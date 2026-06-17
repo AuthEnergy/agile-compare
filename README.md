@@ -2,7 +2,7 @@
 
 A single-page, browser-only tool that pulls roughly a year of your real half-hourly Octopus Energy consumption and tells you what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements.
 
-**Live version:** `https://<your-username>.github.io/<repo-name>/` (replace once GitHub Pages is enabled — see below).
+**Live version:** `https://github.com/AuthEnergy/agile-compare` (replace once GitHub Pages is enabled — see below).
 
 ## What it does
 

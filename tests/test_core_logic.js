@@ -114,4 +114,56 @@ function makeReadings(startISO, count, kwh) {
   console.log('PASS: unmatched readings correctly flagged rather than silently miscalculated');
 }
 
+// --- Test 7: region detection from a REAL account response shape ---
+// This is a regression test for a real bug: Octopus's documented example
+// responses show a `gsp` field on each electricity_meter_point (e.g.
+// "_C"), but a real account fetched during development had NO such
+// field at all. getRegionLetterFromAccount must fall back to parsing
+// the region letter off the end of the tariff_code in that case.
+{
+  const { getRegionLetterFromAccount } = require('./app_module.js');
+  const realShapeNoGsp = {
+    number: "A-1FC1B997",
+    properties: [{
+      electricity_meter_points: [{
+        mpan: "1050001523469",
+        // deliberately no `gsp` field, matching the real response
+        agreements: [
+          { tariff_code: "E-1R-VAR-22-11-01-A", valid_from: "2025-05-31T00:00:00+01:00", valid_to: "2025-06-24T00:00:00+01:00" },
+          { tariff_code: "E-1R-AGILE-24-10-01-A", valid_from: "2025-06-24T00:00:00+01:00", valid_to: "2026-06-24T00:00:00+01:00" },
+        ],
+        is_export: false,
+      }],
+      gas_meter_points: [],
+    }],
+  };
+  const region = getRegionLetterFromAccount(realShapeNoGsp, "1050001523469");
+  assert.strictEqual(region, "A", `expected region A parsed from tariff_code suffix, got ${region}`);
+  console.log("PASS: region correctly derived from tariff_code when gsp field is absent (real-world regression case)");
+}
+
+// --- Test 8: gsp field still works as a fallback when present ---
+{
+  const { getRegionLetterFromAccount } = require('./app_module.js');
+  const withGsp = {
+    properties: [{
+      electricity_meter_points: [{ mpan: "9999999999999", gsp: "_M", agreements: [] }],
+    }],
+  };
+  const region = getRegionLetterFromAccount(withGsp, "9999999999999");
+  assert.strictEqual(region, "M", `expected region M from gsp field, got ${region}`);
+  console.log("PASS: gsp field still used correctly when present");
+}
+
+// --- Test 9: MPAN genuinely not on the account returns null (not the sentinel) ---
+{
+  const { getRegionLetterFromAccount } = require('./app_module.js');
+  const noMatch = {
+    properties: [{ electricity_meter_points: [{ mpan: "1111111111111", gsp: "_C", agreements: [] }] }],
+  };
+  const region = getRegionLetterFromAccount(noMatch, "9999999999999");
+  assert.strictEqual(region, null, `expected null for a genuinely absent MPAN, got ${region}`);
+  console.log("PASS: a truly absent MPAN returns null, distinct from the 'found but no region' sentinel");
+}
+
 console.log('\nAll tests passed.');

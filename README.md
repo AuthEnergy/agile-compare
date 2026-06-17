@@ -2,7 +2,7 @@
 
 A single-page, browser-only tool that pulls roughly a year of your real half-hourly Octopus Energy consumption and tells you what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements.
 
-**Live version:** `https://github.com/AuthEnergy/agile-compare` (replace once GitHub Pages is enabled — see below).
+**Live version:** `https://<your-username>.github.io/<repo-name>/` (replace once GitHub Pages is enabled — see below).
 
 ## What it does
 
@@ -17,9 +17,9 @@ A single-page, browser-only tool that pulls roughly a year of your real half-hou
 
 Nowhere except Octopus. This is a static HTML file with no backend, no analytics, and no server of any kind. Every request it makes goes directly from your browser to `api.octopus.energy` using your own API key. Open your browser's network tab while running it if you want to verify this yourself — that's the whole point of it being a single inspectable file rather than a packaged app.
 
-Your API key, account number, MPAN, and meter serial are only ever held in your browser's memory for the duration of the page being open. Nothing is written to a server, a database, or a file anywhere outside your own machine.
+By default, your API key, account number, MPAN, and meter serial are only ever held in your browser's memory for the duration of the page being open, and are gone the moment you close or reload the tab. There's an optional "remember these details in this browser" checkbox if you'd rather not re-enter them every time — ticking it saves them to that browser's `localStorage` (not a cookie, never transmitted anywhere) until you clear them via the button that appears once something's saved, or clear your browser's site data for the page.
 
-**You should still treat your API key like a password.** Don't paste it into a copy of this tool you don't trust, and don't share a screenshot or recording that shows it.
+**You should still treat your API key like a password.** Don't paste it into a copy of this tool you don't trust, don't share a screenshot or recording that shows it, and avoid using the "remember" option on a shared or public computer.
 
 ## Running it
 
@@ -54,7 +54,7 @@ The calculation logic (gap detection, rate-window matching, period costing) is c
 npm test
 ```
 
-This regenerates the test module from `index.html` and runs all four suites: core calculation logic, a mocked end-to-end pipeline run, a regression test for a billing-period-date-clamping bug found and fixed during development, and a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny.
+This regenerates the test module from `index.html` and runs five suites: core calculation logic (including region detection against a real account response shape), a mocked end-to-end pipeline run, a regression test for a billing-period-date-clamping bug found and fixed during development, a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny, and the "remember my details" localStorage save/load/clear behaviour.
 
 ## Contributing
 

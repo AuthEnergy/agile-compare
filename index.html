@@ -194,6 +194,74 @@
   }
   button.secondary:hover { border-color: var(--ink-dim); color: var(--ink); }
 
+  .remember-row {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    margin-bottom: 6px;
+  }
+
+  .checkbox-label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    accent-color: var(--amber);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .remember-row .hint {
+    margin-bottom: 0;
+    margin-left: 25px;
+  }
+
+  .clear-saved-row {
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  .clear-saved-row button.secondary {
+    width: 100%;
+  }
+
+  .privacy-statement {
+    margin-top: 56px;
+    padding-top: 28px;
+    border-top: 1px solid var(--hairline);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--ink-dim);
+  }
+
+  .privacy-statement h3 {
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--ink);
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+
+  .privacy-statement p { margin: 0 0 10px; }
+  .privacy-statement p:last-child { margin-bottom: 0; }
+
+  .privacy-statement a {
+    color: var(--teal);
+    text-decoration: none;
+    border-bottom: 1px solid var(--teal-dim);
+  }
+  .privacy-statement a:hover { border-bottom-color: var(--teal); }
+
   /* --- progress / log screen --- */
 
   .progress-log {
@@ -436,8 +504,19 @@
         <div class="field-error" id="error-serial">Enter your meter serial number.</div>
       </div>
 
+      <div class="remember-row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="input-remember">
+          <span>Remember these details in this browser</span>
+        </label>
+        <span class="hint">Stored only in this browser's local storage, never sent anywhere except back into these fields next time. Anyone with access to this browser/device could read it back out, so don't use this on a shared or public computer.</span>
+      </div>
+
       <div class="btn-row">
         <button class="primary" id="btn-submit">Fetch my data &amp; compare tariffs</button>
+      </div>
+      <div class="clear-saved-row" id="clear-saved-row" style="display:none;">
+        <button class="secondary" id="btn-clear-saved">Clear saved details from this browser</button>
       </div>
     </div>
 
@@ -460,6 +539,14 @@
     <div class="btn-row">
       <button class="secondary" id="btn-restart">Run again</button>
     </div>
+  </div>
+
+  <div class="privacy-statement">
+    <h3>Privacy</h3>
+    <p>This page has no backend. There is no server collecting your data, because there is no server at all &mdash; it's a single static HTML file, viewable by anyone via "view source" or this repository's <a href="https://github.com/AuthEnergy/agile-compare" target="_blank" rel="noopener">public code on GitHub</a>.</p>
+    <p>Every request this page makes goes directly from your browser to Octopus Energy's own API at api.octopus.energy, using your own API key. Nothing you enter is sent to the author of this tool, to any analytics service, or to any third party of any kind. You can verify this yourself by opening your browser's network tab while using the page.</p>
+    <p>If you tick "remember these details," your API key, account number, MPAN, and meter serial are saved using your browser's local storage &mdash; a feature built into the browser itself, not a cookie, and not transmitted anywhere. This data stays on your device until you clear it (via the button on the input screen, or by clearing your browser's site data for this page) and is never readable by any other website.</p>
+    <p>Treat your Octopus API key like a password. Anyone with it can read your account's billing and consumption history. If you use the "remember" option, that key sits in plain form in this browser's storage, so avoid using it on a shared or public computer, and clear it when you're done if you do.</p>
   </div>
 
 </div>
@@ -1171,13 +1258,89 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, perio
   `;
 }
 
+/* ============================================================
+   DOM WIRING — browser-only from here down.
+   extract_module.js cuts the test module at this marker, since
+   everything below references real DOM elements / localStorage
+   that don't exist in the Node test environment. Tests call
+   validateInputs() / runComparison() / etc. directly instead.
+   ============================================================ */
+
 document.getElementById("btn-submit").addEventListener("click", () => {
-  if (validateInputs()) runComparison();
+  if (validateInputs()) {
+    saveOrClearCredentials();
+    runComparison();
+  }
 });
 
 document.getElementById("btn-restart").addEventListener("click", () => {
   showScreen("screen-input");
 });
+
+/* ============================================================
+   SAVED CREDENTIALS (localStorage, opt-in via checkbox)
+   ============================================================ */
+
+const STORAGE_KEY = "octopusTariffCheck_savedCredentials";
+
+function loadSavedCredentials() {
+  let saved = null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) saved = JSON.parse(raw);
+  } catch (e) {
+    // Corrupted or inaccessible storage (e.g. private browsing in some
+    // browsers throws on access) — fail quietly, just don't pre-fill.
+    saved = null;
+  }
+
+  if (saved) {
+    document.getElementById("input-apikey").value = saved.apiKey || "";
+    document.getElementById("input-account").value = saved.accountNumber || "";
+    document.getElementById("input-mpan").value = saved.mpan || "";
+    document.getElementById("input-serial").value = saved.serial || "";
+    document.getElementById("input-remember").checked = true;
+  }
+  updateClearButtonVisibility();
+}
+
+function saveOrClearCredentials() {
+  const remember = document.getElementById("input-remember").checked;
+  if (remember) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        apiKey: state.apiKey,
+        accountNumber: state.accountNumber,
+        mpan: state.mpan,
+        serial: state.serial,
+      }));
+    } catch (e) {
+      // Storage full or unavailable — not worth blocking the actual
+      // comparison over, so just skip saving silently.
+    }
+  } else {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  }
+  updateClearButtonVisibility();
+}
+
+function updateClearButtonVisibility() {
+  let hasSaved = false;
+  try { hasSaved = localStorage.getItem(STORAGE_KEY) !== null; } catch (e) {}
+  document.getElementById("clear-saved-row").style.display = hasSaved ? "block" : "none";
+}
+
+document.getElementById("btn-clear-saved").addEventListener("click", () => {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+  document.getElementById("input-apikey").value = "";
+  document.getElementById("input-account").value = "";
+  document.getElementById("input-mpan").value = "";
+  document.getElementById("input-serial").value = "";
+  document.getElementById("input-remember").checked = false;
+  updateClearButtonVisibility();
+});
+
+loadSavedCredentials();
 </script>
 </body>
 </html>

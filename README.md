@@ -62,6 +62,6 @@ This regenerates the test module from `index.html` and runs five suites: core ca
 
 It's one HTML file. Open a PR. If you're changing the calculation logic, please add or update a test in `/tests` covering the change — that's how the bugs mentioned above got caught before anyone saw a wrong number.
 
-## Copyright
+## Copyright and license
 
-Copyright (c) 2026 Auth Energy Ltd. Licensed under the MIT License — see [LICENSE](LICENSE).
+Copyright (c) 2026 Auth Energy Ltd. Licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE) — free to use, modify, and distribute for any noncommercial purpose (personal, educational, charitable, research, government). Commercial use requires permission from Auth Energy Ltd; get in touch at [hello@auth.energy](mailto:hello@auth.energy).

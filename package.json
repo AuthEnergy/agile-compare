@@ -6,5 +6,5 @@
   "scripts": {
     "test": "node tests/extract_module.js && node tests/test_core_logic.js && node tests/test_e2e.js && node tests/test_runcomparison.js && node tests/test_realistic_period.js && node tests/test_remember_me.js"
   },
-  "license": "MIT"
+  "license": "PolyForm-Noncommercial-1.0.0"
 }

@@ -15,7 +15,9 @@ A single-page, browser-only tool by [auth.energy](https://auth.energy) that pull
 
 ## Where your data goes
 
-Nowhere except Octopus. This is a static HTML file with no backend, no analytics, and no server of any kind. Every request it makes goes directly from your browser to `api.octopus.energy` using your own API key. Open your browser's network tab while running it if you want to verify this yourself — that's the whole point of it being a single inspectable file rather than a packaged app.
+Nowhere except Octopus, with one optional exception. This is a static HTML file with no backend, no analytics, and no server of any kind. Every request it makes goes directly from your browser to `api.octopus.energy` using your own API key. Open your browser's network tab while running it if you want to verify this yourself — that's the whole point of it being a single inspectable file rather than a packaged app.
+
+The one exception: a results screen button labelled "Email this summary to auth.energy." It opens a pre-filled draft in your own email app — it does not send anything automatically — containing only your postcode's outward code (e.g. "N15", never the full postcode), the comparison period, total kWh, and the three totals (actual, calculated Flexible, calculated Agile). It never includes your API key, account number, MPAN, meter serial, or raw consumption data. You can review or cancel the draft before it ever leaves your device.
 
 By default, your API key, account number, MPAN, and meter serial are only ever held in your browser's memory for the duration of the page being open, and are gone the moment you close or reload the tab. There's an optional "remember these details in this browser" checkbox if you'd rather not re-enter them every time — ticking it saves them to that browser's `localStorage` (not a cookie, never transmitted anywhere) until you clear them via the button that appears once something's saved, or clear your browser's site data for the page.
 

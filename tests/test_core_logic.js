@@ -205,4 +205,29 @@ function makeReadings(startISO, count, kwh) {
   console.log("PASS: calculateCost still rejects a genuinely implausible (~36000-day) date range");
 }
 
+// --- Test 12: postcode area extraction returns only the outward code ---
+{
+  const { getPostcodeAreaForMpan } = require('./app_module.js');
+  const realShape = {
+    properties: [{ postcode: "N15 4FZ", electricity_meter_points: [{ mpan: "1050001523469" }] }],
+  };
+  const area = getPostcodeAreaForMpan(realShape, "1050001523469");
+  assert.strictEqual(area, "N15", `expected outward code "N15", got ${area}`);
+  console.log("PASS: postcode area extraction returns only the outward code, not the full postcode");
+}
+
+// --- Test 13: postcode area extraction handles missing space and missing postcode ---
+{
+  const { getPostcodeAreaForMpan } = require('./app_module.js');
+  const noSpace = { properties: [{ postcode: "N154FZ", electricity_meter_points: [{ mpan: "123" }] }] };
+  assert.strictEqual(getPostcodeAreaForMpan(noSpace, "123"), "N15", "should fall back to length-based split when there's no space");
+
+  const noPostcode = { properties: [{ electricity_meter_points: [{ mpan: "123" }] }] };
+  assert.strictEqual(getPostcodeAreaForMpan(noPostcode, "123"), null, "should return null when no postcode is present");
+
+  const noMatch = { properties: [{ postcode: "N15 4FZ", electricity_meter_points: [{ mpan: "other" }] }] };
+  assert.strictEqual(getPostcodeAreaForMpan(noMatch, "123"), null, "should return null when the MPAN doesn't match");
+  console.log("PASS: postcode area extraction handles missing space, missing postcode, and non-matching MPAN");
+}
+
 console.log('\nAll tests passed.');

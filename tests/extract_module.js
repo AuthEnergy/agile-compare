@@ -53,7 +53,7 @@ const exported = [
   "state", "validateInputs", "fetchAccount", "getRegionLetterFromAccount",
   "fetchConsumption", "detectGaps", "findLiveProductCodeByDisplayName",
   "fetchProductTariffCode", "fetchRateWindows", "calculateCost",
-  "getAgreementsForMpan", "obtainKrakenToken", "fetchStatements",
+  "getAgreementsForMpan", "getPostcodeAreaForMpan", "obtainKrakenToken", "fetchStatements",
   "runComparison", "renderResults", "renderError", "rateAt",
 ];
 

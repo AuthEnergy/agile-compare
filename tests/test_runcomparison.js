@@ -90,7 +90,7 @@ global.fetch = async (url, opts = {}) => {
 
   if (u.pathname.includes("/accounts/")) {
     return mockJsonResponse(200, {
-      properties: [{ electricity_meter_points: [{ mpan: "1234567890123", gsp: "_" + REGION, agreements: [{ tariff_code: "E-1R-VAR-22-11-01-C", valid_from: "2023-01-01T00:00:00Z", valid_to: null }] }] }],
+      properties: [{ postcode: "N15 4FZ", electricity_meter_points: [{ mpan: "1234567890123", gsp: "_" + REGION, agreements: [{ tariff_code: "E-1R-VAR-22-11-01-C", valid_from: "2023-01-01T00:00:00Z", valid_to: null }] }] }],
     });
   }
 
@@ -180,6 +180,23 @@ const { runComparison, validateInputs, state } = require('./app_module.js');
   assert.ok(content.includes("Flexible"), "results should mention Flexible");
   assert.ok(content.includes("Agile"), "results should mention Agile");
   console.log("PASS: results mention both tariffs with money values");
+
+  // --- Privacy check: the email-results mailto link must contain only
+  // the intended coarse fields, and must NEVER leak the API key, account
+  // number, MPAN, meter serial, or full postcode (only its outward part).
+  const mailtoMatch = content.match(/href="(mailto:[^"]+)"/);
+  assert.ok(mailtoMatch, "should find a mailto link for emailing results");
+  const mailtoHref = decodeURIComponent(mailtoMatch[1]);
+
+  assert.ok(mailtoHref.includes("hello@auth.energy"), "mailto link should be addressed to hello@auth.energy");
+  assert.ok(mailtoHref.includes("Octopus Tariff Check Results"), "mailto link subject should be 'Octopus Tariff Check Results'");
+  assert.ok(mailtoHref.includes("N15"), "mailto body should include the coarse postcode area");
+  assert.ok(!mailtoHref.includes("4FZ"), "mailto body must NOT include the inward (specific) part of the postcode");
+  assert.ok(!mailtoHref.includes("sk_test_fakekey123"), "mailto body must NEVER include the API key");
+  assert.ok(!mailtoHref.includes("A-TEST0001"), "mailto body must NEVER include the account number");
+  assert.ok(!mailtoHref.includes("1234567890123"), "mailto body must NEVER include the MPAN");
+  assert.ok(!mailtoHref.includes("12A3456789"), "mailto body must NEVER include the meter serial");
+  console.log("PASS: email-results mailto link contains only coarse postcode area, period, and totals — no credentials, no full postcode");
 
   // Sanity check the actual numbers via direct recomputation
   // (We know: 1 statement covering the whole window, KWH_PER_SLOT=0.3,

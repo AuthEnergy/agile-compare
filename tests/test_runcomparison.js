@@ -1,7 +1,7 @@
-// Tests the actual runComparison() orchestration function end-to-end,
-// with mocks that respond dynamically to whatever date range the
-// function under test actually requests (since it computes "1 year
-// ago minus 7 days" internally based on real current time).
+// Tests the actual runComparison() orchestration function end-to-end.
+// The fetch window is now derived from real statement boundaries (see
+// index.html), so this mock returns a statement with realistic dates
+// relative to the real current time, rather than a fixed window.
 
 const assert = require('assert');
 
@@ -61,11 +61,15 @@ global.fetch = async (url, opts = {}) => {
       return mockJsonResponse(200, { data: { obtainKrakenToken: { token: "fake-jwt" } } });
     }
     if (body.query.includes("Statements")) {
-      // Realistic case: one statement whose dates are slightly OUTSIDE
-      // the fetch window on the early side (a common real scenario,
-      // since the first statement after switching to a meter often
-      // starts before smart-meter data exists) and one fully INSIDE the
-      // window, to check both the clamping fix and the normal path.
+      // The fetch window is now DERIVED from statement dates (rather
+      // than statements being clamped against a pre-decided window), so
+      // this mock needs realistic dates relative to "now" — a single
+      // statement covering roughly the last month, ending a bit before
+      // today (since the app trims to "7 days ago" for data settling).
+      const end = new Date();
+      end.setDate(end.getDate() - 10);
+      const start = new Date(end);
+      start.setDate(start.getDate() - 30);
       return mockJsonResponse(200, {
         data: {
           account: {
@@ -73,7 +77,7 @@ global.fetch = async (url, opts = {}) => {
               statements: {
                 pageInfo: { hasNextPage: false, endCursor: null },
                 edges: [
-                  { node: { id: 1, startAt: "2000-01-01T00:00:00Z", endAt: "2099-01-01T00:00:00Z", totalCharges: { grossTotal: 99999 }, totalCredits: { grossTotal: 0 } } },
+                  { node: { id: 1, startAt: start.toISOString(), endAt: end.toISOString(), totalCharges: { grossTotal: 99999 }, totalCredits: { grossTotal: 0 } } },
                 ],
               },
             }],
@@ -169,6 +173,9 @@ const { runComparison, validateInputs, state } = require('./app_module.js');
   assert.ok(!content.includes("error-banner"), "should not contain an error banner");
   console.log("PASS: results content rendered without error banner");
 
+  assert.ok(!content.includes("partial"), "a normal statement should not be flagged as partial/clamped now that the fetch window derives from real statement dates");
+  console.log("PASS: no spurious 'partial — outside fetched data' flag for a normal statement");
+
   assert.ok(content.includes("£"), "results should include money values");
   assert.ok(content.includes("Flexible"), "results should mention Flexible");
   assert.ok(content.includes("Agile"), "results should mention Agile");
@@ -182,6 +189,52 @@ const { runComparison, validateInputs, state } = require('./app_module.js');
   console.log("--- end snippet ---\n");
 
   console.log("All runComparison() orchestration tests passed.");
+})().catch(err => {
+  console.error("TEST FAILED:", err);
+  process.exit(1);
+});
+
+// --- Second scenario: billing history starting more than a year ago ---
+// This is the exact case that was previously broken: under the old fixed
+// "today minus 1 year" window, a statement starting 13+ months ago would
+// have its start date clamped, triggering the "partial — outside fetched
+// data" flag even though the user has real billing history for that period.
+(async () => {
+  console.log("\nRunning long-billing-history regression test...\n");
+
+  const end = new Date();
+  end.setDate(end.getDate() - 10);
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 14); // 14 months ago — beyond the OLD 1-year cap
+
+  // Override just the Statements mock for this scenario
+  const originalFetch = global.fetch;
+  global.fetch = async (url, opts = {}) => {
+    if (url.toString().includes("/graphql/")) {
+      const body = JSON.parse(opts.body);
+      if (body.query.includes("obtainKrakenToken")) {
+        return mockJsonResponse(200, { data: { obtainKrakenToken: { token: "fake-jwt" } } });
+      }
+      if (body.query.includes("Statements")) {
+        return mockJsonResponse(200, {
+          data: { account: { ledgers: [{ statements: {
+            pageInfo: { hasNextPage: false, endCursor: null },
+            edges: [{ node: { id: 1, startAt: start.toISOString(), endAt: end.toISOString(), totalCharges: { grossTotal: 88888 }, totalCredits: { grossTotal: 0 } } }],
+          } }] } },
+        });
+      }
+    }
+    return originalFetch(url, opts);
+  };
+
+  await runComparison();
+
+  const content = document.getElementById("results-content").innerHTML;
+  assert.ok(!content.includes("error-banner"), "a 14-month-old statement should not error");
+  assert.ok(!content.includes("partial"), "a 14-month-old statement should NOT be flagged as partial — this is the bug that was reported and fixed");
+  console.log("PASS: a billing period starting 14 months ago is fetched and costed in full, with no partial/clamped flag");
+
+  console.log("\nAll long-billing-history regression tests passed.");
 })().catch(err => {
   console.error("TEST FAILED:", err);
   process.exit(1);

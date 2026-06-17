@@ -166,4 +166,43 @@ function makeReadings(startISO, count, kwh) {
   console.log("PASS: a truly absent MPAN returns null, distinct from the 'found but no region' sentinel");
 }
 
+// --- Test 10: calculateCost accepts a realistic long billing period (14 months) ---
+// This is a real scenario for an infrequently-switching customer, and was
+// previously broken by an overly tight 400-day guard.
+{
+  const longReadings = makeReadings('2025-01-01T00:00:00Z', 48 * 420, 0.3); // ~420 days of data
+  const unitRateWindows = [{ validFrom: new Date('2020-01-01T00:00:00Z'), validTo: null, value: 25.0 }];
+  const standingChargeWindows = [{ validFrom: new Date('2020-01-01T00:00:00Z'), validTo: null, value: 45.0 }];
+  const periodStart = new Date('2025-01-01T00:00:00Z');
+  const periodEnd = new Date('2026-02-25T00:00:00Z'); // ~420 days later
+
+  let threw = false;
+  let result;
+  try {
+    result = calculateCost(longReadings, periodStart, periodEnd, unitRateWindows, standingChargeWindows);
+  } catch (e) {
+    threw = true;
+  }
+  assert.strictEqual(threw, false, "a realistic 420-day billing period should NOT trip the defensive guard");
+  assert.ok(result.kwh > 0, "a realistic long period should still calculate a real cost");
+  console.log(`PASS: calculateCost accepts a realistic 420-day billing period (£${(result.totalPence/100).toFixed(2)})`);
+}
+
+// --- Test 11: calculateCost still rejects a genuinely implausible date range ---
+// Guards against a regression where the guard is widened so far it stops
+// catching real bugs (e.g. an unclamped statement with a 2000-2099 span).
+{
+  let threw = false;
+  let message = "";
+  try {
+    calculateCost([], new Date('2000-01-01T00:00:00Z'), new Date('2099-01-01T00:00:00Z'), [], []);
+  } catch (e) {
+    threw = true;
+    message = e.message;
+  }
+  assert.strictEqual(threw, true, "a ~36000-day range should still trip the defensive guard");
+  assert.ok(message.includes("implausible"), "the error should clearly explain this looks like a bug");
+  console.log("PASS: calculateCost still rejects a genuinely implausible (~36000-day) date range");
+}
+
 console.log('\nAll tests passed.');

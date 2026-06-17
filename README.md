@@ -1,15 +1,15 @@
 # Octopus Tariff Check
 
-A single-page, browser-only tool that pulls roughly a year of your real half-hourly Octopus Energy consumption and tells you what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements.
+A single-page, browser-only tool by [auth.energy](https://auth.energy) that pulls your real half-hourly Octopus Energy consumption and tells you what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements.
 
-**Live version:** `https://<your-username>.github.io/<repo-name>/` (replace once GitHub Pages is enabled — see below).
+**Live version:** [authenergy.github.io/agile-compare](https://authenergy.github.io/agile-compare/)
 
 ## What it does
 
 1. Fetches your account details and confirms your meter's region.
-2. Pulls ~12 months of half-hourly consumption (up to 7 days ago, since Octopus's smart-meter data typically takes a few days to settle).
-3. Checks that data for gaps and flags any it finds.
-4. Fetches your real billing periods and the amount you were actually charged for each one.
+2. Fetches your real billing periods and the amount you were actually charged for each one.
+3. Pulls half-hourly consumption covering exactly that billing history (up to 7 days ago, since Octopus's smart-meter data typically takes a few days to settle) — the fetch window is built from your real statement dates, not a fixed calendar year, so a normal billing period is never partially cut off.
+4. Checks that data for gaps and flags any it finds.
 5. Looks up the real historical unit rates and standing charges for both Flexible Octopus (which changes roughly quarterly) and Agile Octopus (which changes every half hour) across that same window.
 6. Calculates what each billing period would have cost under each tariff, and shows it next to what you actually paid.
 
@@ -54,8 +54,12 @@ The calculation logic (gap detection, rate-window matching, period costing) is c
 npm test
 ```
 
-This regenerates the test module from `index.html` and runs five suites: core calculation logic (including region detection against a real account response shape), a mocked end-to-end pipeline run, a regression test for a billing-period-date-clamping bug found and fixed during development, a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny, and the "remember my details" localStorage save/load/clear behaviour.
+This regenerates the test module from `index.html` and runs five suites: core calculation logic (including region detection against a real account response shape, and the defensive guard against implausible date ranges), a mocked end-to-end pipeline run, orchestration regression tests covering both the original billing-period-date-clamping bug and a since-fixed bug where billing history older than a fixed lookback window was incorrectly clamped, a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny, and the "remember my details" localStorage save/load/clear behaviour.
 
 ## Contributing
 
-It's one HTML file. Open a PR. If you're changing the calculation logic, please add or update a test in `/tests` covering the change — that's how the clamping bug mentioned above got caught before anyone saw a wrong number.
+It's one HTML file. Open a PR. If you're changing the calculation logic, please add or update a test in `/tests` covering the change — that's how the bugs mentioned above got caught before anyone saw a wrong number.
+
+## Copyright
+
+Copyright (c) 2026 Auth Energy Ltd. Licensed under the MIT License — see [LICENSE](LICENSE).

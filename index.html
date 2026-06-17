@@ -1,21 +1,26 @@
+<!--
+  Octopus Tariff Check
+  Copyright (c) 2026 Auth Energy Ltd
+  Licensed under the MIT License — see LICENSE for details.
+  https://github.com/AuthEnergy/agile-compare
+-->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Octopus Tariff Check</title>
+<title>Octopus Tariff Check | auth.energy</title>
 <style>
   :root {
-    --bg: #0E1116;
-    --bg-raised: #161B22;
-    --ink: #E9E6DD;
-    --ink-dim: #8B92A0;
-    --hairline: #262B33;
-    --amber: #E8A33D;
-    --amber-dim: #5A4324;
-    --teal: #4DB6AC;
-    --teal-dim: #1F3D3A;
-    --red: #D9685B;
+    --bg: #000000;
+    --bg-raised: #0A0A0A;
+    --ink: #FFFFFF;
+    --ink-dim: rgba(255, 255, 255, 0.58);
+    --ink-faint: rgba(255, 255, 255, 0.34);
+    --hairline: rgba(255, 255, 255, 0.14);
+    --hairline-strong: rgba(255, 255, 255, 0.28);
+    --red: #E5564A;
+    --red-dim: rgba(229, 86, 74, 0.16);
     --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
   }
@@ -42,20 +47,24 @@
     max-width: 720px;
   }
 
-  .meter-mark {
+  .brand-header {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
-    margin-bottom: 6px;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 8px;
   }
 
-  .meter-mark .dial {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--amber);
-    box-shadow: 0 0 0 3px var(--amber-dim);
+  .brand-mark {
+    width: 28px;
+    height: auto;
+    color: var(--ink);
     flex-shrink: 0;
+  }
+
+  .brand-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
   }
 
   h1 {
@@ -65,11 +74,22 @@
     margin: 0;
   }
 
+  .brand-byline {
+    font-size: 12px;
+    color: var(--ink-dim);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+  }
+  .brand-byline:hover {
+    color: var(--ink);
+    border-bottom-color: var(--hairline-strong);
+  }
+
   .subhead {
     color: var(--ink-dim);
     font-size: 14.5px;
     line-height: 1.6;
-    margin: 0 0 36px;
+    margin: 16px 0 36px;
     max-width: 56ch;
   }
 
@@ -118,11 +138,11 @@
   }
 
   .field .hint a {
-    color: var(--teal);
+    color: var(--ink);
     text-decoration: none;
-    border-bottom: 1px solid var(--teal-dim);
+    border-bottom: 1px solid var(--hairline-strong);
   }
-  .field .hint a:hover { border-bottom-color: var(--teal); }
+  .field .hint a:hover { border-bottom-color: var(--ink); }
 
   .field input {
     width: 100%;
@@ -138,11 +158,11 @@
   }
 
   .field input:focus {
-    border-color: var(--teal);
+    border-color: var(--ink-dim);
   }
 
   .field input::placeholder {
-    color: #4A5160;
+    color: var(--ink-faint);
   }
 
   .field-error {
@@ -164,19 +184,19 @@
 
   button.primary {
     width: 100%;
-    background: var(--amber);
-    color: #1A1305;
+    background: var(--ink);
+    color: #000000;
     border: none;
-    border-radius: 7px;
+    border-radius: 999px;
     font-family: var(--sans);
     font-size: 14.5px;
     font-weight: 600;
     padding: 13px 20px;
     cursor: pointer;
-    transition: filter 0.15s;
+    transition: opacity 0.15s;
   }
 
-  button.primary:hover { filter: brightness(1.08); }
+  button.primary:hover { opacity: 0.85; }
   button.primary:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -186,7 +206,7 @@
     background: transparent;
     color: var(--ink-dim);
     border: 1px solid var(--hairline);
-    border-radius: 7px;
+    border-radius: 999px;
     font-family: var(--sans);
     font-size: 13px;
     padding: 9px 16px;
@@ -215,7 +235,7 @@
     width: 16px;
     height: 16px;
     margin-top: 1px;
-    accent-color: var(--amber);
+    accent-color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -256,11 +276,11 @@
   .privacy-statement p:last-child { margin-bottom: 0; }
 
   .privacy-statement a {
-    color: var(--teal);
+    color: var(--ink);
     text-decoration: none;
-    border-bottom: 1px solid var(--teal-dim);
+    border-bottom: 1px solid var(--hairline-strong);
   }
-  .privacy-statement a:hover { border-bottom-color: var(--teal); }
+  .privacy-statement a:hover { border-bottom-color: var(--ink); }
 
   /* --- progress / log screen --- */
 
@@ -281,13 +301,13 @@
 
   .progress-log .line.ok::before {
     content: "✓ ";
-    color: var(--teal);
+    color: var(--ink);
   }
   .progress-log .line.ok { color: var(--ink); }
 
   .progress-log .line.active::before {
     content: "› ";
-    color: var(--amber);
+    color: var(--ink-dim);
   }
   .progress-log .line.active { color: var(--ink); }
 
@@ -307,7 +327,7 @@
 
   .progress-bar-fill {
     height: 100%;
-    background: var(--amber);
+    background: var(--ink);
     width: 0%;
     transition: width 0.3s ease;
   }
@@ -328,6 +348,11 @@
     background: var(--bg);
   }
 
+  .summary-card.actual {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+
   .summary-card .label {
     font-size: 11.5px;
     color: var(--ink-dim);
@@ -336,15 +361,17 @@
     margin-bottom: 8px;
   }
 
+  .summary-card.actual .label { color: rgba(0, 0, 0, 0.55); }
+
   .summary-card .value {
     font-family: var(--mono);
     font-size: 22px;
     font-weight: 600;
   }
 
-  .summary-card.actual .value { color: var(--ink); }
-  .summary-card.flexible .value { color: var(--amber); }
-  .summary-card.agile .value { color: var(--teal); }
+  .summary-card.actual .value { color: #000000; }
+  .summary-card.flexible .value { color: var(--ink); }
+  .summary-card.agile .value { color: var(--ink); }
 
   .summary-card .delta {
     font-family: var(--mono);
@@ -352,6 +379,8 @@
     margin-top: 6px;
     color: var(--ink-dim);
   }
+
+  .summary-card.actual .delta { color: rgba(0, 0, 0, 0.55); }
 
   .verdict {
     border: 1px solid var(--hairline);
@@ -410,8 +439,8 @@
   }
 
   .gap-warning {
-    border: 1px solid #4A3320;
-    background: #1F1710;
+    border: 1px solid var(--hairline-strong);
+    background: var(--bg-raised);
     border-radius: 8px;
     padding: 14px 16px;
     margin-bottom: 20px;
@@ -420,7 +449,7 @@
   }
 
   .gap-warning .title {
-    color: var(--amber);
+    color: var(--ink);
     font-weight: 600;
     margin-bottom: 6px;
   }
@@ -467,7 +496,16 @@
 <body>
 <div class="shell">
 
-  <div class="meter-mark"><span class="dial"></span><h1>Octopus Tariff Check</h1></div>
+  <div class="brand-header">
+    <svg class="brand-mark" viewBox="0 0 26.97 43.969" xmlns="http://www.w3.org/2000/svg">
+      <path d="M 5.523 7.921 C 5.523 3.546 9.084 0 13.477 0 C 17.869 0 21.43 3.546 21.43 7.921 C 21.43 12.296 17.869 15.842 13.477 15.842 C 9.084 15.842 5.523 12.296 5.523 7.921 Z" fill="currentColor"/>
+      <path d="M 26.97 10.52 C 26.97 28.981 20.927 43.969 13.485 43.969 C 6.042 43.969 0 28.981 0 10.52 C 0 14.179 3.021 17.148 6.743 17.148 C 10.464 17.148 13.485 14.179 13.485 10.52 C 13.485 14.179 16.506 17.148 20.227 17.148 C 23.948 17.148 26.97 14.179 26.97 10.52 Z M 12.614 26.835 L 12.614 39.882 C 12.614 39.937 12.659 39.982 12.714 39.982 L 14.255 39.982 C 14.311 39.982 14.356 39.937 14.356 39.882 L 14.356 26.835 C 16.492 26.455 18.109 24.711 18.109 22.618 C 18.109 20.248 16.037 18.324 13.485 18.324 C 10.933 18.324 8.861 20.248 8.861 22.618 C 8.861 24.711 10.477 26.455 12.614 26.835 Z M 13.485 20.421 C 13.023 20.421 12.649 20.073 12.649 19.644 C 12.649 19.216 13.023 18.868 13.485 18.868 C 13.946 18.868 14.321 19.216 14.321 19.644 C 14.321 20.073 13.946 20.421 13.485 20.421 Z M 10.056 38.922 L 12.345 38.922 L 12.345 38.07 L 10.056 38.07 C 9.904 38.07 9.782 38.193 9.782 38.344 L 9.782 38.649 C 9.782 38.8 9.904 38.922 10.056 38.922 Z M 10.888 37.828 L 12.345 37.828 L 12.345 36.976 L 10.888 36.976 C 10.815 36.976 10.745 37.004 10.694 37.056 C 10.642 37.107 10.613 37.177 10.613 37.25 L 10.613 37.555 C 10.613 37.627 10.642 37.697 10.694 37.748 C 10.745 37.799 10.815 37.828 10.888 37.828 Z M 10.056 36.734 L 12.345 36.734 L 12.345 35.881 L 10.056 35.881 C 9.904 35.881 9.782 36.004 9.782 36.155 L 9.782 36.46 C 9.782 36.612 9.904 36.734 10.056 36.734 Z" fill="currentColor"/>
+    </svg>
+    <div class="brand-text">
+      <h1>Octopus Tariff Check</h1>
+      <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
+    </div>
+  </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
 
   <!-- SCREEN 1: input -->
@@ -612,17 +650,19 @@ function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standi
     }
   }
 
-  // Defensive guard: a billing period should never realistically span
-  // more than ~400 days. This function should always be called with
-  // periodStart/periodEnd already clamped to the actual data window by
-  // the caller, but this check exists as a second line of defense —
-  // an unclamped, accidentally huge date range (e.g. an open-ended
-  // statement with no end date, or a date-parsing bug) would otherwise
-  // silently inflate the standing charge total by iterating the
-  // day-counting loop below across however many days the bad range
-  // spans, with no visible error.
+  // Defensive guard against a genuinely implausible date range (e.g. an
+  // open-ended statement with no real end date, or a date-parsing bug).
+  // This function should always be called with periodStart/periodEnd
+  // already clamped to the actual data window by the caller, but this
+  // check exists as a second line of defense — an unclamped, accidentally
+  // huge date range would otherwise silently inflate the standing charge
+  // total by iterating the day-counting loop below across however many
+  // days the bad range spans, with no visible error. The bound is set
+  // generously above the app's own 3-year fetch-window cap (see
+  // runComparison), since a real billing period can legitimately span
+  // well over a year for an infrequently-switching customer.
   const spanDays = (periodEnd - periodStart) / (24 * 60 * 60 * 1000);
-  if (spanDays > 400) {
+  if (spanDays > 1500) {
     throw new Error(
       `calculateCost called with an implausible date range (${spanDays.toFixed(0)} days, ` +
       `${periodStart.toISOString()} to ${periodEnd.toISOString()}). This is almost certainly a bug ` +
@@ -1005,42 +1045,73 @@ async function runComparison() {
     const currentAgreement = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
     log(`Current tariff on this meter: ${currentAgreement ? currentAgreement.tariff_code : "unknown"}`, "ok");
 
-    // --- Step 2: date window ---
-    const periodTo = new Date();
-    periodTo.setDate(periodTo.getDate() - 7); // data settles in Octopus's systems with a delay
-    periodTo.setUTCHours(0, 0, 0, 0);
-    const periodFrom = new Date(periodTo);
-    periodFrom.setFullYear(periodFrom.getFullYear() - 1);
+    // --- Step 2: real billing periods + invoice totals ---
+    // Fetched BEFORE the consumption window is decided, so the window can
+    // be built around your actual bill dates rather than an arbitrary
+    // calendar year that your bills then get clamped against.
+    line = log("Authenticating to fetch your real billing periods...", "active");
+    const token = await obtainKrakenToken(state.apiKey);
+    setActiveLine(line, "Authenticated.", "ok");
+    setProgress(15);
 
-    log(`Comparison window: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}`, "ok");
-    setProgress(12);
+    line = log("Fetching statements (real bill periods + amounts)...", "active");
+    const allStatements = await fetchStatements(token, state.accountNumber);
+    if (allStatements.length === 0) {
+      throw new Error("No statements found on this account. Your account may not have statement history available via the API.");
+    }
+    setActiveLine(line, `Found ${allStatements.length} statement(s) on this account.`, "ok");
+    setProgress(20);
 
-    // --- Step 3: consumption ---
+    // --- Step 3: date window, derived from real statement boundaries ---
+    // Data settles a few days after the fact, and consumption typically
+    // isn't available before the meter's smart-meter agreements began, so
+    // the window is clamped to "now minus 7 days" at the top and to
+    // roughly the last 12 months at the bottom — but the actual edges
+    // come from your real statements, not a guessed calendar year.
+    const dataAvailableTo = new Date();
+    dataAvailableTo.setDate(dataAvailableTo.getDate() - 7);
+    dataAvailableTo.setUTCHours(0, 0, 0, 0);
+
+    const earliestApprox = new Date(dataAvailableTo);
+    earliestApprox.setFullYear(earliestApprox.getFullYear() - 3); // generous ceiling: protects against an extreme edge case (a very long-standing account) without clamping a normal 1-2 year billing history, which is what caused "partial" periods previously
+
+    const statementStarts = allStatements.map(s => new Date(s.startAt));
+    const statementEnds = allStatements.map(s => new Date(s.endAt));
+    const earliestStatement = new Date(Math.min(...statementStarts));
+    const latestStatement = new Date(Math.max(...statementEnds));
+
+    // periodFrom/periodTo bound the actual data we'll fetch: never later
+    // than "today minus 7 days" (data needs to have settled), and reaching
+    // back to whichever is later — your earliest statement, or a year ago
+    // — so a long billing history doesn't balloon the half-hourly fetch.
+    const periodTo = latestStatement < dataAvailableTo ? latestStatement : dataAvailableTo;
+    const periodFrom = earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
+
+    log(`Comparison window: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)} (aligned to your real billing history)`, "ok");
+    setProgress(25);
+
+    // --- Step 4: consumption ---
     line = log("Fetching half-hourly consumption (this is the slow part)...", "active");
     const readings = await fetchConsumption(state.mpan, state.serial, periodFrom, periodTo);
     if (readings.length === 0) {
       throw new Error("No consumption data was returned for this window. Either this meter has no smart-meter data yet, or the MPAN/serial don't match a meter with readings.");
     }
     setActiveLine(line, `Fetched ${readings.length} half-hourly readings.`, "ok");
-    setProgress(35);
+    setProgress(40);
 
-    // --- Step 4: gap check ---
+    // --- Step 5: gap check ---
     line = log("Checking for gaps...", "active");
     const gapInfo = detectGaps(readings);
     const totalExpectedSlots = Math.round((gapInfo.latest - gapInfo.earliest) / (30 * 60 * 1000)) + 1;
     const missingSlots = gapInfo.gaps.reduce((sum, g) => sum + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0);
     setActiveLine(line, `${gapInfo.gaps.length} gap range(s), ${missingSlots} missing slots out of ${totalExpectedSlots} expected.`, gapInfo.gaps.length > 0 ? "err" : "ok");
-    setProgress(40);
-
-    // --- Step 5: real billing periods + invoice totals ---
-    line = log("Authenticating to fetch your real billing periods...", "active");
-    const token = await obtainKrakenToken(state.apiKey);
-    setActiveLine(line, "Authenticated.", "ok");
     setProgress(45);
 
-    line = log("Fetching statements (real bill periods + amounts)...", "active");
-    const statements = await fetchStatements(token, state.accountNumber);
-    const billingPeriods = statements
+    // --- Step 6: turn statements into billing periods for costing ---
+    // periodFrom/periodTo were built FROM these same statements above, so
+    // clamping here is now just a safety net (e.g. a statement that's
+    // still open-ended with no endAt yet) rather than the normal case.
+    const billingPeriods = allStatements
       .filter(s => new Date(s.startAt) >= periodFrom || new Date(s.endAt) > periodFrom)
       .map(s => {
         const rawStart = new Date(s.startAt);

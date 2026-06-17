@@ -4,975 +4,1277 @@
   Licensed under the MIT License — see LICENSE for details.
   https://github.com/AuthEnergy/agile-compare
 -->
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Octopus Tariff Check | auth.energy</title>
-<style>
-  :root {
-    --bg: #000000;
-    --bg-raised: #0A0A0A;
-    --ink: #FFFFFF;
-    --ink-dim: rgba(255, 255, 255, 0.58);
-    --ink-faint: rgba(255, 255, 255, 0.34);
-    --hairline: rgba(255, 255, 255, 0.14);
-    --hairline-strong: rgba(255, 255, 255, 0.28);
-    --red: #E5564A;
-    --red-dim: rgba(229, 86, 74, 0.16);
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  }
-
-  * { box-sizing: border-box; }
-
-  html, body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: var(--sans);
-    -webkit-font-smoothing: antialiased;
-  }
-
-  body {
-    min-height: 100vh;
-    display: flex;
-    justify-content: center;
-    padding: 48px 20px 96px;
-  }
-
-  .shell {
-    width: 100%;
-    max-width: 720px;
-  }
-
-  .brand-header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 8px;
-  }
-
-  .brand-mark {
-    width: 28px;
-    height: auto;
-    color: var(--ink);
-    flex-shrink: 0;
-  }
-
-  .brand-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  h1 {
-    font-size: 22px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    margin: 0;
-  }
-
-  .brand-byline {
-    font-size: 12px;
-    color: var(--ink-dim);
-    text-decoration: none;
-    border-bottom: 1px solid transparent;
-  }
-  .brand-byline:hover {
-    color: var(--ink);
-    border-bottom-color: var(--hairline-strong);
-  }
-
-  .subhead {
-    color: var(--ink-dim);
-    font-size: 14.5px;
-    line-height: 1.6;
-    margin: 16px 0 24px;
-    max-width: 56ch;
-  }
-
-  .disclaimer {
-    border: 1px solid var(--hairline);
-    border-radius: 8px;
-    padding: 14px 16px;
-    margin-bottom: 36px;
-    font-size: 12.5px;
-    line-height: 1.6;
-    color: var(--ink-dim);
-    max-width: 56ch;
-  }
-
-  .disclaimer strong {
-    color: var(--ink);
-  }
-
-  .panel {
-    border: 1px solid var(--hairline);
-    border-radius: 10px;
-    background: var(--bg-raised);
-    padding: 28px;
-    margin-bottom: 20px;
-  }
-
-  .panel h2 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 4px;
-    color: var(--ink);
-  }
-
-  .panel .panel-desc {
-    color: var(--ink-dim);
-    font-size: 13px;
-    line-height: 1.55;
-    margin: 0 0 18px;
-  }
-
-  .field {
-    margin-bottom: 18px;
-  }
-
-  .field:last-child { margin-bottom: 0; }
-
-  .field label {
-    display: block;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--ink);
-    margin-bottom: 4px;
-  }
-
-  .field .hint {
-    display: block;
-    font-size: 12px;
-    color: var(--ink-dim);
-    margin-bottom: 7px;
-    line-height: 1.5;
-  }
-
-  .field .hint a {
-    color: var(--ink);
-    text-decoration: none;
-    border-bottom: 1px solid var(--hairline-strong);
-  }
-  .field .hint a:hover { border-bottom-color: var(--ink); }
-
-  .field input {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--hairline);
-    border-radius: 6px;
-    color: var(--ink);
-    font-family: var(--mono);
-    font-size: 13.5px;
-    padding: 10px 12px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
-  .field input:focus {
-    border-color: var(--ink-dim);
-  }
-
-  .field input::placeholder {
-    color: var(--ink-faint);
-  }
-
-  .field-error {
-    font-size: 12px;
-    color: var(--red);
-    margin-top: 5px;
-    display: none;
-  }
-
-  .field-error.show { display: block; }
-
-  .field input.invalid {
-    border-color: var(--red);
-  }
-
-  .btn-row {
-    margin-top: 28px;
-  }
-
-  button.primary {
-    width: 100%;
-    background: var(--ink);
-    color: #000000;
-    border: none;
-    border-radius: 999px;
-    font-family: var(--sans);
-    font-size: 14.5px;
-    font-weight: 600;
-    padding: 13px 20px;
-    cursor: pointer;
-    transition: opacity 0.15s;
-  }
-
-  button.primary:hover { opacity: 0.85; }
-  button.primary:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  button.secondary {
-    background: transparent;
-    color: var(--ink-dim);
-    border: 1px solid var(--hairline);
-    border-radius: 999px;
-    font-family: var(--sans);
-    font-size: 13px;
-    padding: 9px 16px;
-    cursor: pointer;
-  }
-  button.secondary:hover { border-color: var(--ink-dim); color: var(--ink); }
-
-  .remember-row {
-    margin-top: 22px;
-    padding-top: 18px;
-    border-top: 1px solid var(--hairline);
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: flex-start;
-    gap: 9px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink);
-    cursor: pointer;
-    margin-bottom: 6px;
-  }
-
-  .checkbox-label input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    margin-top: 1px;
-    accent-color: var(--ink);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .remember-row .hint {
-    margin-bottom: 0;
-    margin-left: 25px;
-  }
-
-  .clear-saved-row {
-    margin-top: 12px;
-    text-align: center;
-  }
-
-  .clear-saved-row button.secondary {
-    width: 100%;
-  }
-
-  .privacy-statement {
-    margin-top: 56px;
-    padding-top: 28px;
-    border-top: 1px solid var(--hairline);
-    font-size: 12.5px;
-    line-height: 1.7;
-    color: var(--ink-dim);
-  }
-
-  .privacy-statement h3 {
-    font-size: 12.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: var(--ink);
-    margin: 0 0 12px;
-    font-weight: 600;
-  }
-
-  .privacy-statement p { margin: 0 0 10px; }
-  .privacy-statement p:last-child { margin-bottom: 0; }
-
-  .privacy-statement a {
-    color: var(--ink);
-    text-decoration: none;
-    border-bottom: 1px solid var(--hairline-strong);
-  }
-  .privacy-statement a:hover { border-bottom-color: var(--ink); }
-
-  /* --- progress / log screen --- */
-
-  .progress-log {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    line-height: 1.9;
-    max-height: 360px;
-    overflow-y: auto;
-    padding-right: 4px;
-  }
-
-  .progress-log .line {
-    color: var(--ink-dim);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .progress-log .line.ok::before {
-    content: "✓ ";
-    color: var(--ink);
-  }
-  .progress-log .line.ok { color: var(--ink); }
-
-  .progress-log .line.active::before {
-    content: "› ";
-    color: var(--ink-dim);
-  }
-  .progress-log .line.active { color: var(--ink); }
-
-  .progress-log .line.err::before {
-    content: "✕ ";
-    color: var(--red);
-  }
-  .progress-log .line.err { color: var(--red); }
-
-  .progress-bar-track {
-    height: 4px;
-    border-radius: 4px;
-    background: var(--hairline);
-    overflow: hidden;
-    margin: 18px 0 22px;
-  }
-
-  .progress-bar-fill {
-    height: 100%;
-    background: var(--ink);
-    width: 0%;
-    transition: width 0.3s ease;
-  }
-
-  /* --- results screen --- */
-
-  .summary-row {
-    display: flex;
-    gap: 14px;
-    margin-bottom: 24px;
-  }
-
-  .summary-card {
-    flex: 1;
-    border: 1px solid var(--hairline);
-    border-radius: 8px;
-    padding: 16px 18px;
-    background: var(--bg);
-  }
-
-  .summary-card.actual {
-    background: var(--ink);
-    border-color: var(--ink);
-  }
-
-  .summary-card .label {
-    font-size: 11.5px;
-    color: var(--ink-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 8px;
-  }
-
-  .summary-card.actual .label { color: rgba(0, 0, 0, 0.55); }
-
-  .summary-card .value {
-    font-family: var(--mono);
-    font-size: 22px;
-    font-weight: 600;
-  }
-
-  .summary-card.actual .value { color: #000000; }
-  .summary-card.flexible .value { color: var(--ink); }
-  .summary-card.agile .value { color: var(--ink); }
-
-  .summary-card .delta {
-    font-family: var(--mono);
-    font-size: 12.5px;
-    margin-top: 6px;
-    color: var(--ink-dim);
-  }
-
-  .summary-card.actual .delta { color: rgba(0, 0, 0, 0.55); }
-
-  .verdict {
-    border: 1px solid var(--hairline);
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 24px;
-    font-size: 14px;
-    line-height: 1.6;
-  }
-
-  table.results {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12.5px;
-  }
-
-  table.results th {
-    text-align: right;
-    font-weight: 600;
-    color: var(--ink-dim);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 0 8px 10px;
-    border-bottom: 1px solid var(--hairline);
-  }
-
-  table.results th:first-child { text-align: left; }
-
-  table.results td {
-    text-align: right;
-    font-family: var(--mono);
-    padding: 9px 8px;
-    border-bottom: 1px solid var(--hairline);
-    white-space: nowrap;
-  }
-
-  table.results td:first-child {
-    text-align: left;
-    font-family: var(--sans);
-    color: var(--ink-dim);
-  }
-
-  table.results .stale-flag {
-    color: var(--red);
-    font-family: var(--sans);
-    font-size: 10.5px;
-    margin-left: 5px;
-  }
-
-  table.results tfoot td {
-    border-bottom: none;
-    border-top: 1px solid var(--hairline);
-    font-weight: 600;
-    padding-top: 13px;
-  }
-
-  .gap-warning {
-    border: 1px solid var(--hairline-strong);
-    background: var(--bg-raised);
-    border-radius: 8px;
-    padding: 14px 16px;
-    margin-bottom: 20px;
-    font-size: 13px;
-    line-height: 1.55;
-  }
-
-  .gap-warning .title {
-    color: var(--ink);
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-
-  .gap-warning ul {
-    margin: 6px 0 0;
-    padding-left: 18px;
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--ink-dim);
-  }
-
-  .error-banner {
-    border: 1px solid #4A2420;
-    background: #1F1310;
-    border-radius: 8px;
-    padding: 16px 18px;
-    margin-bottom: 20px;
-    font-size: 13.5px;
-    line-height: 1.6;
-  }
-
-  .error-banner .title {
-    color: var(--red);
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-
-  .screen { display: none; }
-  .screen.active { display: block; }
-
-  .footnote {
-    color: var(--ink-dim);
-    font-size: 12px;
-    line-height: 1.6;
-    margin-top: 28px;
-  }
-
-  .email-results-row {
-    margin-top: 20px;
-    padding-top: 20px;
-    border-top: 1px solid var(--hairline);
-  }
-
-  .email-results-link {
-    display: inline-block;
-    color: var(--ink);
-    font-size: 13.5px;
-    font-weight: 600;
-    text-decoration: none;
-    border-bottom: 1px solid var(--hairline-strong);
-  }
-  .email-results-link:hover { border-bottom-color: var(--ink); }
-
-  .email-results-hint {
-    display: block;
-    color: var(--ink-dim);
-    font-size: 12px;
-    line-height: 1.5;
-    margin-top: 6px;
-    max-width: 56ch;
-  }
-
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 4px; }
-</style>
-</head>
-<body>
-<div class="shell">
-
-  <div class="brand-header">
-    <svg class="brand-mark" viewBox="0 0 26.97 43.969" xmlns="http://www.w3.org/2000/svg">
-      <path d="M 5.523 7.921 C 5.523 3.546 9.084 0 13.477 0 C 17.869 0 21.43 3.546 21.43 7.921 C 21.43 12.296 17.869 15.842 13.477 15.842 C 9.084 15.842 5.523 12.296 5.523 7.921 Z" fill="currentColor"/>
-      <path d="M 26.97 10.52 C 26.97 28.981 20.927 43.969 13.485 43.969 C 6.042 43.969 0 28.981 0 10.52 C 0 14.179 3.021 17.148 6.743 17.148 C 10.464 17.148 13.485 14.179 13.485 10.52 C 13.485 14.179 16.506 17.148 20.227 17.148 C 23.948 17.148 26.97 14.179 26.97 10.52 Z M 12.614 26.835 L 12.614 39.882 C 12.614 39.937 12.659 39.982 12.714 39.982 L 14.255 39.982 C 14.311 39.982 14.356 39.937 14.356 39.882 L 14.356 26.835 C 16.492 26.455 18.109 24.711 18.109 22.618 C 18.109 20.248 16.037 18.324 13.485 18.324 C 10.933 18.324 8.861 20.248 8.861 22.618 C 8.861 24.711 10.477 26.455 12.614 26.835 Z M 13.485 20.421 C 13.023 20.421 12.649 20.073 12.649 19.644 C 12.649 19.216 13.023 18.868 13.485 18.868 C 13.946 18.868 14.321 19.216 14.321 19.644 C 14.321 20.073 13.946 20.421 13.485 20.421 Z M 10.056 38.922 L 12.345 38.922 L 12.345 38.07 L 10.056 38.07 C 9.904 38.07 9.782 38.193 9.782 38.344 L 9.782 38.649 C 9.782 38.8 9.904 38.922 10.056 38.922 Z M 10.888 37.828 L 12.345 37.828 L 12.345 36.976 L 10.888 36.976 C 10.815 36.976 10.745 37.004 10.694 37.056 C 10.642 37.107 10.613 37.177 10.613 37.25 L 10.613 37.555 C 10.613 37.627 10.642 37.697 10.694 37.748 C 10.745 37.799 10.815 37.828 10.888 37.828 Z M 10.056 36.734 L 12.345 36.734 L 12.345 35.881 L 10.056 35.881 C 9.904 35.881 9.782 36.004 9.782 36.155 L 9.782 36.46 C 9.782 36.612 9.904 36.734 10.056 36.734 Z" fill="currentColor"/>
-    </svg>
-    <div class="brand-text">
-      <h1>Octopus Tariff Check</h1>
-      <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-    </div>
-  </div>
-  <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
-
-  <div class="disclaimer">
-    <strong>No warranty, no advice.</strong> This tool is provided "as is" with no warranty of any kind, express or implied, including as to accuracy, completeness, or fitness for any particular purpose. It is not financial or professional advice, and Auth Energy Ltd accepts no liability for decisions made using it. Calculations are based on Octopus's own published rates and your own account data, but errors are possible &mdash; always check your real bills and Octopus's own tariff tools before switching. Past tariff performance does not indicate future performance: a tariff that would have been cheaper over the period shown is not guaranteed to be cheaper going forward, since both your usage and tariff rates can change.
-  </div>
-
-  <!-- SCREEN 1: input -->
-  <div class="screen active" id="screen-input">
-    <div class="panel">
-      <h2>Your Octopus credentials</h2>
-      <p class="panel-desc">All four of these are visible on your Octopus account dashboard. None of this leaves your browser &mdash; every request goes directly from this page to api.octopus.energy.</p>
-
-      <div class="field">
-        <label for="input-apikey">API key</label>
-        <span class="hint">Found at <a href="https://octopus.energy/dashboard/developer/" target="_blank" rel="noopener">octopus.energy/dashboard/developer</a>. Starts with <code>sk_live_</code>.</span>
-        <input type="password" id="input-apikey" placeholder="sk_live_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
-        <div class="field-error" id="error-apikey">Enter your API key.</div>
-      </div>
-
-      <div class="field">
-        <label for="input-account">Account number</label>
-        <span class="hint">Same dashboard page, top of the screen. Format <code>A-AAAA1111</code>.</span>
-        <input type="text" id="input-account" placeholder="A-AAAA1111" autocomplete="off">
-        <div class="field-error" id="error-account">Enter your account number, e.g. A-AAAA1111.</div>
-      </div>
-
-      <div class="field">
-        <label for="input-mpan">Electricity MPAN</label>
-        <span class="hint">Your meter point number &mdash; 13 digits, also on the developer dashboard or on any bill.</span>
-        <input type="text" id="input-mpan" placeholder="1234567890123" autocomplete="off">
-        <div class="field-error" id="error-mpan">Enter your 13-digit MPAN.</div>
-      </div>
-
-      <div class="field">
-        <label for="input-serial">Meter serial number</label>
-        <span class="hint">Listed next to your MPAN on the same dashboard page.</span>
-        <input type="text" id="input-serial" placeholder="12A3456789" autocomplete="off">
-        <div class="field-error" id="error-serial">Enter your meter serial number.</div>
-      </div>
-
-      <div class="remember-row">
-        <label class="checkbox-label">
-          <input type="checkbox" id="input-remember">
-          <span>Remember these details in this browser</span>
-        </label>
-        <span class="hint">Stored only in this browser's local storage, never sent anywhere except back into these fields next time. Anyone with access to this browser/device could read it back out, so don't use this on a shared or public computer.</span>
-      </div>
-
-      <div class="btn-row">
-        <button class="primary" id="btn-submit">Fetch my data &amp; compare tariffs</button>
-      </div>
-      <div class="clear-saved-row" id="clear-saved-row" style="display:none;">
-        <button class="secondary" id="btn-clear-saved">Clear saved details from this browser</button>
-      </div>
-    </div>
-
-    <p class="footnote">This pulls roughly 12 months of half-hourly consumption (up to 7 days ago, so the data has settled in Octopus's systems), checks it for gaps, then prices it under both Flexible and Agile using the real historical rates for each billing period &mdash; compared against what you actually paid.</p>
-  </div>
-
-  <!-- SCREEN 2: progress -->
-  <div class="screen" id="screen-progress">
-    <div class="panel">
-      <h2>Fetching &amp; calculating</h2>
-      <p class="panel-desc" id="progress-subhead">This can take a minute or two &mdash; a year of half-hourly data and several rate-history lookups add up.</p>
-      <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar"></div></div>
-      <div class="progress-log" id="progress-log"></div>
-    </div>
-  </div>
-
-  <!-- SCREEN 3: results -->
-  <div class="screen" id="screen-results">
-    <div id="results-content"></div>
-    <div class="btn-row">
-      <button class="secondary" id="btn-restart">Run again</button>
-    </div>
-  </div>
-
-  <div class="privacy-statement">
-    <h3>Privacy</h3>
-    <p>This page has no backend. There is no server collecting your data, because there is no server at all &mdash; it's a single static HTML file, viewable by anyone via "view source" or this repository's <a href="https://github.com/AuthEnergy/agile-compare" target="_blank" rel="noopener">public code on GitHub</a>.</p>
-    <p>Every request this page makes goes directly from your browser to Octopus Energy's own API at api.octopus.energy, using your own API key. Nothing you enter is sent to the author of this tool, to any analytics service, or to any third party of any kind. You can verify this yourself by opening your browser's network tab while using the page.</p>
-    <p>The one exception is the "Email this summary to auth.energy" button on the results screen, which is entirely optional. It opens a draft in your own email app &mdash; it doesn't send anything automatically &mdash; containing only your postcode's outward code (e.g. "N15", never the full postcode), the comparison period, total kWh, and the actual/Flexible/Agile totals. It never includes your API key, account number, MPAN, meter serial, or raw consumption data, and you can review or cancel the draft before anything leaves your device.</p>
-    <p>If you tick "remember these details," your API key, account number, MPAN, and meter serial are saved using your browser's local storage &mdash; a feature built into the browser itself, not a cookie, and not transmitted anywhere. This data stays on your device until you clear it (via the button on the input screen, or by clearing your browser's site data for this page) and is never readable by any other website.</p>
-    <p>Treat your Octopus API key like a password. Anyone with it can read your account's billing and consumption history. If you use the "remember" option, that key sits in plain form in this browser's storage, so avoid using it on a shared or public computer, and clear it when you're done if you do.</p>
-  </div>
-
-</div>
-
-<script>
-/* ============================================================
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Octopus Tariff Check | auth.energy</title>
+        <style>
+            :root {
+                --bg: #000000;
+                --bg-raised: #0a0a0a;
+                --ink: #ffffff;
+                --ink-dim: rgba(255, 255, 255, 0.58);
+                --ink-faint: rgba(255, 255, 255, 0.34);
+                --hairline: rgba(255, 255, 255, 0.14);
+                --hairline-strong: rgba(255, 255, 255, 0.28);
+                --red: #e5564a;
+                --red-dim: rgba(229, 86, 74, 0.16);
+                --mono:
+                    ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+                    Menlo, Consolas, monospace;
+                --sans:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+                    Arial, sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--ink);
+                font-family: var(--sans);
+                -webkit-font-smoothing: antialiased;
+            }
+
+            body {
+                min-height: 100vh;
+                display: flex;
+                justify-content: center;
+                padding: 48px 20px 96px;
+            }
+
+            .shell {
+                width: 100%;
+                max-width: 720px;
+            }
+
+            .brand-header {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                margin-bottom: 8px;
+            }
+
+            .brand-mark {
+                width: 28px;
+                height: auto;
+                color: var(--ink);
+                flex-shrink: 0;
+            }
+
+            .brand-text {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+            }
+
+            h1 {
+                font-size: 22px;
+                font-weight: 600;
+                letter-spacing: -0.01em;
+                margin: 0;
+            }
+
+            .brand-byline {
+                font-size: 12px;
+                color: var(--ink-dim);
+                text-decoration: none;
+                border-bottom: 1px solid transparent;
+            }
+            .brand-byline:hover {
+                color: var(--ink);
+                border-bottom-color: var(--hairline-strong);
+            }
+
+            .subhead {
+                color: var(--ink-dim);
+                font-size: 14.5px;
+                line-height: 1.6;
+                margin: 16px 0 24px;
+                max-width: 56ch;
+            }
+
+            .disclaimer {
+                border: 1px solid var(--hairline);
+                border-radius: 8px;
+                padding: 14px 16px;
+                margin-bottom: 36px;
+                font-size: 12.5px;
+                line-height: 1.6;
+                color: var(--ink-dim);
+                max-width: 80ch;
+            }
+
+            .disclaimer strong {
+                color: var(--ink);
+            }
+
+            .panel {
+                border: 1px solid var(--hairline);
+                border-radius: 10px;
+                background: var(--bg-raised);
+                padding: 28px;
+                margin-bottom: 20px;
+            }
+
+            .panel h2 {
+                font-size: 15px;
+                font-weight: 600;
+                margin: 0 0 4px;
+                color: var(--ink);
+            }
+
+            .panel .panel-desc {
+                color: var(--ink-dim);
+                font-size: 13px;
+                line-height: 1.55;
+                margin: 0 0 18px;
+            }
+
+            .field {
+                margin-bottom: 18px;
+            }
+
+            .field:last-child {
+                margin-bottom: 0;
+            }
+
+            .field label {
+                display: block;
+                font-size: 12.5px;
+                font-weight: 600;
+                color: var(--ink);
+                margin-bottom: 4px;
+            }
+
+            .field .hint {
+                display: block;
+                font-size: 12px;
+                color: var(--ink-dim);
+                margin-bottom: 7px;
+                line-height: 1.5;
+            }
+
+            .field .hint a {
+                color: var(--ink);
+                text-decoration: none;
+                border-bottom: 1px solid var(--hairline-strong);
+            }
+            .field .hint a:hover {
+                border-bottom-color: var(--ink);
+            }
+
+            .field input {
+                width: 100%;
+                background: var(--bg);
+                border: 1px solid var(--hairline);
+                border-radius: 6px;
+                color: var(--ink);
+                font-family: var(--mono);
+                font-size: 13.5px;
+                padding: 10px 12px;
+                outline: none;
+                transition: border-color 0.15s;
+            }
+
+            .field input:focus {
+                border-color: var(--ink-dim);
+            }
+
+            .field input::placeholder {
+                color: var(--ink-faint);
+            }
+
+            .field-error {
+                font-size: 12px;
+                color: var(--red);
+                margin-top: 5px;
+                display: none;
+            }
+
+            .field-error.show {
+                display: block;
+            }
+
+            .field input.invalid {
+                border-color: var(--red);
+            }
+
+            .btn-row {
+                margin-top: 28px;
+            }
+
+            button.primary {
+                width: 100%;
+                background: var(--ink);
+                color: #000000;
+                border: none;
+                border-radius: 999px;
+                font-family: var(--sans);
+                font-size: 14.5px;
+                font-weight: 600;
+                padding: 13px 20px;
+                cursor: pointer;
+                transition: opacity 0.15s;
+            }
+
+            button.primary:hover {
+                opacity: 0.85;
+            }
+            button.primary:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+
+            button.secondary {
+                background: transparent;
+                color: var(--ink-dim);
+                border: 1px solid var(--hairline);
+                border-radius: 999px;
+                font-family: var(--sans);
+                font-size: 13px;
+                padding: 9px 16px;
+                cursor: pointer;
+            }
+            button.secondary:hover {
+                border-color: var(--ink-dim);
+                color: var(--ink);
+            }
+
+            .remember-row {
+                margin-top: 22px;
+                padding-top: 18px;
+                border-top: 1px solid var(--hairline);
+            }
+
+            .checkbox-label {
+                display: flex;
+                align-items: flex-start;
+                gap: 9px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--ink);
+                cursor: pointer;
+                margin-bottom: 6px;
+            }
+
+            .checkbox-label input[type="checkbox"] {
+                width: 16px;
+                height: 16px;
+                margin-top: 1px;
+                accent-color: var(--ink);
+                cursor: pointer;
+                flex-shrink: 0;
+            }
+
+            .remember-row .hint {
+                margin-bottom: 0;
+                margin-left: 25px;
+            }
+
+            .clear-saved-row {
+                margin-top: 12px;
+                text-align: center;
+            }
+
+            .clear-saved-row button.secondary {
+                width: 100%;
+            }
+
+            .privacy-statement {
+                margin-top: 56px;
+                padding-top: 28px;
+                border-top: 1px solid var(--hairline);
+                font-size: 12.5px;
+                line-height: 1.7;
+                color: var(--ink-dim);
+            }
+
+            .privacy-statement h3 {
+                font-size: 12.5px;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--ink);
+                margin: 0 0 12px;
+                font-weight: 600;
+            }
+
+            .privacy-statement p {
+                margin: 0 0 10px;
+            }
+            .privacy-statement p:last-child {
+                margin-bottom: 0;
+            }
+
+            .privacy-statement a {
+                color: var(--ink);
+                text-decoration: none;
+                border-bottom: 1px solid var(--hairline-strong);
+            }
+            .privacy-statement a:hover {
+                border-bottom-color: var(--ink);
+            }
+
+            /* --- progress / log screen --- */
+
+            .progress-log {
+                font-family: var(--mono);
+                font-size: 12.5px;
+                line-height: 1.9;
+                max-height: 360px;
+                overflow-y: auto;
+                padding-right: 4px;
+            }
+
+            .progress-log .line {
+                color: var(--ink-dim);
+                white-space: pre-wrap;
+                word-break: break-word;
+            }
+
+            .progress-log .line.ok::before {
+                content: "✓ ";
+                color: var(--ink);
+            }
+            .progress-log .line.ok {
+                color: var(--ink);
+            }
+
+            .progress-log .line.active::before {
+                content: "› ";
+                color: var(--ink-dim);
+            }
+            .progress-log .line.active {
+                color: var(--ink);
+            }
+
+            .progress-log .line.err::before {
+                content: "✕ ";
+                color: var(--red);
+            }
+            .progress-log .line.err {
+                color: var(--red);
+            }
+
+            .progress-bar-track {
+                height: 4px;
+                border-radius: 4px;
+                background: var(--hairline);
+                overflow: hidden;
+                margin: 18px 0 22px;
+            }
+
+            .progress-bar-fill {
+                height: 100%;
+                background: var(--ink);
+                width: 0%;
+                transition: width 0.3s ease;
+            }
+
+            /* --- results screen --- */
+
+            .summary-row {
+                display: flex;
+                gap: 14px;
+                margin-bottom: 24px;
+            }
+
+            .summary-card {
+                flex: 1;
+                border: 1px solid var(--hairline);
+                border-radius: 8px;
+                padding: 16px 18px;
+                background: var(--bg);
+            }
+
+            .summary-card.actual {
+                background: var(--ink);
+                border-color: var(--ink);
+            }
+
+            .summary-card .label {
+                font-size: 11.5px;
+                color: var(--ink-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                margin-bottom: 8px;
+            }
+
+            .summary-card.actual .label {
+                color: rgba(0, 0, 0, 0.55);
+            }
+
+            .summary-card .value {
+                font-family: var(--mono);
+                font-size: 22px;
+                font-weight: 600;
+            }
+
+            .summary-card.actual .value {
+                color: #000000;
+            }
+            .summary-card.flexible .value {
+                color: var(--ink);
+            }
+            .summary-card.agile .value {
+                color: var(--ink);
+            }
+
+            .summary-card .delta {
+                font-family: var(--mono);
+                font-size: 12.5px;
+                margin-top: 6px;
+                color: var(--ink-dim);
+            }
+
+            .summary-card.actual .delta {
+                color: rgba(0, 0, 0, 0.55);
+            }
+
+            .verdict {
+                border: 1px solid var(--hairline);
+                border-radius: 8px;
+                padding: 16px 18px;
+                margin-bottom: 24px;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+
+            table.results {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12.5px;
+            }
+
+            table.results th {
+                text-align: right;
+                font-weight: 600;
+                color: var(--ink-dim);
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.03em;
+                padding: 0 8px 10px;
+                border-bottom: 1px solid var(--hairline);
+            }
+
+            table.results th:first-child {
+                text-align: left;
+            }
+
+            table.results td {
+                text-align: right;
+                font-family: var(--mono);
+                padding: 9px 8px;
+                border-bottom: 1px solid var(--hairline);
+                white-space: nowrap;
+            }
+
+            table.results td:first-child {
+                text-align: left;
+                font-family: var(--sans);
+                color: var(--ink-dim);
+            }
+
+            table.results .stale-flag {
+                color: var(--red);
+                font-family: var(--sans);
+                font-size: 10.5px;
+                margin-left: 5px;
+            }
+
+            table.results tfoot td {
+                border-bottom: none;
+                border-top: 1px solid var(--hairline);
+                font-weight: 600;
+                padding-top: 13px;
+            }
+
+            .gap-warning {
+                border: 1px solid var(--hairline-strong);
+                background: var(--bg-raised);
+                border-radius: 8px;
+                padding: 14px 16px;
+                margin-bottom: 20px;
+                font-size: 13px;
+                line-height: 1.55;
+            }
+
+            .gap-warning .title {
+                color: var(--ink);
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+
+            .gap-warning ul {
+                margin: 6px 0 0;
+                padding-left: 18px;
+                font-family: var(--mono);
+                font-size: 12px;
+                color: var(--ink-dim);
+            }
+
+            .error-banner {
+                border: 1px solid #4a2420;
+                background: #1f1310;
+                border-radius: 8px;
+                padding: 16px 18px;
+                margin-bottom: 20px;
+                font-size: 13.5px;
+                line-height: 1.6;
+            }
+
+            .error-banner .title {
+                color: var(--red);
+                font-weight: 600;
+                margin-bottom: 6px;
+            }
+
+            .screen {
+                display: none;
+            }
+            .screen.active {
+                display: block;
+            }
+
+            .footnote {
+                color: var(--ink-dim);
+                font-size: 12px;
+                line-height: 1.6;
+                margin-top: 28px;
+            }
+
+            .email-results-row {
+                margin-top: 20px;
+                padding-top: 20px;
+                border-top: 1px solid var(--hairline);
+            }
+
+            .email-results-link {
+                display: inline-block;
+                color: var(--ink);
+                font-size: 13.5px;
+                font-weight: 600;
+                text-decoration: none;
+                border-bottom: 1px solid var(--hairline-strong);
+            }
+            .email-results-link:hover {
+                border-bottom-color: var(--ink);
+            }
+
+            .email-results-hint {
+                display: block;
+                color: var(--ink-dim);
+                font-size: 12px;
+                line-height: 1.5;
+                margin-top: 6px;
+                max-width: 56ch;
+            }
+
+            ::-webkit-scrollbar {
+                width: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: var(--hairline);
+                border-radius: 4px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="shell">
+            <div class="brand-header">
+                <svg
+                    class="brand-mark"
+                    viewBox="0 0 26.97 43.969"
+                    xmlns="http://www.w3.org/2000/svg"
+                >
+                    <path
+                        d="M 5.523 7.921 C 5.523 3.546 9.084 0 13.477 0 C 17.869 0 21.43 3.546 21.43 7.921 C 21.43 12.296 17.869 15.842 13.477 15.842 C 9.084 15.842 5.523 12.296 5.523 7.921 Z"
+                        fill="currentColor"
+                    />
+                    <path
+                        d="M 26.97 10.52 C 26.97 28.981 20.927 43.969 13.485 43.969 C 6.042 43.969 0 28.981 0 10.52 C 0 14.179 3.021 17.148 6.743 17.148 C 10.464 17.148 13.485 14.179 13.485 10.52 C 13.485 14.179 16.506 17.148 20.227 17.148 C 23.948 17.148 26.97 14.179 26.97 10.52 Z M 12.614 26.835 L 12.614 39.882 C 12.614 39.937 12.659 39.982 12.714 39.982 L 14.255 39.982 C 14.311 39.982 14.356 39.937 14.356 39.882 L 14.356 26.835 C 16.492 26.455 18.109 24.711 18.109 22.618 C 18.109 20.248 16.037 18.324 13.485 18.324 C 10.933 18.324 8.861 20.248 8.861 22.618 C 8.861 24.711 10.477 26.455 12.614 26.835 Z M 13.485 20.421 C 13.023 20.421 12.649 20.073 12.649 19.644 C 12.649 19.216 13.023 18.868 13.485 18.868 C 13.946 18.868 14.321 19.216 14.321 19.644 C 14.321 20.073 13.946 20.421 13.485 20.421 Z M 10.056 38.922 L 12.345 38.922 L 12.345 38.07 L 10.056 38.07 C 9.904 38.07 9.782 38.193 9.782 38.344 L 9.782 38.649 C 9.782 38.8 9.904 38.922 10.056 38.922 Z M 10.888 37.828 L 12.345 37.828 L 12.345 36.976 L 10.888 36.976 C 10.815 36.976 10.745 37.004 10.694 37.056 C 10.642 37.107 10.613 37.177 10.613 37.25 L 10.613 37.555 C 10.613 37.627 10.642 37.697 10.694 37.748 C 10.745 37.799 10.815 37.828 10.888 37.828 Z M 10.056 36.734 L 12.345 36.734 L 12.345 35.881 L 10.056 35.881 C 9.904 35.881 9.782 36.004 9.782 36.155 L 9.782 36.46 C 9.782 36.612 9.904 36.734 10.056 36.734 Z"
+                        fill="currentColor"
+                    />
+                </svg>
+                <div class="brand-text">
+                    <h1>Octopus Tariff Check</h1>
+                    <a
+                        class="brand-byline"
+                        href="https://auth.energy"
+                        target="_blank"
+                        rel="noopener"
+                        >by auth.energy</a
+                    >
+                </div>
+            </div>
+            <p class="subhead">
+                Pull a year of your real half-hourly usage and find out whether
+                Flexible or Agile would have actually cost you less &mdash;
+                using the real historical rates for each, not today's snapshot.
+                Runs entirely in this browser tab; nothing is sent anywhere
+                except Octopus's own API.
+            </p>
+
+            <div class="disclaimer">
+                <strong>No warranty, no advice.</strong> This tool is provided
+                "as is" with no warranty of any kind, express or implied,
+                including as to accuracy, completeness, or fitness for any
+                particular purpose. It is not financial or professional advice,
+                and Auth Energy Ltd accepts no liability for decisions made
+                using it. Calculations are based on Octopus's own published
+                rates and your own account data, but errors are possible &mdash;
+                always check your real bills and Octopus's own tariff tools
+                before switching. Past tariff performance does not indicate
+                future performance: a tariff that would have been cheaper over
+                the period shown is not guaranteed to be cheaper going forward,
+                since both your usage and tariff rates can change.
+            </div>
+
+            <!-- SCREEN 1: input -->
+            <div class="screen active" id="screen-input">
+                <div class="panel">
+                    <h2>Your Octopus credentials</h2>
+                    <p class="panel-desc">
+                        All four of these are visible on your Octopus account
+                        dashboard. None of this leaves your browser &mdash;
+                        every request goes directly from this page to
+                        api.octopus.energy.
+                    </p>
+
+                    <div class="field">
+                        <label for="input-apikey">API key</label>
+                        <span class="hint"
+                            >Found at
+                            <a
+                                href="https://octopus.energy/dashboard/developer/"
+                                target="_blank"
+                                rel="noopener"
+                                >octopus.energy/dashboard/developer</a
+                            >. Starts with <code>sk_live_</code>.</span
+                        >
+                        <input
+                            type="password"
+                            id="input-apikey"
+                            placeholder="sk_live_xxxxxxxxxxxxxxxxxxxx"
+                            autocomplete="off"
+                        />
+                        <div class="field-error" id="error-apikey">
+                            Enter your API key.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="input-account">Account number</label>
+                        <span class="hint"
+                            >Same dashboard page, top of the screen. Format
+                            <code>A-AAAA1111</code>.</span
+                        >
+                        <input
+                            type="text"
+                            id="input-account"
+                            placeholder="A-AAAA1111"
+                            autocomplete="off"
+                        />
+                        <div class="field-error" id="error-account">
+                            Enter your account number, e.g. A-AAAA1111.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="input-mpan">Electricity MPAN</label>
+                        <span class="hint"
+                            >Your meter point number &mdash; 13 digits, also on
+                            the developer dashboard or on any bill.</span
+                        >
+                        <input
+                            type="text"
+                            id="input-mpan"
+                            placeholder="1234567890123"
+                            autocomplete="off"
+                        />
+                        <div class="field-error" id="error-mpan">
+                            Enter your 13-digit MPAN.
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="input-serial">Meter serial number</label>
+                        <span class="hint"
+                            >Listed next to your MPAN on the same dashboard
+                            page.</span
+                        >
+                        <input
+                            type="text"
+                            id="input-serial"
+                            placeholder="12A3456789"
+                            autocomplete="off"
+                        />
+                        <div class="field-error" id="error-serial">
+                            Enter your meter serial number.
+                        </div>
+                    </div>
+
+                    <div class="remember-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="input-remember" />
+                            <span>Remember these details in this browser</span>
+                        </label>
+                        <span class="hint"
+                            >Stored only in this browser's local storage, never
+                            sent anywhere except back into these fields next
+                            time. Anyone with access to this browser/device
+                            could read it back out, so don't use this on a
+                            shared or public computer.</span
+                        >
+                    </div>
+
+                    <div class="btn-row">
+                        <button class="primary" id="btn-submit">
+                            Fetch my data &amp; compare tariffs
+                        </button>
+                    </div>
+                    <div
+                        class="clear-saved-row"
+                        id="clear-saved-row"
+                        style="display: none"
+                    >
+                        <button class="secondary" id="btn-clear-saved">
+                            Clear saved details from this browser
+                        </button>
+                    </div>
+                </div>
+
+                <p class="footnote">
+                    This pulls roughly 12 months of half-hourly consumption (up
+                    to 7 days ago, so the data has settled in Octopus's
+                    systems), checks it for gaps, then prices it under both
+                    Flexible and Agile using the real historical rates for each
+                    billing period &mdash; compared against what you actually
+                    paid.
+                </p>
+            </div>
+
+            <!-- SCREEN 2: progress -->
+            <div class="screen" id="screen-progress">
+                <div class="panel">
+                    <h2>Fetching &amp; calculating</h2>
+                    <p class="panel-desc" id="progress-subhead">
+                        This can take a minute or two &mdash; a year of
+                        half-hourly data and several rate-history lookups add
+                        up.
+                    </p>
+                    <div class="progress-bar-track">
+                        <div class="progress-bar-fill" id="progress-bar"></div>
+                    </div>
+                    <div class="progress-log" id="progress-log"></div>
+                </div>
+            </div>
+
+            <!-- SCREEN 3: results -->
+            <div class="screen" id="screen-results">
+                <div id="results-content"></div>
+                <div class="btn-row">
+                    <button class="secondary" id="btn-restart">
+                        Run again
+                    </button>
+                </div>
+            </div>
+
+            <div class="privacy-statement">
+                <h3>Privacy</h3>
+                <p>
+                    This page has no backend. There is no server collecting your
+                    data, because there is no server at all &mdash; it's a
+                    single static HTML file, viewable by anyone via "view
+                    source" or this repository's
+                    <a
+                        href="https://github.com/AuthEnergy/agile-compare"
+                        target="_blank"
+                        rel="noopener"
+                        >public code on GitHub</a
+                    >.
+                </p>
+                <p>
+                    Every request this page makes goes directly from your
+                    browser to Octopus Energy's own API at api.octopus.energy,
+                    using your own API key. Nothing you enter is sent to the
+                    author of this tool, to any analytics service, or to any
+                    third party of any kind. You can verify this yourself by
+                    opening your browser's network tab while using the page.
+                </p>
+                <p>
+                    The one exception is the "Email this summary to auth.energy"
+                    button on the results screen, which is entirely optional. It
+                    opens a draft in your own email app &mdash; it doesn't send
+                    anything automatically &mdash; containing only your
+                    postcode's outward code (e.g. "N15", never the full
+                    postcode), the comparison period, total kWh, and the
+                    actual/Flexible/Agile totals. It never includes your API
+                    key, account number, MPAN, meter serial, or raw consumption
+                    data, and you can review or cancel the draft before anything
+                    leaves your device.
+                </p>
+                <p>
+                    If you tick "remember these details," your API key, account
+                    number, MPAN, and meter serial are saved using your
+                    browser's local storage &mdash; a feature built into the
+                    browser itself, not a cookie, and not transmitted anywhere.
+                    This data stays on your device until you clear it (via the
+                    button on the input screen, or by clearing your browser's
+                    site data for this page) and is never readable by any other
+                    website.
+                </p>
+                <p>
+                    Treat your Octopus API key like a password. Anyone with it
+                    can read your account's billing and consumption history. If
+                    you use the "remember" option, that key sits in plain form
+                    in this browser's storage, so avoid using it on a shared or
+                    public computer, and clear it when you're done if you do.
+                </p>
+            </div>
+        </div>
+
+        <script>
+            /* ============================================================
    CORE CALCULATION LOGIC
    (mirrors core_logic_test.js, verified separately with Node)
    ============================================================ */
 
-function rateAt(rateWindows, instant) {
-  const t = instant.getTime();
-  for (const w of rateWindows) {
-    const from = w.validFrom.getTime();
-    const to = w.validTo ? w.validTo.getTime() : Infinity;
-    if (t >= from && t < to) return w.value;
-  }
-  return null;
-}
+            function rateAt(rateWindows, instant) {
+                const t = instant.getTime();
+                for (const w of rateWindows) {
+                    const from = w.validFrom.getTime();
+                    const to = w.validTo ? w.validTo.getTime() : Infinity;
+                    if (t >= from && t < to) return w.value;
+                }
+                return null;
+            }
 
-function detectGaps(readings) {
-  if (readings.length === 0) return { gaps: [], duplicates: [], earliest: null, latest: null };
-  const sorted = [...readings].sort((a, b) => a.start - b.start);
-  const earliest = sorted[0].start;
-  const latest = sorted[sorted.length - 1].start;
+            function detectGaps(readings) {
+                if (readings.length === 0)
+                    return {
+                        gaps: [],
+                        duplicates: [],
+                        earliest: null,
+                        latest: null,
+                    };
+                const sorted = [...readings].sort((a, b) => a.start - b.start);
+                const earliest = sorted[0].start;
+                const latest = sorted[sorted.length - 1].start;
 
-  const seen = new Map();
-  for (const r of sorted) {
-    const key = r.start.getTime();
-    seen.set(key, (seen.get(key) || 0) + 1);
-  }
-  const duplicates = [...seen.entries()].filter(([_, c]) => c > 1).map(([t]) => new Date(t));
+                const seen = new Map();
+                for (const r of sorted) {
+                    const key = r.start.getTime();
+                    seen.set(key, (seen.get(key) || 0) + 1);
+                }
+                const duplicates = [...seen.entries()]
+                    .filter(([_, c]) => c > 1)
+                    .map(([t]) => new Date(t));
 
-  const stepMs = 30 * 60 * 1000;
-  const gaps = [];
-  let current = earliest.getTime();
-  let gapStart = null;
-  while (current <= latest.getTime()) {
-    if (!seen.has(current)) {
-      if (gapStart === null) gapStart = current;
-    } else if (gapStart !== null) {
-      gaps.push({ start: new Date(gapStart), end: new Date(current - stepMs) });
-      gapStart = null;
-    }
-    current += stepMs;
-  }
-  if (gapStart !== null) gaps.push({ start: new Date(gapStart), end: new Date(current - stepMs) });
+                const stepMs = 30 * 60 * 1000;
+                const gaps = [];
+                let current = earliest.getTime();
+                let gapStart = null;
+                while (current <= latest.getTime()) {
+                    if (!seen.has(current)) {
+                        if (gapStart === null) gapStart = current;
+                    } else if (gapStart !== null) {
+                        gaps.push({
+                            start: new Date(gapStart),
+                            end: new Date(current - stepMs),
+                        });
+                        gapStart = null;
+                    }
+                    current += stepMs;
+                }
+                if (gapStart !== null)
+                    gaps.push({
+                        start: new Date(gapStart),
+                        end: new Date(current - stepMs),
+                    });
 
-  return { gaps, duplicates, earliest, latest };
-}
+                return { gaps, duplicates, earliest, latest };
+            }
 
-function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standingChargeWindows) {
-  let kwh = 0;
-  let energyCostPence = 0;
-  let unmatchedReadings = 0;
+            function calculateCost(
+                readings,
+                periodStart,
+                periodEnd,
+                unitRateWindows,
+                standingChargeWindows,
+            ) {
+                let kwh = 0;
+                let energyCostPence = 0;
+                let unmatchedReadings = 0;
 
-  for (const r of readings) {
-    if (r.start >= periodStart && r.start < periodEnd) {
-      kwh += r.kwh;
-      const rate = rateAt(unitRateWindows, r.start);
-      if (rate === null) unmatchedReadings++;
-      else energyCostPence += r.kwh * rate;
-    }
-  }
+                for (const r of readings) {
+                    if (r.start >= periodStart && r.start < periodEnd) {
+                        kwh += r.kwh;
+                        const rate = rateAt(unitRateWindows, r.start);
+                        if (rate === null) unmatchedReadings++;
+                        else energyCostPence += r.kwh * rate;
+                    }
+                }
 
-  // Defensive guard against a genuinely implausible date range (e.g. an
-  // open-ended statement with no real end date, or a date-parsing bug).
-  // This function should always be called with periodStart/periodEnd
-  // already clamped to the actual data window by the caller, but this
-  // check exists as a second line of defense — an unclamped, accidentally
-  // huge date range would otherwise silently inflate the standing charge
-  // total by iterating the day-counting loop below across however many
-  // days the bad range spans, with no visible error. The bound is set
-  // generously above the app's own 3-year fetch-window cap (see
-  // runComparison), since a real billing period can legitimately span
-  // well over a year for an infrequently-switching customer.
-  const spanDays = (periodEnd - periodStart) / (24 * 60 * 60 * 1000);
-  if (spanDays > 1500) {
-    throw new Error(
-      `calculateCost called with an implausible date range (${spanDays.toFixed(0)} days, ` +
-      `${periodStart.toISOString()} to ${periodEnd.toISOString()}). This is almost certainly a bug ` +
-      `(an unclamped statement date) rather than a real billing period.`
-    );
-  }
+                // Defensive guard against a genuinely implausible date range (e.g. an
+                // open-ended statement with no real end date, or a date-parsing bug).
+                // This function should always be called with periodStart/periodEnd
+                // already clamped to the actual data window by the caller, but this
+                // check exists as a second line of defense — an unclamped, accidentally
+                // huge date range would otherwise silently inflate the standing charge
+                // total by iterating the day-counting loop below across however many
+                // days the bad range spans, with no visible error. The bound is set
+                // generously above the app's own 3-year fetch-window cap (see
+                // runComparison), since a real billing period can legitimately span
+                // well over a year for an infrequently-switching customer.
+                const spanDays =
+                    (periodEnd - periodStart) / (24 * 60 * 60 * 1000);
+                if (spanDays > 1500) {
+                    throw new Error(
+                        `calculateCost called with an implausible date range (${spanDays.toFixed(0)} days, ` +
+                            `${periodStart.toISOString()} to ${periodEnd.toISOString()}). This is almost certainly a bug ` +
+                            `(an unclamped statement date) rather than a real billing period.`,
+                    );
+                }
 
-  let standingChargePence = 0;
-  let cursor = new Date(periodStart);
-  cursor.setUTCHours(12, 0, 0, 0);
-  if (cursor < periodStart) cursor.setUTCDate(cursor.getUTCDate() + 1);
-  while (cursor < periodEnd) {
-    const rate = rateAt(standingChargeWindows, cursor);
-    if (rate !== null) standingChargePence += rate;
-    cursor.setUTCDate(cursor.getUTCDate() + 1);
-  }
+                let standingChargePence = 0;
+                let cursor = new Date(periodStart);
+                cursor.setUTCHours(12, 0, 0, 0);
+                if (cursor < periodStart)
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                while (cursor < periodEnd) {
+                    const rate = rateAt(standingChargeWindows, cursor);
+                    if (rate !== null) standingChargePence += rate;
+                    cursor.setUTCDate(cursor.getUTCDate() + 1);
+                }
 
-  return { kwh, energyCostPence, standingChargePence, totalPence: energyCostPence + standingChargePence, unmatchedReadings };
-}
+                return {
+                    kwh,
+                    energyCostPence,
+                    standingChargePence,
+                    totalPence: energyCostPence + standingChargePence,
+                    unmatchedReadings,
+                };
+            }
 
-/* ============================================================
+            /* ============================================================
    API CLIENT
    ============================================================ */
 
-const REST_BASE = "https://api.octopus.energy/v1";
-const GRAPHQL_URL = "https://api.octopus.energy/v1/graphql/";
+            const REST_BASE = "https://api.octopus.energy/v1";
+            const GRAPHQL_URL = "https://api.octopus.energy/v1/graphql/";
 
-class OctopusApiError extends Error {
-  constructor(message, { corsLikely = false, status = null, body = null } = {}) {
-    super(message);
-    this.corsLikely = corsLikely;
-    this.status = status;
-    this.body = body;
-  }
-}
+            class OctopusApiError extends Error {
+                constructor(
+                    message,
+                    { corsLikely = false, status = null, body = null } = {},
+                ) {
+                    super(message);
+                    this.corsLikely = corsLikely;
+                    this.status = status;
+                    this.body = body;
+                }
+            }
 
-async function restGet(path, params = {}) {
-  const url = new URL(path.startsWith("http") ? path : REST_BASE + path);
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined && v !== null) url.searchParams.set(k, v);
-  }
-  let resp;
-  try {
-    resp = await fetch(url.toString(), {
-      headers: { "Authorization": "Basic " + btoa(state.apiKey + ":") }
-    });
-  } catch (e) {
-    // A network-level fetch failure with no response at all is the
-    // classic CORS signature in browsers (the actual reason is hidden
-    // from JS by design; only the console shows it).
-    throw new OctopusApiError(
-      "Network request failed before any response was received. This is almost always a CORS block " +
-      "(the browser refusing to let this page read api.octopus.energy's response) or a connectivity issue. " +
-      "Check the browser console for the specific reason.",
-      { corsLikely: true }
-    );
-  }
-  if (!resp.ok) {
-    let bodyText = "";
-    try { bodyText = await resp.text(); } catch (e) {}
-    throw new OctopusApiError(`HTTP ${resp.status} from ${url.pathname}: ${bodyText.slice(0, 300)}`, { status: resp.status, body: bodyText });
-  }
-  return resp.json();
-}
+            async function restGet(path, params = {}) {
+                const url = new URL(
+                    path.startsWith("http") ? path : REST_BASE + path,
+                );
+                for (const [k, v] of Object.entries(params)) {
+                    if (v !== undefined && v !== null)
+                        url.searchParams.set(k, v);
+                }
+                let resp;
+                try {
+                    resp = await fetch(url.toString(), {
+                        headers: {
+                            Authorization: "Basic " + btoa(state.apiKey + ":"),
+                        },
+                    });
+                } catch (e) {
+                    // A network-level fetch failure with no response at all is the
+                    // classic CORS signature in browsers (the actual reason is hidden
+                    // from JS by design; only the console shows it).
+                    throw new OctopusApiError(
+                        "Network request failed before any response was received. This is almost always a CORS block " +
+                            "(the browser refusing to let this page read api.octopus.energy's response) or a connectivity issue. " +
+                            "Check the browser console for the specific reason.",
+                        { corsLikely: true },
+                    );
+                }
+                if (!resp.ok) {
+                    let bodyText = "";
+                    try {
+                        bodyText = await resp.text();
+                    } catch (e) {}
+                    throw new OctopusApiError(
+                        `HTTP ${resp.status} from ${url.pathname}: ${bodyText.slice(0, 300)}`,
+                        { status: resp.status, body: bodyText },
+                    );
+                }
+                return resp.json();
+            }
 
-async function restGetAllPages(path, params = {}) {
-  let results = [];
-  let nextUrl = REST_BASE + path;
-  let nextParams = params;
-  let guard = 0;
-  while (nextUrl && guard < 50) {
-    const url = new URL(nextUrl);
-    for (const [k, v] of Object.entries(nextParams || {})) {
-      if (v !== undefined && v !== null) url.searchParams.set(k, v);
-    }
-    const page = await restGetRaw(url.toString());
-    results = results.concat(page.results || []);
-    nextUrl = page.next;
-    nextParams = null;
-    guard++;
-  }
-  return results;
-}
+            async function restGetAllPages(path, params = {}) {
+                let results = [];
+                let nextUrl = REST_BASE + path;
+                let nextParams = params;
+                let guard = 0;
+                while (nextUrl && guard < 50) {
+                    const url = new URL(nextUrl);
+                    for (const [k, v] of Object.entries(nextParams || {})) {
+                        if (v !== undefined && v !== null)
+                            url.searchParams.set(k, v);
+                    }
+                    const page = await restGetRaw(url.toString());
+                    results = results.concat(page.results || []);
+                    nextUrl = page.next;
+                    nextParams = null;
+                    guard++;
+                }
+                return results;
+            }
 
-async function restGetRaw(fullUrl) {
-  let resp;
-  try {
-    resp = await fetch(fullUrl, {
-      headers: { "Authorization": "Basic " + btoa(state.apiKey + ":") }
-    });
-  } catch (e) {
-    throw new OctopusApiError(
-      "Network request failed before any response was received (likely CORS). Check the browser console.",
-      { corsLikely: true }
-    );
-  }
-  if (!resp.ok) {
-    let bodyText = "";
-    try { bodyText = await resp.text(); } catch (e) {}
-    throw new OctopusApiError(`HTTP ${resp.status}: ${bodyText.slice(0, 300)}`, { status: resp.status, body: bodyText });
-  }
-  return resp.json();
-}
+            async function restGetRaw(fullUrl) {
+                let resp;
+                try {
+                    resp = await fetch(fullUrl, {
+                        headers: {
+                            Authorization: "Basic " + btoa(state.apiKey + ":"),
+                        },
+                    });
+                } catch (e) {
+                    throw new OctopusApiError(
+                        "Network request failed before any response was received (likely CORS). Check the browser console.",
+                        { corsLikely: true },
+                    );
+                }
+                if (!resp.ok) {
+                    let bodyText = "";
+                    try {
+                        bodyText = await resp.text();
+                    } catch (e) {}
+                    throw new OctopusApiError(
+                        `HTTP ${resp.status}: ${bodyText.slice(0, 300)}`,
+                        { status: resp.status, body: bodyText },
+                    );
+                }
+                return resp.json();
+            }
 
-async function graphqlRequest(query, variables = {}, token = null) {
-  const headers = {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-  };
-  if (token) headers["Authorization"] = token;
+            async function graphqlRequest(query, variables = {}, token = null) {
+                const headers = {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                };
+                if (token) headers["Authorization"] = token;
 
-  let resp;
-  try {
-    resp = await fetch(GRAPHQL_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ query, variables }),
-    });
-  } catch (e) {
-    throw new OctopusApiError(
-      "GraphQL request failed before any response was received (likely CORS). Check the browser console.",
-      { corsLikely: true }
-    );
-  }
-  if (!resp.ok) {
-    let bodyText = "";
-    try { bodyText = await resp.text(); } catch (e) {}
-    throw new OctopusApiError(`HTTP ${resp.status} from GraphQL endpoint: ${bodyText.slice(0, 300)}`, { status: resp.status, body: bodyText });
-  }
-  const data = await resp.json();
-  if (data.errors) {
-    throw new OctopusApiError("GraphQL error: " + data.errors.map(e => e.message).join("; "));
-  }
-  return data.data;
-}
+                let resp;
+                try {
+                    resp = await fetch(GRAPHQL_URL, {
+                        method: "POST",
+                        headers,
+                        body: JSON.stringify({ query, variables }),
+                    });
+                } catch (e) {
+                    throw new OctopusApiError(
+                        "GraphQL request failed before any response was received (likely CORS). Check the browser console.",
+                        { corsLikely: true },
+                    );
+                }
+                if (!resp.ok) {
+                    let bodyText = "";
+                    try {
+                        bodyText = await resp.text();
+                    } catch (e) {}
+                    throw new OctopusApiError(
+                        `HTTP ${resp.status} from GraphQL endpoint: ${bodyText.slice(0, 300)}`,
+                        { status: resp.status, body: bodyText },
+                    );
+                }
+                const data = await resp.json();
+                if (data.errors) {
+                    throw new OctopusApiError(
+                        "GraphQL error: " +
+                            data.errors.map((e) => e.message).join("; "),
+                    );
+                }
+                return data.data;
+            }
 
-async function obtainKrakenToken(apiKey) {
-  const query = `
+            async function obtainKrakenToken(apiKey) {
+                const query = `
     mutation ObtainKrakenToken($input: ObtainJSONWebTokenInput!) {
       obtainKrakenToken(input: $input) { token }
     }`;
-  const data = await graphqlRequest(query, { input: { APIKey: apiKey } });
-  return data.obtainKrakenToken.token;
-}
+                const data = await graphqlRequest(query, {
+                    input: { APIKey: apiKey },
+                });
+                return data.obtainKrakenToken.token;
+            }
 
-async function fetchAccount(accountNumber) {
-  return restGetRaw(`${REST_BASE}/accounts/${accountNumber}/`);
-}
+            async function fetchAccount(accountNumber) {
+                return restGetRaw(`${REST_BASE}/accounts/${accountNumber}/`);
+            }
 
-function getRegionLetterFromAccount(accountData, mpan) {
-  for (const prop of accountData.properties || []) {
-    for (const em of prop.electricity_meter_points || []) {
-      if (em.mpan === mpan) {
-        // The documented `gsp` field (e.g. "_C") is not reliably present
-        // on real account responses — it was absent entirely in testing
-        // against a live account, despite appearing in Octopus's own
-        // example docs. The tariff_code on each agreement always ends in
-        // a region letter (e.g. "E-1R-VAR-22-11-01-A" -> "A"), so that's
-        // used as the primary source, with gsp kept as a fallback in case
-        // it IS present for some accounts.
-        if (em.gsp) return em.gsp.replace(/^_/, "");
-        const agreements = em.agreements || [];
-        for (const a of agreements) {
-          const match = (a.tariff_code || "").match(/-([A-Z])$/);
-          if (match) return match[1];
-        }
-        return "MPAN_FOUND_NO_REGION"; // distinguishes from "MPAN not found" below
-      }
-    }
-  }
-  return null;
-}
+            function getRegionLetterFromAccount(accountData, mpan) {
+                for (const prop of accountData.properties || []) {
+                    for (const em of prop.electricity_meter_points || []) {
+                        if (em.mpan === mpan) {
+                            // The documented `gsp` field (e.g. "_C") is not reliably present
+                            // on real account responses — it was absent entirely in testing
+                            // against a live account, despite appearing in Octopus's own
+                            // example docs. The tariff_code on each agreement always ends in
+                            // a region letter (e.g. "E-1R-VAR-22-11-01-A" -> "A"), so that's
+                            // used as the primary source, with gsp kept as a fallback in case
+                            // it IS present for some accounts.
+                            if (em.gsp) return em.gsp.replace(/^_/, "");
+                            const agreements = em.agreements || [];
+                            for (const a of agreements) {
+                                const match = (a.tariff_code || "").match(
+                                    /-([A-Z])$/,
+                                );
+                                if (match) return match[1];
+                            }
+                            return "MPAN_FOUND_NO_REGION"; // distinguishes from "MPAN not found" below
+                        }
+                    }
+                }
+                return null;
+            }
 
-function getAgreementsForMpan(accountData, mpan) {
-  for (const prop of accountData.properties || []) {
-    for (const em of prop.electricity_meter_points || []) {
-      if (em.mpan === mpan) {
-        return em.agreements || [];
-      }
-    }
-  }
-  return [];
-}
+            function getAgreementsForMpan(accountData, mpan) {
+                for (const prop of accountData.properties || []) {
+                    for (const em of prop.electricity_meter_points || []) {
+                        if (em.mpan === mpan) {
+                            return em.agreements || [];
+                        }
+                    }
+                }
+                return [];
+            }
 
-function getPostcodeAreaForMpan(accountData, mpan) {
-  // Returns only the OUTWARD part of the postcode (e.g. "N15" from
-  // "N15 4FZ") — never the full postcode, which is far more specific
-  // to an individual address. This is deliberately the coarsest useful
-  // location signal for the optional results-email feature.
-  for (const prop of accountData.properties || []) {
-    for (const em of prop.electricity_meter_points || []) {
-      if (em.mpan === mpan) {
-        const postcode = (prop.postcode || "").trim();
-        if (!postcode) return null;
-        // UK postcodes split as "outward inward", e.g. "N15 4FZ" -> "N15".
-        // If there's no space (unusual formatting), fall back to everything
-        // before the last 3 characters, which is the inward code's fixed length.
-        const spaceIdx = postcode.indexOf(" ");
-        if (spaceIdx > 0) return postcode.slice(0, spaceIdx);
-        return postcode.length > 3 ? postcode.slice(0, -3) : postcode;
-      }
-    }
-  }
-  return null;
-}
+            function getPostcodeAreaForMpan(accountData, mpan) {
+                // Returns only the OUTWARD part of the postcode (e.g. "N15" from
+                // "N15 4FZ") — never the full postcode, which is far more specific
+                // to an individual address. This is deliberately the coarsest useful
+                // location signal for the optional results-email feature.
+                for (const prop of accountData.properties || []) {
+                    for (const em of prop.electricity_meter_points || []) {
+                        if (em.mpan === mpan) {
+                            const postcode = (prop.postcode || "").trim();
+                            if (!postcode) return null;
+                            // UK postcodes split as "outward inward", e.g. "N15 4FZ" -> "N15".
+                            // If there's no space (unusual formatting), fall back to everything
+                            // before the last 3 characters, which is the inward code's fixed length.
+                            const spaceIdx = postcode.indexOf(" ");
+                            if (spaceIdx > 0)
+                                return postcode.slice(0, spaceIdx);
+                            return postcode.length > 3
+                                ? postcode.slice(0, -3)
+                                : postcode;
+                        }
+                    }
+                }
+                return null;
+            }
 
-async function fetchConsumption(mpan, serial, periodFrom, periodTo) {
-  const path = `/electricity-meter-points/${mpan}/meters/${serial}/consumption/`;
-  const results = await restGetAllPages(path, {
-    period_from: periodFrom.toISOString(),
-    period_to: periodTo.toISOString(),
-    page_size: 25000,
-    order_by: "period",
-  });
-  return results.map(r => ({
-    start: new Date(r.interval_start),
-    end: new Date(r.interval_end),
-    kwh: r.consumption,
-  }));
-}
+            async function fetchConsumption(
+                mpan,
+                serial,
+                periodFrom,
+                periodTo,
+            ) {
+                const path = `/electricity-meter-points/${mpan}/meters/${serial}/consumption/`;
+                const results = await restGetAllPages(path, {
+                    period_from: periodFrom.toISOString(),
+                    period_to: periodTo.toISOString(),
+                    page_size: 25000,
+                    order_by: "period",
+                });
+                return results.map((r) => ({
+                    start: new Date(r.interval_start),
+                    end: new Date(r.interval_end),
+                    kwh: r.consumption,
+                }));
+            }
 
-async function fetchProductTariffCode(productCode, regionLetter) {
-  const detail = await restGetRaw(`${REST_BASE}/products/${productCode}/`);
-  const regionKey = "_" + regionLetter;
-  const regionTariffs = (detail.single_register_electricity_tariffs || {})[regionKey];
-  if (!regionTariffs) return null;
-  const tariff = regionTariffs.direct_debit_monthly || Object.values(regionTariffs)[0];
-  return tariff ? tariff.code : null;
-}
+            async function fetchProductTariffCode(productCode, regionLetter) {
+                const detail = await restGetRaw(
+                    `${REST_BASE}/products/${productCode}/`,
+                );
+                const regionKey = "_" + regionLetter;
+                const regionTariffs =
+                    (detail.single_register_electricity_tariffs || {})[
+                        regionKey
+                    ];
+                if (!regionTariffs) return null;
+                const tariff =
+                    regionTariffs.direct_debit_monthly ||
+                    Object.values(regionTariffs)[0];
+                return tariff ? tariff.code : null;
+            }
 
-async function findLiveProductCodeByDisplayName(displayName) {
-  // Discovers the currently-live product code rather than relying on a
-  // hardcoded version string, since Octopus periodically retires and
-  // replaces product codes (this happened to the email/password login
-  // flow elsewhere in this build, so hardcoded identifiers are treated
-  // as a liability throughout this app).
-  const results = await restGetAllPages("/products/", { brand: "OCTOPUS_ENERGY", is_variable: "true" });
-  const candidates = results.filter(p =>
-    p.display_name === displayName && !p.is_business && !p.is_prepay
-  );
-  if (candidates.length === 0) return null;
-  // Prefer one with no available_to (still live) if present
-  const live = candidates.find(p => !p.available_to);
-  return (live || candidates[0]).code;
-}
+            async function findLiveProductCodeByDisplayName(displayName) {
+                // Discovers the currently-live product code rather than relying on a
+                // hardcoded version string, since Octopus periodically retires and
+                // replaces product codes (this happened to the email/password login
+                // flow elsewhere in this build, so hardcoded identifiers are treated
+                // as a liability throughout this app).
+                const results = await restGetAllPages("/products/", {
+                    brand: "OCTOPUS_ENERGY",
+                    is_variable: "true",
+                });
+                const candidates = results.filter(
+                    (p) =>
+                        p.display_name === displayName &&
+                        !p.is_business &&
+                        !p.is_prepay,
+                );
+                if (candidates.length === 0) return null;
+                // Prefer one with no available_to (still live) if present
+                const live = candidates.find((p) => !p.available_to);
+                return (live || candidates[0]).code;
+            }
 
-async function fetchRateWindows(productCode, tariffCode, kind, periodFrom, periodTo) {
-  // kind: "standard-unit-rates" or "standing-charges"
-  const path = `/products/${productCode}/electricity-tariffs/${tariffCode}/${kind}/`;
-  const results = await restGetAllPages(path, {
-    period_from: periodFrom.toISOString(),
-    period_to: periodTo.toISOString(),
-    page_size: 1500,
-  });
-  return results
-    .filter(r => r.payment_method === "DIRECT_DEBIT" || !r.payment_method)
-    .map(r => ({
-      validFrom: new Date(r.valid_from),
-      validTo: r.valid_to ? new Date(r.valid_to) : null,
-      value: r.value_inc_vat,
-    }));
-}
+            async function fetchRateWindows(
+                productCode,
+                tariffCode,
+                kind,
+                periodFrom,
+                periodTo,
+            ) {
+                // kind: "standard-unit-rates" or "standing-charges"
+                const path = `/products/${productCode}/electricity-tariffs/${tariffCode}/${kind}/`;
+                const results = await restGetAllPages(path, {
+                    period_from: periodFrom.toISOString(),
+                    period_to: periodTo.toISOString(),
+                    page_size: 1500,
+                });
+                return results
+                    .filter(
+                        (r) =>
+                            r.payment_method === "DIRECT_DEBIT" ||
+                            !r.payment_method,
+                    )
+                    .map((r) => ({
+                        validFrom: new Date(r.valid_from),
+                        validTo: r.valid_to ? new Date(r.valid_to) : null,
+                        value: r.value_inc_vat,
+                    }));
+            }
 
-async function fetchStatements(token, accountNumber) {
-  const query = `
+            async function fetchStatements(token, accountNumber) {
+                const query = `
     query Statements($accountNumber: String!, $after: String) {
       account(accountNumber: $accountNumber) {
         ledgers {
@@ -991,350 +1293,630 @@ async function fetchStatements(token, accountNumber) {
         }
       }
     }`;
-  let statements = [];
-  let after = null;
-  let guard = 0;
-  while (guard < 30) {
-    const data = await graphqlRequest(query, { accountNumber, after }, token);
-    let anyNext = false;
-    for (const ledger of data.account.ledgers || []) {
-      const stmts = ledger.statements;
-      if (!stmts) continue;
-      for (const edge of stmts.edges) statements.push(edge.node);
-      if (stmts.pageInfo.hasNextPage) {
-        anyNext = true;
-        after = stmts.pageInfo.endCursor;
-      }
-    }
-    guard++;
-    if (!anyNext) break;
-  }
-  return statements;
-}
+                let statements = [];
+                let after = null;
+                let guard = 0;
+                while (guard < 30) {
+                    const data = await graphqlRequest(
+                        query,
+                        { accountNumber, after },
+                        token,
+                    );
+                    let anyNext = false;
+                    for (const ledger of data.account.ledgers || []) {
+                        const stmts = ledger.statements;
+                        if (!stmts) continue;
+                        for (const edge of stmts.edges)
+                            statements.push(edge.node);
+                        if (stmts.pageInfo.hasNextPage) {
+                            anyNext = true;
+                            after = stmts.pageInfo.endCursor;
+                        }
+                    }
+                    guard++;
+                    if (!anyNext) break;
+                }
+                return statements;
+            }
 
-/* ============================================================
+            /* ============================================================
    ORCHESTRATION
    ============================================================ */
 
-const state = {
-  apiKey: "",
-  accountNumber: "",
-  mpan: "",
-  serial: "",
-};
+            const state = {
+                apiKey: "",
+                accountNumber: "",
+                mpan: "",
+                serial: "",
+            };
 
-function log(message, cls = "") {
-  const el = document.getElementById("progress-log");
-  const line = document.createElement("div");
-  line.className = "line " + cls;
-  line.textContent = message;
-  el.appendChild(line);
-  el.scrollTop = el.scrollHeight;
-  return line;
-}
+            function log(message, cls = "") {
+                const el = document.getElementById("progress-log");
+                const line = document.createElement("div");
+                line.className = "line " + cls;
+                line.textContent = message;
+                el.appendChild(line);
+                el.scrollTop = el.scrollHeight;
+                return line;
+            }
 
-function setActiveLine(line, message, cls) {
-  line.className = "line " + cls;
-  line.textContent = message;
-}
+            function setActiveLine(line, message, cls) {
+                line.className = "line " + cls;
+                line.textContent = message;
+            }
 
-function setProgress(pct) {
-  document.getElementById("progress-bar").style.width = pct + "%";
-}
+            function setProgress(pct) {
+                document.getElementById("progress-bar").style.width = pct + "%";
+            }
 
-function showScreen(id) {
-  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
-}
+            function showScreen(id) {
+                document
+                    .querySelectorAll(".screen")
+                    .forEach((s) => s.classList.remove("active"));
+                document.getElementById(id).classList.add("active");
+            }
 
-function fmtMoney(pence) {
-  return "£" + (pence / 100).toFixed(2);
-}
+            function fmtMoney(pence) {
+                return "£" + (pence / 100).toFixed(2);
+            }
 
-function fmtDate(d) {
-  return d.toISOString().slice(0, 10);
-}
+            function fmtDate(d) {
+                return d.toISOString().slice(0, 10);
+            }
 
-function validateInputs() {
-  let ok = true;
-  const apiKey = document.getElementById("input-apikey").value.trim();
-  const account = document.getElementById("input-account").value.trim();
-  const mpan = document.getElementById("input-mpan").value.trim();
-  const serial = document.getElementById("input-serial").value.trim();
+            function validateInputs() {
+                let ok = true;
+                const apiKey = document
+                    .getElementById("input-apikey")
+                    .value.trim();
+                const account = document
+                    .getElementById("input-account")
+                    .value.trim();
+                const mpan = document.getElementById("input-mpan").value.trim();
+                const serial = document
+                    .getElementById("input-serial")
+                    .value.trim();
 
-  function setError(fieldId, errorId, isValid) {
-    const field = document.getElementById(fieldId);
-    const error = document.getElementById(errorId);
-    if (isValid) {
-      field.classList.remove("invalid");
-      error.classList.remove("show");
-    } else {
-      field.classList.add("invalid");
-      error.classList.add("show");
-      ok = false;
-    }
-  }
+                function setError(fieldId, errorId, isValid) {
+                    const field = document.getElementById(fieldId);
+                    const error = document.getElementById(errorId);
+                    if (isValid) {
+                        field.classList.remove("invalid");
+                        error.classList.remove("show");
+                    } else {
+                        field.classList.add("invalid");
+                        error.classList.add("show");
+                        ok = false;
+                    }
+                }
 
-  setError("input-apikey", "error-apikey", apiKey.length > 0);
-  setError("input-account", "error-account", /^A-[A-Z0-9]+$/i.test(account));
-  setError("input-mpan", "error-mpan", /^\d{13}$/.test(mpan));
-  setError("input-serial", "error-serial", serial.length > 0);
+                setError("input-apikey", "error-apikey", apiKey.length > 0);
+                setError(
+                    "input-account",
+                    "error-account",
+                    /^A-[A-Z0-9]+$/i.test(account),
+                );
+                setError("input-mpan", "error-mpan", /^\d{13}$/.test(mpan));
+                setError("input-serial", "error-serial", serial.length > 0);
 
-  if (ok) {
-    state.apiKey = apiKey;
-    state.accountNumber = account.toUpperCase();
-    state.mpan = mpan;
-    state.serial = serial;
-  }
-  return ok;
-}
+                if (ok) {
+                    state.apiKey = apiKey;
+                    state.accountNumber = account.toUpperCase();
+                    state.mpan = mpan;
+                    state.serial = serial;
+                }
+                return ok;
+            }
 
-async function runComparison() {
-  showScreen("screen-progress");
-  document.getElementById("progress-log").innerHTML = "";
-  setProgress(2);
+            async function runComparison() {
+                showScreen("screen-progress");
+                document.getElementById("progress-log").innerHTML = "";
+                setProgress(2);
 
-  try {
-    // --- Step 1: account info, region, agreements ---
-    let line = log("Fetching account details...", "active");
-    const accountData = await fetchAccount(state.accountNumber);
-    const regionLetter = getRegionLetterFromAccount(accountData, state.mpan);
-    if (regionLetter === null) {
-      throw new Error(`Could not find MPAN ${state.mpan} on account ${state.accountNumber}. Double check the MPAN matches this account.`);
-    }
-    if (regionLetter === "MPAN_FOUND_NO_REGION") {
-      throw new Error(`Found MPAN ${state.mpan} on this account, but could not determine its region from either the meter point data or its tariff codes. This is unexpected — please check the account JSON manually.`);
-    }
-    setActiveLine(line, `Account verified. Region ${regionLetter}.`, "ok");
-    setProgress(8);
+                try {
+                    // --- Step 1: account info, region, agreements ---
+                    let line = log("Fetching account details...", "active");
+                    const accountData = await fetchAccount(state.accountNumber);
+                    const regionLetter = getRegionLetterFromAccount(
+                        accountData,
+                        state.mpan,
+                    );
+                    if (regionLetter === null) {
+                        throw new Error(
+                            `Could not find MPAN ${state.mpan} on account ${state.accountNumber}. Double check the MPAN matches this account.`,
+                        );
+                    }
+                    if (regionLetter === "MPAN_FOUND_NO_REGION") {
+                        throw new Error(
+                            `Found MPAN ${state.mpan} on this account, but could not determine its region from either the meter point data or its tariff codes. This is unexpected — please check the account JSON manually.`,
+                        );
+                    }
+                    setActiveLine(
+                        line,
+                        `Account verified. Region ${regionLetter}.`,
+                        "ok",
+                    );
+                    setProgress(8);
 
-    const agreements = getAgreementsForMpan(accountData, state.mpan);
-    const currentAgreement = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
-    log(`Current tariff on this meter: ${currentAgreement ? currentAgreement.tariff_code : "unknown"}`, "ok");
-    const postcodeArea = getPostcodeAreaForMpan(accountData, state.mpan);
+                    const agreements = getAgreementsForMpan(
+                        accountData,
+                        state.mpan,
+                    );
+                    const currentAgreement =
+                        agreements.find((a) => !a.valid_to) ||
+                        agreements[agreements.length - 1];
+                    log(
+                        `Current tariff on this meter: ${currentAgreement ? currentAgreement.tariff_code : "unknown"}`,
+                        "ok",
+                    );
+                    const postcodeArea = getPostcodeAreaForMpan(
+                        accountData,
+                        state.mpan,
+                    );
 
-    // --- Step 2: real billing periods + invoice totals ---
-    // Fetched BEFORE the consumption window is decided, so the window can
-    // be built around your actual bill dates rather than an arbitrary
-    // calendar year that your bills then get clamped against.
-    line = log("Authenticating to fetch your real billing periods...", "active");
-    const token = await obtainKrakenToken(state.apiKey);
-    setActiveLine(line, "Authenticated.", "ok");
-    setProgress(15);
+                    // --- Step 2: real billing periods + invoice totals ---
+                    // Fetched BEFORE the consumption window is decided, so the window can
+                    // be built around your actual bill dates rather than an arbitrary
+                    // calendar year that your bills then get clamped against.
+                    line = log(
+                        "Authenticating to fetch your real billing periods...",
+                        "active",
+                    );
+                    const token = await obtainKrakenToken(state.apiKey);
+                    setActiveLine(line, "Authenticated.", "ok");
+                    setProgress(15);
 
-    line = log("Fetching statements (real bill periods + amounts)...", "active");
-    const allStatements = await fetchStatements(token, state.accountNumber);
-    if (allStatements.length === 0) {
-      throw new Error("No statements found on this account. Your account may not have statement history available via the API.");
-    }
-    setActiveLine(line, `Found ${allStatements.length} statement(s) on this account.`, "ok");
-    setProgress(20);
+                    line = log(
+                        "Fetching statements (real bill periods + amounts)...",
+                        "active",
+                    );
+                    const allStatements = await fetchStatements(
+                        token,
+                        state.accountNumber,
+                    );
+                    if (allStatements.length === 0) {
+                        throw new Error(
+                            "No statements found on this account. Your account may not have statement history available via the API.",
+                        );
+                    }
+                    setActiveLine(
+                        line,
+                        `Found ${allStatements.length} statement(s) on this account.`,
+                        "ok",
+                    );
+                    setProgress(20);
 
-    // --- Step 3: date window, derived from real statement boundaries ---
-    // Data settles a few days after the fact, and consumption typically
-    // isn't available before the meter's smart-meter agreements began, so
-    // the window is clamped to "now minus 7 days" at the top and to
-    // roughly the last 12 months at the bottom — but the actual edges
-    // come from your real statements, not a guessed calendar year.
-    const dataAvailableTo = new Date();
-    dataAvailableTo.setDate(dataAvailableTo.getDate() - 7);
-    dataAvailableTo.setUTCHours(0, 0, 0, 0);
+                    // --- Step 3: date window, derived from real statement boundaries ---
+                    // Data settles a few days after the fact, and consumption typically
+                    // isn't available before the meter's smart-meter agreements began, so
+                    // the window is clamped to "now minus 7 days" at the top and to
+                    // roughly the last 12 months at the bottom — but the actual edges
+                    // come from your real statements, not a guessed calendar year.
+                    const dataAvailableTo = new Date();
+                    dataAvailableTo.setDate(dataAvailableTo.getDate() - 7);
+                    dataAvailableTo.setUTCHours(0, 0, 0, 0);
 
-    const earliestApprox = new Date(dataAvailableTo);
-    earliestApprox.setFullYear(earliestApprox.getFullYear() - 3); // generous ceiling: protects against an extreme edge case (a very long-standing account) without clamping a normal 1-2 year billing history, which is what caused "partial" periods previously
+                    const earliestApprox = new Date(dataAvailableTo);
+                    earliestApprox.setFullYear(
+                        earliestApprox.getFullYear() - 3,
+                    ); // generous ceiling: protects against an extreme edge case (a very long-standing account) without clamping a normal 1-2 year billing history, which is what caused "partial" periods previously
 
-    const statementStarts = allStatements.map(s => new Date(s.startAt));
-    const statementEnds = allStatements.map(s => new Date(s.endAt));
-    const earliestStatement = new Date(Math.min(...statementStarts));
-    const latestStatement = new Date(Math.max(...statementEnds));
+                    const statementStarts = allStatements.map(
+                        (s) => new Date(s.startAt),
+                    );
+                    const statementEnds = allStatements.map(
+                        (s) => new Date(s.endAt),
+                    );
+                    const earliestStatement = new Date(
+                        Math.min(...statementStarts),
+                    );
+                    const latestStatement = new Date(
+                        Math.max(...statementEnds),
+                    );
 
-    // periodFrom/periodTo bound the actual data we'll fetch: never later
-    // than "today minus 7 days" (data needs to have settled), and reaching
-    // back to whichever is later — your earliest statement, or a year ago
-    // — so a long billing history doesn't balloon the half-hourly fetch.
-    const periodTo = latestStatement < dataAvailableTo ? latestStatement : dataAvailableTo;
-    const periodFrom = earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
+                    // periodFrom/periodTo bound the actual data we'll fetch: never later
+                    // than "today minus 7 days" (data needs to have settled), and reaching
+                    // back to whichever is later — your earliest statement, or a year ago
+                    // — so a long billing history doesn't balloon the half-hourly fetch.
+                    const periodTo =
+                        latestStatement < dataAvailableTo
+                            ? latestStatement
+                            : dataAvailableTo;
+                    const periodFrom =
+                        earliestStatement > earliestApprox
+                            ? earliestStatement
+                            : earliestApprox;
 
-    log(`Comparison window: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)} (aligned to your real billing history)`, "ok");
-    setProgress(25);
+                    log(
+                        `Comparison window: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)} (aligned to your real billing history)`,
+                        "ok",
+                    );
+                    setProgress(25);
 
-    // --- Step 4: consumption ---
-    line = log("Fetching half-hourly consumption (this is the slow part)...", "active");
-    const readings = await fetchConsumption(state.mpan, state.serial, periodFrom, periodTo);
-    if (readings.length === 0) {
-      throw new Error("No consumption data was returned for this window. Either this meter has no smart-meter data yet, or the MPAN/serial don't match a meter with readings.");
-    }
-    setActiveLine(line, `Fetched ${readings.length} half-hourly readings.`, "ok");
-    setProgress(40);
+                    // --- Step 4: consumption ---
+                    line = log(
+                        "Fetching half-hourly consumption (this is the slow part)...",
+                        "active",
+                    );
+                    const readings = await fetchConsumption(
+                        state.mpan,
+                        state.serial,
+                        periodFrom,
+                        periodTo,
+                    );
+                    if (readings.length === 0) {
+                        throw new Error(
+                            "No consumption data was returned for this window. Either this meter has no smart-meter data yet, or the MPAN/serial don't match a meter with readings.",
+                        );
+                    }
+                    setActiveLine(
+                        line,
+                        `Fetched ${readings.length} half-hourly readings.`,
+                        "ok",
+                    );
+                    setProgress(40);
 
-    // --- Step 5: gap check ---
-    line = log("Checking for gaps...", "active");
-    const gapInfo = detectGaps(readings);
-    const totalExpectedSlots = Math.round((gapInfo.latest - gapInfo.earliest) / (30 * 60 * 1000)) + 1;
-    const missingSlots = gapInfo.gaps.reduce((sum, g) => sum + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0);
-    setActiveLine(line, `${gapInfo.gaps.length} gap range(s), ${missingSlots} missing slots out of ${totalExpectedSlots} expected.`, gapInfo.gaps.length > 0 ? "err" : "ok");
-    setProgress(45);
+                    // --- Step 5: gap check ---
+                    line = log("Checking for gaps...", "active");
+                    const gapInfo = detectGaps(readings);
+                    const totalExpectedSlots =
+                        Math.round(
+                            (gapInfo.latest - gapInfo.earliest) /
+                                (30 * 60 * 1000),
+                        ) + 1;
+                    const missingSlots = gapInfo.gaps.reduce(
+                        (sum, g) =>
+                            sum +
+                            Math.round((g.end - g.start) / (30 * 60 * 1000)) +
+                            1,
+                        0,
+                    );
+                    setActiveLine(
+                        line,
+                        `${gapInfo.gaps.length} gap range(s), ${missingSlots} missing slots out of ${totalExpectedSlots} expected.`,
+                        gapInfo.gaps.length > 0 ? "err" : "ok",
+                    );
+                    setProgress(45);
 
-    // --- Step 6: turn statements into billing periods for costing ---
-    // periodFrom/periodTo were built FROM these same statements above, so
-    // clamping here is now just a safety net (e.g. a statement that's
-    // still open-ended with no endAt yet) rather than the normal case.
-    const billingPeriods = allStatements
-      .filter(s => new Date(s.startAt) >= periodFrom || new Date(s.endAt) > periodFrom)
-      .map(s => {
-        const rawStart = new Date(s.startAt);
-        const rawEnd = new Date(s.endAt);
-        return {
-          // displayStart/displayEnd preserve the real statement dates for
-          // labeling, so the table still shows your actual bill period.
-          displayStart: rawStart,
-          displayEnd: rawEnd,
-          // start/end are clamped to the fetched consumption window before
-          // being used in any cost calculation. Without this clamp, a
-          // statement whose dates extend outside the data we actually have
-          // (e.g. an open-ended current bill, or any date mismatch) would
-          // make calculateCost's day-by-day standing charge loop run over
-          // a far wider span than intended, hugely inflating the result.
-          start: rawStart < periodFrom ? periodFrom : rawStart,
-          end: rawEnd > periodTo ? periodTo : rawEnd,
-          actualChargePence: s.totalCharges && s.totalCharges.grossTotal != null ? s.totalCharges.grossTotal : null,
-        };
-      })
-      .filter(p => p.end > periodFrom && p.start < periodTo && p.end > p.start)
-      .sort((a, b) => a.start - b.start);
+                    // --- Step 6: turn statements into billing periods for costing ---
+                    // periodFrom/periodTo were built FROM these same statements above, so
+                    // clamping here is now just a safety net (e.g. a statement that's
+                    // still open-ended with no endAt yet) rather than the normal case.
+                    const billingPeriods = allStatements
+                        .filter(
+                            (s) =>
+                                new Date(s.startAt) >= periodFrom ||
+                                new Date(s.endAt) > periodFrom,
+                        )
+                        .map((s) => {
+                            const rawStart = new Date(s.startAt);
+                            const rawEnd = new Date(s.endAt);
+                            return {
+                                // displayStart/displayEnd preserve the real statement dates for
+                                // labeling, so the table still shows your actual bill period.
+                                displayStart: rawStart,
+                                displayEnd: rawEnd,
+                                // start/end are clamped to the fetched consumption window before
+                                // being used in any cost calculation. Without this clamp, a
+                                // statement whose dates extend outside the data we actually have
+                                // (e.g. an open-ended current bill, or any date mismatch) would
+                                // make calculateCost's day-by-day standing charge loop run over
+                                // a far wider span than intended, hugely inflating the result.
+                                start:
+                                    rawStart < periodFrom
+                                        ? periodFrom
+                                        : rawStart,
+                                end: rawEnd > periodTo ? periodTo : rawEnd,
+                                actualChargePence:
+                                    s.totalCharges &&
+                                    s.totalCharges.grossTotal != null
+                                        ? s.totalCharges.grossTotal
+                                        : null,
+                            };
+                        })
+                        .filter(
+                            (p) =>
+                                p.end > periodFrom &&
+                                p.start < periodTo &&
+                                p.end > p.start,
+                        )
+                        .sort((a, b) => a.start - b.start);
 
-    if (billingPeriods.length === 0) {
-      throw new Error("No statements found covering this window. Your account may not have statement history available via the API.");
-    }
-    setActiveLine(line, `Found ${billingPeriods.length} billing period(s) in this window.`, "ok");
-    setProgress(50);
+                    if (billingPeriods.length === 0) {
+                        throw new Error(
+                            "No statements found covering this window. Your account may not have statement history available via the API.",
+                        );
+                    }
+                    setActiveLine(
+                        line,
+                        `Found ${billingPeriods.length} billing period(s) in this window.`,
+                        "ok",
+                    );
+                    setProgress(50);
 
-    // --- Step 6: Flexible Octopus historical rates ---
-    line = log("Discovering current Flexible Octopus product...", "active");
-    const flexProductCode = await findLiveProductCodeByDisplayName("Flexible Octopus");
-    if (!flexProductCode) throw new Error("Could not find a live Flexible Octopus product via the API.");
-    setActiveLine(line, `Flexible Octopus product: ${flexProductCode}`, "ok");
-    const flexTariffCode = await fetchProductTariffCode(flexProductCode, regionLetter);
-    if (!flexTariffCode) throw new Error(`Could not find a Flexible Octopus tariff for region ${regionLetter}.`);
-    line = log("Fetching Flexible Octopus historical rates...", "active");
-    const flexUnitRates = await fetchRateWindows(flexProductCode, flexTariffCode, "standard-unit-rates", periodFrom, periodTo);
-    const flexStandingCharges = await fetchRateWindows(flexProductCode, flexTariffCode, "standing-charges", periodFrom, periodTo);
-    setActiveLine(line, `Flexible Octopus: ${flexUnitRates.length} rate window(s), ${flexStandingCharges.length} standing charge window(s).`, "ok");
-    setProgress(60);
+                    // --- Step 6: Flexible Octopus historical rates ---
+                    line = log(
+                        "Discovering current Flexible Octopus product...",
+                        "active",
+                    );
+                    const flexProductCode =
+                        await findLiveProductCodeByDisplayName(
+                            "Flexible Octopus",
+                        );
+                    if (!flexProductCode)
+                        throw new Error(
+                            "Could not find a live Flexible Octopus product via the API.",
+                        );
+                    setActiveLine(
+                        line,
+                        `Flexible Octopus product: ${flexProductCode}`,
+                        "ok",
+                    );
+                    const flexTariffCode = await fetchProductTariffCode(
+                        flexProductCode,
+                        regionLetter,
+                    );
+                    if (!flexTariffCode)
+                        throw new Error(
+                            `Could not find a Flexible Octopus tariff for region ${regionLetter}.`,
+                        );
+                    line = log(
+                        "Fetching Flexible Octopus historical rates...",
+                        "active",
+                    );
+                    const flexUnitRates = await fetchRateWindows(
+                        flexProductCode,
+                        flexTariffCode,
+                        "standard-unit-rates",
+                        periodFrom,
+                        periodTo,
+                    );
+                    const flexStandingCharges = await fetchRateWindows(
+                        flexProductCode,
+                        flexTariffCode,
+                        "standing-charges",
+                        periodFrom,
+                        periodTo,
+                    );
+                    setActiveLine(
+                        line,
+                        `Flexible Octopus: ${flexUnitRates.length} rate window(s), ${flexStandingCharges.length} standing charge window(s).`,
+                        "ok",
+                    );
+                    setProgress(60);
 
-    // --- Step 7: Agile Octopus historical rates ---
-    line = log("Discovering current Agile Octopus product...", "active");
-    const agileProductCode = await findLiveProductCodeByDisplayName("Agile Octopus");
-    let agileTariffCode = agileProductCode ? await fetchProductTariffCode(agileProductCode, regionLetter) : null;
-    let agileUnitRates = [];
-    let agileStandingCharges = [];
-    let agileAvailable = true;
-    if (!agileTariffCode) {
-      agileAvailable = false;
-      setActiveLine(line, "Could not resolve a live Agile Octopus tariff for this region — Agile comparison will be skipped.", "err");
-    } else {
-      setActiveLine(line, `Agile Octopus product: ${agileProductCode}`, "ok");
-      line = log("Fetching Agile Octopus historical half-hourly rates (many calls, may take a moment)...", "active");
-      try {
-        agileUnitRates = await fetchRateWindows(agileProductCode, agileTariffCode, "standard-unit-rates", periodFrom, periodTo);
-        agileStandingCharges = await fetchRateWindows(agileProductCode, agileTariffCode, "standing-charges", periodFrom, periodTo);
-        setActiveLine(line, `Agile Octopus: ${agileUnitRates.length} rate window(s) fetched.`, "ok");
-        if (agileUnitRates.length === 0) {
-          agileAvailable = false;
-          log("No Agile rate history returned for this window — this product may not have existed for the full comparison period. Agile comparison will be skipped.", "err");
-        }
-      } catch (e) {
-        agileAvailable = false;
-        setActiveLine(line, "Agile rate history fetch failed — Agile comparison will be skipped: " + e.message, "err");
-      }
-    }
-    setProgress(85);
+                    // --- Step 7: Agile Octopus historical rates ---
+                    line = log(
+                        "Discovering current Agile Octopus product...",
+                        "active",
+                    );
+                    const agileProductCode =
+                        await findLiveProductCodeByDisplayName("Agile Octopus");
+                    let agileTariffCode = agileProductCode
+                        ? await fetchProductTariffCode(
+                              agileProductCode,
+                              regionLetter,
+                          )
+                        : null;
+                    let agileUnitRates = [];
+                    let agileStandingCharges = [];
+                    let agileAvailable = true;
+                    if (!agileTariffCode) {
+                        agileAvailable = false;
+                        setActiveLine(
+                            line,
+                            "Could not resolve a live Agile Octopus tariff for this region — Agile comparison will be skipped.",
+                            "err",
+                        );
+                    } else {
+                        setActiveLine(
+                            line,
+                            `Agile Octopus product: ${agileProductCode}`,
+                            "ok",
+                        );
+                        line = log(
+                            "Fetching Agile Octopus historical half-hourly rates (many calls, may take a moment)...",
+                            "active",
+                        );
+                        try {
+                            agileUnitRates = await fetchRateWindows(
+                                agileProductCode,
+                                agileTariffCode,
+                                "standard-unit-rates",
+                                periodFrom,
+                                periodTo,
+                            );
+                            agileStandingCharges = await fetchRateWindows(
+                                agileProductCode,
+                                agileTariffCode,
+                                "standing-charges",
+                                periodFrom,
+                                periodTo,
+                            );
+                            setActiveLine(
+                                line,
+                                `Agile Octopus: ${agileUnitRates.length} rate window(s) fetched.`,
+                                "ok",
+                            );
+                            if (agileUnitRates.length === 0) {
+                                agileAvailable = false;
+                                log(
+                                    "No Agile rate history returned for this window — this product may not have existed for the full comparison period. Agile comparison will be skipped.",
+                                    "err",
+                                );
+                            }
+                        } catch (e) {
+                            agileAvailable = false;
+                            setActiveLine(
+                                line,
+                                "Agile rate history fetch failed — Agile comparison will be skipped: " +
+                                    e.message,
+                                "err",
+                            );
+                        }
+                    }
+                    setProgress(85);
 
-    // --- Step 8: calculate per period ---
-    line = log("Calculating costs per billing period...", "active");
-    const results = billingPeriods.map(period => {
-      const flex = calculateCost(readings, period.start, period.end, flexUnitRates, flexStandingCharges);
-      const agile = agileAvailable
-        ? calculateCost(readings, period.start, period.end, agileUnitRates, agileStandingCharges)
-        : null;
-      const wasClamped = period.start.getTime() !== period.displayStart.getTime() || period.end.getTime() !== period.displayEnd.getTime();
-      return { period, flex, agile, wasClamped };
-    });
-    setActiveLine(line, "Done.", "ok");
-    setProgress(100);
+                    // --- Step 8: calculate per period ---
+                    line = log(
+                        "Calculating costs per billing period...",
+                        "active",
+                    );
+                    const results = billingPeriods.map((period) => {
+                        const flex = calculateCost(
+                            readings,
+                            period.start,
+                            period.end,
+                            flexUnitRates,
+                            flexStandingCharges,
+                        );
+                        const agile = agileAvailable
+                            ? calculateCost(
+                                  readings,
+                                  period.start,
+                                  period.end,
+                                  agileUnitRates,
+                                  agileStandingCharges,
+                              )
+                            : null;
+                        const wasClamped =
+                            period.start.getTime() !==
+                                period.displayStart.getTime() ||
+                            period.end.getTime() !==
+                                period.displayEnd.getTime();
+                        return { period, flex, agile, wasClamped };
+                    });
+                    setActiveLine(line, "Done.", "ok");
+                    setProgress(100);
 
-    renderResults({ results, gapInfo, regionLetter, currentAgreement, periodFrom, periodTo, agileAvailable, postcodeArea });
-    showScreen("screen-results");
+                    renderResults({
+                        results,
+                        gapInfo,
+                        regionLetter,
+                        currentAgreement,
+                        periodFrom,
+                        periodTo,
+                        agileAvailable,
+                        postcodeArea,
+                    });
+                    showScreen("screen-results");
+                } catch (err) {
+                    renderError(err);
+                    showScreen("screen-results");
+                }
+            }
 
-  } catch (err) {
-    renderError(err);
-    showScreen("screen-results");
-  }
-}
-
-function renderError(err) {
-  const container = document.getElementById("results-content");
-  let extra = "";
-  if (err instanceof OctopusApiError && err.corsLikely) {
-    extra = `<p>This specific failure pattern (no HTTP status, request just fails) is the signature of a CORS block: the browser is refusing to let this page read the response from api.octopus.energy. Open the browser console (F12 or Cmd+Option+J) for the exact reason &mdash; it will say something like "blocked by CORS policy" if that's what happened. If so, this tool cannot work as a pure browser page against this API unless Octopus's API sends the right CORS headers for direct browser access.</p>`;
-  } else if (err instanceof OctopusApiError && err.status) {
-    extra = `<p>HTTP status: ${err.status}</p><p style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);">${(err.body || "").slice(0, 400)}</p>`;
-  }
-  container.innerHTML = `
+            function renderError(err) {
+                const container = document.getElementById("results-content");
+                let extra = "";
+                if (err instanceof OctopusApiError && err.corsLikely) {
+                    extra = `<p>This specific failure pattern (no HTTP status, request just fails) is the signature of a CORS block: the browser is refusing to let this page read the response from api.octopus.energy. Open the browser console (F12 or Cmd+Option+J) for the exact reason &mdash; it will say something like "blocked by CORS policy" if that's what happened. If so, this tool cannot work as a pure browser page against this API unless Octopus's API sends the right CORS headers for direct browser access.</p>`;
+                } else if (err instanceof OctopusApiError && err.status) {
+                    extra = `<p>HTTP status: ${err.status}</p><p style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);">${(err.body || "").slice(0, 400)}</p>`;
+                }
+                container.innerHTML = `
     <div class="error-banner">
       <div class="title">Something went wrong</div>
       <p>${err.message}</p>
       ${extra}
     </div>
   `;
-}
+            }
 
-function renderResults({ results, gapInfo, regionLetter, currentAgreement, periodFrom, periodTo, agileAvailable, postcodeArea }) {
-  const container = document.getElementById("results-content");
+            function renderResults({
+                results,
+                gapInfo,
+                regionLetter,
+                currentAgreement,
+                periodFrom,
+                periodTo,
+                agileAvailable,
+                postcodeArea,
+            }) {
+                const container = document.getElementById("results-content");
 
-  const totalActual = results.reduce((s, r) => s + (r.flex.kwh > 0 && r.period.actualChargePence != null ? r.period.actualChargePence : 0), 0);
-  const totalFlex = results.reduce((s, r) => s + r.flex.totalPence, 0);
-  const totalAgile = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.totalPence : 0), 0) : null;
-  const totalKwh = results.reduce((s, r) => s + r.flex.kwh, 0);
+                const totalActual = results.reduce(
+                    (s, r) =>
+                        s +
+                        (r.flex.kwh > 0 && r.period.actualChargePence != null
+                            ? r.period.actualChargePence
+                            : 0),
+                    0,
+                );
+                const totalFlex = results.reduce(
+                    (s, r) => s + r.flex.totalPence,
+                    0,
+                );
+                const totalAgile = agileAvailable
+                    ? results.reduce(
+                          (s, r) => s + (r.agile ? r.agile.totalPence : 0),
+                          0,
+                      )
+                    : null;
+                const totalKwh = results.reduce((s, r) => s + r.flex.kwh, 0);
 
-  const hasActual = results.some(r => r.period.actualChargePence != null);
+                const hasActual = results.some(
+                    (r) => r.period.actualChargePence != null,
+                );
 
-  let gapHtml = "";
+                let gapHtml = "";
 
-  const totalFlexUnmatched = results.reduce((s, r) => s + r.flex.unmatchedReadings, 0);
-  const totalAgileUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.unmatchedReadings : 0), 0) : 0;
-  let rateCoverageHtml = "";
-  if (totalFlexUnmatched > 0 || totalAgileUnmatched > 0) {
-    rateCoverageHtml = `
+                const totalFlexUnmatched = results.reduce(
+                    (s, r) => s + r.flex.unmatchedReadings,
+                    0,
+                );
+                const totalAgileUnmatched = agileAvailable
+                    ? results.reduce(
+                          (s, r) =>
+                              s + (r.agile ? r.agile.unmatchedReadings : 0),
+                          0,
+                      )
+                    : 0;
+                let rateCoverageHtml = "";
+                if (totalFlexUnmatched > 0 || totalAgileUnmatched > 0) {
+                    rateCoverageHtml = `
       <div class="gap-warning">
         <div class="title">Rate history didn't fully cover the comparison window</div>
         <div>${totalFlexUnmatched > 0 ? `${totalFlexUnmatched} half-hour reading(s) had no matching Flexible rate window. ` : ""}${totalAgileUnmatched > 0 ? `${totalAgileUnmatched} half-hour reading(s) had no matching Agile rate window. ` : ""}This usually means the product changed code at some point in the window and an older version's history wasn't picked up &mdash; the totals below will understate the true cost for the affected period(s).</div>
       </div>`;
-  }
+                }
 
-  if (gapInfo.gaps.length > 0) {
-    const missingSlots = gapInfo.gaps.reduce((sum, g) => sum + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0);
-    gapHtml = `
+                if (gapInfo.gaps.length > 0) {
+                    const missingSlots = gapInfo.gaps.reduce(
+                        (sum, g) =>
+                            sum +
+                            Math.round((g.end - g.start) / (30 * 60 * 1000)) +
+                            1,
+                        0,
+                    );
+                    gapHtml = `
       <div class="gap-warning">
         <div class="title">${gapInfo.gaps.length} gap${gapInfo.gaps.length > 1 ? "s" : ""} found in your consumption data (${missingSlots} missing half-hour slots)</div>
         <div>Costs below will be slightly understated for any billing period overlapping these dates, since missing slots contribute zero consumption rather than an estimate.</div>
         <ul>
-          ${gapInfo.gaps.slice(0, 10).map(g => `<li>${g.start.toISOString().slice(0,16).replace("T"," ")} to ${g.end.toISOString().slice(0,16).replace("T"," ")}</li>`).join("")}
+          ${gapInfo.gaps
+              .slice(0, 10)
+              .map(
+                  (g) =>
+                      `<li>${g.start.toISOString().slice(0, 16).replace("T", " ")} to ${g.end.toISOString().slice(0, 16).replace("T", " ")}</li>`,
+              )
+              .join("")}
           ${gapInfo.gaps.length > 10 ? `<li>...and ${gapInfo.gaps.length - 10} more</li>` : ""}
         </ul>
       </div>`;
-  }
+                }
 
-  let verdictHtml = "";
-  if (hasActual && totalAgile !== null) {
-    const flexVsActual = totalFlex - totalActual;
-    const agileVsActual = totalAgile - totalActual;
-    const cheaper = totalFlex < totalAgile ? "Flexible" : "Agile";
-    const cheaperPence = Math.abs(totalFlex - totalAgile);
-    verdictHtml = `<div class="verdict">Over this period, <strong>${cheaper}</strong> would have been ${fmtMoney(cheaperPence)} cheaper than the other. ${currentAgreement ? `You're currently on <strong>${currentAgreement.tariff_code}</strong>.` : ""}</div>`;
-  }
+                let verdictHtml = "";
+                if (hasActual && totalAgile !== null) {
+                    const flexVsActual = totalFlex - totalActual;
+                    const agileVsActual = totalAgile - totalActual;
+                    const cheaper =
+                        totalFlex < totalAgile ? "Flexible" : "Agile";
+                    const cheaperPence = Math.abs(totalFlex - totalAgile);
+                    verdictHtml = `<div class="verdict">Over this period, <strong>${cheaper}</strong> would have been ${fmtMoney(cheaperPence)} cheaper than the other. ${currentAgreement ? `You're currently on <strong>${currentAgreement.tariff_code}</strong>.` : ""}</div>`;
+                }
 
-  const summaryHtml = `
+                const summaryHtml = `
     <div class="summary-row">
       <div class="summary-card actual">
         <div class="label">Actual paid</div>
@@ -1353,61 +1935,73 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, perio
     </div>
   `;
 
-  const rowsHtml = results.map(r => {
-    const periodLabel = fmtDate(r.period.displayStart) + " to " + fmtDate(r.period.displayEnd);
-    const actualStr = r.period.actualChargePence != null ? fmtMoney(r.period.actualChargePence) : "n/a";
-    const flexStr = fmtMoney(r.flex.totalPence);
-    const agileStr = r.agile ? fmtMoney(r.agile.totalPence) : "n/a";
-    const staleFlag = r.flex.unmatchedReadings > 0
-      ? `<span class="stale-flag">${r.flex.unmatchedReadings} flex unmatched</span>`
-      : "";
-    const agileStaleFlag = r.agile && r.agile.unmatchedReadings > 0
-      ? `<span class="stale-flag">${r.agile.unmatchedReadings} agile unmatched</span>`
-      : "";
-    const clampedFlag = r.wasClamped
-      ? `<span class="stale-flag">partial &mdash; outside fetched data</span>`
-      : "";
-    return `<tr>
+                const rowsHtml = results
+                    .map((r) => {
+                        const periodLabel =
+                            fmtDate(r.period.displayStart) +
+                            " to " +
+                            fmtDate(r.period.displayEnd);
+                        const actualStr =
+                            r.period.actualChargePence != null
+                                ? fmtMoney(r.period.actualChargePence)
+                                : "n/a";
+                        const flexStr = fmtMoney(r.flex.totalPence);
+                        const agileStr = r.agile
+                            ? fmtMoney(r.agile.totalPence)
+                            : "n/a";
+                        const staleFlag =
+                            r.flex.unmatchedReadings > 0
+                                ? `<span class="stale-flag">${r.flex.unmatchedReadings} flex unmatched</span>`
+                                : "";
+                        const agileStaleFlag =
+                            r.agile && r.agile.unmatchedReadings > 0
+                                ? `<span class="stale-flag">${r.agile.unmatchedReadings} agile unmatched</span>`
+                                : "";
+                        const clampedFlag = r.wasClamped
+                            ? `<span class="stale-flag">partial &mdash; outside fetched data</span>`
+                            : "";
+                        return `<tr>
       <td>${periodLabel}${staleFlag}${agileStaleFlag}${clampedFlag}</td>
       <td>${r.flex.kwh.toFixed(1)}</td>
       <td>${actualStr}</td>
       <td>${flexStr}</td>
       <td>${agileStr}</td>
     </tr>`;
-  }).join("");
+                    })
+                    .join("");
 
-  const tableHtml = `
+                const tableHtml = `
     <table class="results">
       <thead>
         <tr><th>Period</th><th>kWh</th><th>Actual</th><th>Flexible</th><th>Agile</th></tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot>
-        <tr><td>Total</td><td>${results.reduce((s,r)=>s+r.flex.kwh,0).toFixed(1)}</td><td>${hasActual ? fmtMoney(totalActual) : "n/a"}</td><td>${fmtMoney(totalFlex)}</td><td>${totalAgile !== null ? fmtMoney(totalAgile) : "n/a"}</td></tr>
+        <tr><td>Total</td><td>${results.reduce((s, r) => s + r.flex.kwh, 0).toFixed(1)}</td><td>${hasActual ? fmtMoney(totalActual) : "n/a"}</td><td>${fmtMoney(totalFlex)}</td><td>${totalAgile !== null ? fmtMoney(totalAgile) : "n/a"}</td></tr>
       </tfoot>
     </table>
   `;
 
-  const emailSubject = "Octopus Tariff Check Results";
-  const emailBodyLines = [
-    `Postcode area: ${postcodeArea || "not available"}`,
-    `Period: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}`,
-    `Total consumption: ${totalKwh.toFixed(1)} kWh`,
-    `Actual paid: ${hasActual ? fmtMoney(totalActual) : "n/a"}`,
-    `Flexible (calculated): ${fmtMoney(totalFlex)}`,
-    `Agile (calculated): ${totalAgile !== null ? fmtMoney(totalAgile) : "n/a"}`,
-  ];
-  const emailBody = emailBodyLines.join("\n");
-  const mailtoHref = `mailto:hello@auth.energy?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
+                const emailSubject = "Octopus Tariff Check Results";
+                const emailBodyLines = [
+                    `Postcode area: ${postcodeArea || "not available"}`,
+                    `Period: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}`,
+                    `Total consumption: ${totalKwh.toFixed(1)} kWh`,
+                    `Actual paid: ${hasActual ? fmtMoney(totalActual) : "n/a"}`,
+                    `Flexible (calculated): ${fmtMoney(totalFlex)}`,
+                    `Agile (calculated): ${totalAgile !== null ? fmtMoney(totalAgile) : "n/a"}`,
+                ];
+                const emailBody = emailBodyLines.join("\n");
+                const mailtoHref = `mailto:hello@auth.energy?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
-  const emailButtonHtml = `
+                const emailButtonHtml = `
     <div class="email-results-row">
       <a class="email-results-link" href="${mailtoHref}">Email this summary to auth.energy</a>
       <span class="email-results-hint">Opens your own email app with a draft you can review before sending. Only sends a coarse postcode area, the time period, and the totals below &mdash; never your API key, full address, or raw consumption data.</span>
     </div>
   `;
 
-  container.innerHTML = `
+                container.innerHTML = `
     ${gapHtml}
     ${rateCoverageHtml}
     ${summaryHtml}
@@ -1416,9 +2010,9 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, perio
     <p class="footnote">Region ${regionLetter}. Comparison window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Flexible and Agile costs are calculated using each tariff's real historical rates for the exact dates of each billing period, including correctly splitting any period that spans a rate change. "Actual paid" comes directly from your real statement totals where available.</p>
     ${emailButtonHtml}
   `;
-}
+            }
 
-/* ============================================================
+            /* ============================================================
    DOM WIRING — browser-only from here down.
    extract_module.js cuts the test module at this marker, since
    everything below references real DOM elements / localStorage
@@ -1426,81 +2020,102 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, perio
    validateInputs() / runComparison() / etc. directly instead.
    ============================================================ */
 
-document.getElementById("btn-submit").addEventListener("click", () => {
-  if (validateInputs()) {
-    saveOrClearCredentials();
-    runComparison();
-  }
-});
+            document
+                .getElementById("btn-submit")
+                .addEventListener("click", () => {
+                    if (validateInputs()) {
+                        saveOrClearCredentials();
+                        runComparison();
+                    }
+                });
 
-document.getElementById("btn-restart").addEventListener("click", () => {
-  showScreen("screen-input");
-});
+            document
+                .getElementById("btn-restart")
+                .addEventListener("click", () => {
+                    showScreen("screen-input");
+                });
 
-/* ============================================================
+            /* ============================================================
    SAVED CREDENTIALS (localStorage, opt-in via checkbox)
    ============================================================ */
 
-const STORAGE_KEY = "octopusTariffCheck_savedCredentials";
+            const STORAGE_KEY = "octopusTariffCheck_savedCredentials";
 
-function loadSavedCredentials() {
-  let saved = null;
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) saved = JSON.parse(raw);
-  } catch (e) {
-    // Corrupted or inaccessible storage (e.g. private browsing in some
-    // browsers throws on access) — fail quietly, just don't pre-fill.
-    saved = null;
-  }
+            function loadSavedCredentials() {
+                let saved = null;
+                try {
+                    const raw = localStorage.getItem(STORAGE_KEY);
+                    if (raw) saved = JSON.parse(raw);
+                } catch (e) {
+                    // Corrupted or inaccessible storage (e.g. private browsing in some
+                    // browsers throws on access) — fail quietly, just don't pre-fill.
+                    saved = null;
+                }
 
-  if (saved) {
-    document.getElementById("input-apikey").value = saved.apiKey || "";
-    document.getElementById("input-account").value = saved.accountNumber || "";
-    document.getElementById("input-mpan").value = saved.mpan || "";
-    document.getElementById("input-serial").value = saved.serial || "";
-    document.getElementById("input-remember").checked = true;
-  }
-  updateClearButtonVisibility();
-}
+                if (saved) {
+                    document.getElementById("input-apikey").value =
+                        saved.apiKey || "";
+                    document.getElementById("input-account").value =
+                        saved.accountNumber || "";
+                    document.getElementById("input-mpan").value =
+                        saved.mpan || "";
+                    document.getElementById("input-serial").value =
+                        saved.serial || "";
+                    document.getElementById("input-remember").checked = true;
+                }
+                updateClearButtonVisibility();
+            }
 
-function saveOrClearCredentials() {
-  const remember = document.getElementById("input-remember").checked;
-  if (remember) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        apiKey: state.apiKey,
-        accountNumber: state.accountNumber,
-        mpan: state.mpan,
-        serial: state.serial,
-      }));
-    } catch (e) {
-      // Storage full or unavailable — not worth blocking the actual
-      // comparison over, so just skip saving silently.
-    }
-  } else {
-    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-  }
-  updateClearButtonVisibility();
-}
+            function saveOrClearCredentials() {
+                const remember =
+                    document.getElementById("input-remember").checked;
+                if (remember) {
+                    try {
+                        localStorage.setItem(
+                            STORAGE_KEY,
+                            JSON.stringify({
+                                apiKey: state.apiKey,
+                                accountNumber: state.accountNumber,
+                                mpan: state.mpan,
+                                serial: state.serial,
+                            }),
+                        );
+                    } catch (e) {
+                        // Storage full or unavailable — not worth blocking the actual
+                        // comparison over, so just skip saving silently.
+                    }
+                } else {
+                    try {
+                        localStorage.removeItem(STORAGE_KEY);
+                    } catch (e) {}
+                }
+                updateClearButtonVisibility();
+            }
 
-function updateClearButtonVisibility() {
-  let hasSaved = false;
-  try { hasSaved = localStorage.getItem(STORAGE_KEY) !== null; } catch (e) {}
-  document.getElementById("clear-saved-row").style.display = hasSaved ? "block" : "none";
-}
+            function updateClearButtonVisibility() {
+                let hasSaved = false;
+                try {
+                    hasSaved = localStorage.getItem(STORAGE_KEY) !== null;
+                } catch (e) {}
+                document.getElementById("clear-saved-row").style.display =
+                    hasSaved ? "block" : "none";
+            }
 
-document.getElementById("btn-clear-saved").addEventListener("click", () => {
-  try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
-  document.getElementById("input-apikey").value = "";
-  document.getElementById("input-account").value = "";
-  document.getElementById("input-mpan").value = "";
-  document.getElementById("input-serial").value = "";
-  document.getElementById("input-remember").checked = false;
-  updateClearButtonVisibility();
-});
+            document
+                .getElementById("btn-clear-saved")
+                .addEventListener("click", () => {
+                    try {
+                        localStorage.removeItem(STORAGE_KEY);
+                    } catch (e) {}
+                    document.getElementById("input-apikey").value = "";
+                    document.getElementById("input-account").value = "";
+                    document.getElementById("input-mpan").value = "";
+                    document.getElementById("input-serial").value = "";
+                    document.getElementById("input-remember").checked = false;
+                    updateClearButtonVisibility();
+                });
 
-loadSavedCredentials();
-</script>
-</body>
+            loadSavedCredentials();
+        </script>
+    </body>
 </html>

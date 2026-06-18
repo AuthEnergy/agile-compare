@@ -458,6 +458,48 @@
     line-height: 1.6;
   }
 
+  .share-panel {
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 20px 22px;
+    margin-bottom: 24px;
+  }
+
+  .share-panel .share-label {
+    font-size: 11.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #1a6bbf;
+    margin-bottom: 10px;
+  }
+
+  .share-panel .share-text {
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.7;
+    color: #1a3a6b;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-bottom: 14px;
+  }
+
+  .share-panel button.copy-btn {
+    background: #1a6bbf;
+    color: #ffffff;
+    border: none;
+    border-radius: 999px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 18px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+
+  .share-panel button.copy-btn:hover { opacity: 0.88; }
+  .share-panel button.copy-btn.copied { background: #1a8c5a; }
+
   table.results {
     width: 100%;
     border-collapse: collapse;
@@ -583,7 +625,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.1.1</span>
+      <span class="brand-version">v0.1.2</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1381,7 +1423,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.1.1 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.1.2 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1638,11 +1680,54 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const emailBody = emailBodyLines.join("\n");
   const mailtoHref = `mailto:hello@auth.energy?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
+  // --- Share panel ---
+  const shareLines = [];
+  if (useAgileOnly && hasActual) {
+    const saved = summaryFlex - summaryAgile;
+    const vsActual = summaryAgile - summaryActual;
+    shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${agileKwh.toFixed(0)} kWh):`);
+    shareLines.push(``);
+    shareLines.push(`  Actual paid (Agile):      ${fmtMoney(summaryActual)}`);
+    shareLines.push(`  Calculated Agile:         ${fmtMoney(summaryAgile)}`);
+    shareLines.push(`  Calculated Flexible:      ${fmtMoney(summaryFlex)}`);
+    shareLines.push(``);
+    if (saved > 0) {
+      shareLines.push(`Agile saved me ${fmtMoney(saved)} vs Flexible over this period.`);
+    } else {
+      shareLines.push(`Flexible would have been ${fmtMoney(Math.abs(saved))} cheaper than Agile over this period.`);
+    }
+    shareLines.push(``);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare`);
+  } else if (hasActual) {
+    shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${totalKwh.toFixed(0)} kWh):`);
+    shareLines.push(``);
+    shareLines.push(`  Actual paid:              ${fmtMoney(totalActual)}`);
+    shareLines.push(`  Calculated Flexible:      ${fmtMoney(totalFlex)}`);
+    if (totalAgile !== null) shareLines.push(`  Calculated Agile:         ${fmtMoney(totalAgile)}`);
+    shareLines.push(``);
+    const cheaperAmt = totalAgile !== null ? Math.abs(totalFlex - totalAgile) : null;
+    if (cheaperAmt !== null) {
+      shareLines.push(`${totalFlex < totalAgile ? "Flexible" : "Agile"} would have been ${fmtMoney(cheaperAmt)} cheaper over this period.`);
+    }
+    shareLines.push(``);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare`);
+  }
+
+  const shareText = shareLines.join("\n");
+  const sharePanelHtml = shareLines.length > 0 ? `
+    <div class="share-panel" id="share-panel">
+      <div class="share-label">Share your result on LinkedIn</div>
+      <div class="share-text" id="share-text">${shareText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+      <button class="copy-btn" id="btn-copy-share">Copy to clipboard</button>
+    </div>
+  ` : "";
+
   container.innerHTML = `
     ${gapHtml}
     ${rateCoverageHtml}
     ${summaryHtml}
     ${verdictHtml}
+    ${sharePanelHtml}
     ${tableHtml}
     <p class="footnote">Region ${regionLetter}. Comparison window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Flexible and Agile costs are calculated using each tariff's real historical rates for the exact dates of each billing period, including correctly splitting any period that spans a rate change. "Actual paid" comes directly from your real statement totals where available.</p>
     <div class="actions-block">
@@ -1663,6 +1748,26 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
 
   document.getElementById("btn-diagnostics").addEventListener("click", downloadDiagnostics);
   document.getElementById("btn-restart").addEventListener("click", () => showScreen("screen-input"));
+  const copyBtn = document.getElementById("btn-copy-share");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const text = document.getElementById("share-text").innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        copyBtn.textContent = "Copied!";
+        copyBtn.classList.add("copied");
+        setTimeout(() => {
+          copyBtn.textContent = "Copy to clipboard";
+          copyBtn.classList.remove("copied");
+        }, 2000);
+      }).catch(() => {
+        // Fallback: select the text so user can copy manually
+        const range = document.createRange();
+        range.selectNodeContents(document.getElementById("share-text"));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+      });
+    });
+  }
 }
 
 function downloadDiagnostics() {

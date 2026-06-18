@@ -4,7 +4,7 @@
   "private": true,
   "description": "Browser-only tool to compare Octopus Energy's Flexible and Agile tariffs against your real billing history, using real historical rates.",
   "scripts": {
-    "test": "node tests/extract_module.js && node tests/test_core_logic.js && node tests/test_e2e.js && node tests/test_runcomparison.js && node tests/test_realistic_period.js && node tests/test_remember_me.js"
+    "test": "node tests/extract_module.js && node tests/test_core_logic.js && node tests/test_e2e.js && node tests/test_runcomparison.js && node tests/test_realistic_period.js && node tests/test_remember_me.js && node tests/test_billing_validation.js && node tests/test_features.js && node tests/test_review_fixes.js && node tests/test_replay.js && node tests/test_review2.js && node tests/test_review3.js && node tests/test_review4.js && node tests/test_review5.js && node tests/test_review6.js && node tests/test_merge_rc11.js && node tests/test_failure_diag_pii.js && node tests/test_review7.js"
   },
   "license": "PolyForm-Noncommercial-1.0.0"
 }

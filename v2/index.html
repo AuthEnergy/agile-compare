@@ -10,6 +10,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  Defence-in-depth backstop, NOT a sandbox. This single-file app loads no
+  external scripts/styles/images/fonts and only talks to Octopus's API, so the
+  policy below denies everything by default (default-src 'none') and then
+  re-opens only the channels the app actually uses: inline script/style, same
+  -origin + data: images, and fetch/XHR to Octopus. Every other resource class
+  is pinned shut explicitly (frame/child/font/media/object 'none') so the
+  fallback is never silently widened by a future edit. base-uri/form-action
+  'none' block <base> hijacking and form-based exfiltration. LIMITS, to be
+  honest about it: it allows 'unsafe-inline', so an inline-injected script
+  could still RUN; and a meta-tag CSP cannot set frame-ancestors or reliably
+  block navigation-based exfiltration (location = '…' / window.open). Closing
+  those would mean moving script/style out of this one inline file (hashes or
+  external assets) plus a real response header and Trusted Types. Verify in a
+  browser before relying on it.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://api.octopus.energy; frame-src 'none'; child-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Octopus Tariff Check | auth.energy</title>
 <style>
   :root {
@@ -588,6 +605,37 @@
     color: var(--ink-dim);
   }
 
+  /* Billed-vs-observed mismatch — prominent amber banner above the cards. */
+  .mismatch-warning {
+    border: 1px solid #6b5618;
+    background: #1b1607;
+    border-radius: 8px;
+    padding: 16px 18px;
+    margin-bottom: 20px;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--ink);
+  }
+  .mismatch-warning .title { color: #f0c14b; font-weight: 600; margin-bottom: 6px; }
+  .mismatch-warning .figures { font-family: var(--mono); font-size: 12.5px; color: var(--ink-dim); margin-top: 8px; }
+
+  /* Statement reconciliation: electricity charge / credits / net. */
+  .recon {
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+    font-size: 13px;
+  }
+  .recon .recon-row { display: flex; justify-content: space-between; padding: 5px 0; color: var(--ink-dim); }
+  .recon .recon-row.net { border-top: 1px solid var(--hairline); margin-top: 4px; padding-top: 9px; color: var(--ink); font-weight: 600; }
+  .recon .recon-row .amt { font-family: var(--mono); }
+
+  .tariff-context { font-size: 13px; line-height: 1.7; color: var(--ink-dim); margin-bottom: 24px; }
+  .tariff-context strong { color: var(--ink); }
+
+  .summary-card .delta.not-comparable { color: var(--ink-faint); font-style: italic; }
+
   .error-banner {
     border: 1px solid #4A2420;
     background: #1F1310;
@@ -614,6 +662,7 @@
     margin-top: 28px;
   }
 
+  /* Diagnostic-file replay (load a downloaded diagnostics JSON, no API) */
   .upload-diag-link {
     color: var(--ink-dim);
     font-size: 12px;
@@ -622,7 +671,6 @@
     text-decoration: none;
   }
   .upload-diag-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
-
   .diag-replay-banner {
     border: 1px solid var(--hairline-strong);
     border-radius: 8px;
@@ -708,7 +756,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc11</span>
+      <span class="brand-version">v0.2.0-rc12</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -731,9 +779,9 @@
       <div class="remember-row">
         <label class="checkbox-label">
           <input type="checkbox" id="input-remember">
-          <span>Remember in this browser</span>
+          <span>Store my API key on this device</span>
         </label>
-        <span class="hint">Stored only in this browser's local storage, never sent anywhere. Don't use on a shared or public computer.</span>
+        <span class="hint">Only your API key is saved, in this browser's local storage &mdash; never sent anywhere, and any script on this page's origin could read it. Leave this off on a shared or public computer.</span>
       </div>
 
       <div class="btn-row">
@@ -745,7 +793,7 @@
     </div>
 
     <p class="footnote">Fetches your billing history and half-hourly consumption directly from Octopus, then calculates what you'd have paid on Flexible and Agile using real historical rates &mdash; compared against what you were actually charged.</p>
-    <p class="footnote"><span class="upload-diag-link" id="upload-diag-link">Upload diagnostics</span></p>
+    <p class="footnote"><span class="upload-diag-link" id="upload-diag-link">Upload diagnostics</span> &mdash; replay a previously downloaded diagnostics file, with no live API calls.</p>
     <input type="file" id="input-diag-file" accept=".json" style="display:none;">
   </div>
 
@@ -778,7 +826,7 @@
     <p>This page has no backend. There is no server collecting your data, because there is no server at all &mdash; it's a single static HTML file, viewable by anyone via "view source" or this repository's <a href="https://github.com/AuthEnergy/agile-compare" target="_blank" rel="noopener">public code on GitHub</a>.</p>
     <p>Every request this page makes goes directly from your browser to Octopus Energy's own API at api.octopus.energy, using your own API key. Nothing you enter is sent to the author of this tool, to any analytics service, or to any third party of any kind. You can verify this yourself by opening your browser's network tab while using the page.</p>
     <p>The one exception is the "Email this summary to auth.energy" button on the results screen, which is entirely optional. It opens a draft in your own email app &mdash; it doesn't send anything automatically &mdash; containing only your postcode's outward code (e.g. "N15", never the full postcode), the comparison period, total kWh, and the actual/Flexible/Agile totals. It never includes your API key, account number, MPAN, meter serial, or raw consumption data, and you can review or cancel the draft before anything leaves your device.</p>
-    <p>If you tick "remember these details," your API key, account number, MPAN, and meter serial are saved using your browser's local storage &mdash; a feature built into the browser itself, not a cookie, and not transmitted anywhere. This data stays on your device until you clear it (via the button on the input screen, or by clearing your browser's site data for this page) and is never readable by any other website.</p>
+    <p>If you tick "remember my API key," only your API key is saved using your browser's local storage &mdash; a feature built into the browser itself, not a cookie, and not transmitted anywhere. Your account number, MPAN, and meter serial are discovered from Octopus each time and are not stored. The saved key stays on your device until you clear it (via the button on the input screen, or by clearing your browser's site data for this page) and is never readable by any other website.</p>
     <p>Treat your Octopus API key like a password. Anyone with it can read your account's billing and consumption history. If you use the "remember" option, that key sits in plain form in this browser's storage, so avoid using it on a shared or public computer, and clear it when you're done if you do.</p>
   </div>
 
@@ -798,6 +846,28 @@ function rateAt(rateWindows, instant) {
     if (t >= from && t < to) return w.value;
   }
   return null;
+}
+
+// Binary-search variant of rateAt for the hot per-reading loops. The input
+// MUST be sorted ascending by validFrom (callers sort once). For Agile, rate
+// windows are half-hourly, so a multi-year window has tens of thousands of
+// them; a linear scan per reading is O(readings × windows) and stalls the
+// browser on long histories. This finds the last window starting at or
+// before the instant, then checks its end — O(log windows) per reading.
+// Where versions' windows overlap at a boundary it returns the later-
+// starting window, which is the correct (newer) rate for that instant.
+function rateAtSorted(sortedWindows, instant) {
+  const t = instant.getTime();
+  let lo = 0, hi = sortedWindows.length - 1, ans = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (sortedWindows[mid].validFrom.getTime() <= t) { ans = mid; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  if (ans === -1) return null;
+  const w = sortedWindows[ans];
+  const to = w.validTo ? w.validTo.getTime() : Infinity;
+  return t < to ? w.value : null;
 }
 
 function detectGaps(readings) {
@@ -831,15 +901,20 @@ function detectGaps(readings) {
   return { gaps, duplicates, earliest, latest };
 }
 
-function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standingChargeWindows) {
+function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standingChargeWindows, preSorted) {
   let kwh = 0;
   let energyCostPence = 0;
   let unmatchedReadings = 0;
 
+  // Unit-rate windows must be ascending by validFrom for the binary search.
+  // A caller that prices many periods (split months) sorts the array ONCE
+  // and passes preSorted=true, so the same large Agile window array isn't
+  // re-sorted for every period.
+  const sortedUnit = preSorted ? unitRateWindows : [...unitRateWindows].sort((a, b) => a.validFrom - b.validFrom);
   for (const r of readings) {
     if (r.start >= periodStart && r.start < periodEnd) {
       kwh += r.kwh;
-      const rate = rateAt(unitRateWindows, r.start);
+      const rate = rateAtSorted(sortedUnit, r.start);
       if (rate === null) unmatchedReadings++;
       else energyCostPence += r.kwh * rate;
     }
@@ -865,17 +940,216 @@ function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standi
     );
   }
 
+  // Standing-charge windows can overlap exactly like unit rates: when a
+  // product changes code, an older version's open-ended (validTo:null) window
+  // can still span dates also covered by a newer version's window. A linear
+  // first-match (rateAt) would return whichever window appears first in the
+  // array — the OLDER, stale rate. Sort ascending and use the same binary
+  // -search lookup the unit rates use, so the later-starting (newer) window
+  // wins on overlap. Standing windows are few (one per product version), so we
+  // sort unconditionally (ignoring preSorted, which exists only to spare the
+  // huge half-hourly Agile UNIT array a re-sort per split period) — this keeps
+  // the lookup correct even when a caller passes an unsorted standing array.
+  const sortedStanding = [...standingChargeWindows].sort((a, b) => a.validFrom - b.validFrom);
   let standingChargePence = 0;
+  let unmatchedStandingDays = 0;
   let cursor = new Date(periodStart);
   cursor.setUTCHours(12, 0, 0, 0);
   if (cursor < periodStart) cursor.setUTCDate(cursor.getUTCDate() + 1);
   while (cursor < periodEnd) {
-    const rate = rateAt(standingChargeWindows, cursor);
+    const rate = rateAtSorted(sortedStanding, cursor);
+    // A day with no matching standing-charge window contributes nothing —
+    // which would silently understate the total if the standing-charge
+    // endpoint failed or returned partial history. Count those days so the
+    // caller can flag the period as not fully covered.
     if (rate !== null) standingChargePence += rate;
+    else unmatchedStandingDays++;
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
-  return { kwh, energyCostPence, standingChargePence, totalPence: energyCostPence + standingChargePence, unmatchedReadings };
+  return { kwh, energyCostPence, standingChargePence, totalPence: energyCostPence + standingChargePence, unmatchedReadings, unmatchedStandingDays };
+}
+
+// Value exported electricity under an export ("Outgoing") tariff. Export is
+// income paid per kWh exported, with NO standing charge — so this is unit
+// rate × kWh only, never the cost-style standing-charge model used for import.
+function calculateExportValue(readings, periodStart, periodEnd, unitRateWindows) {
+  let kwh = 0, valuePence = 0, unmatchedReadings = 0;
+  const sortedUnit = [...unitRateWindows].sort((a, b) => a.validFrom - b.validFrom);
+  for (const r of readings) {
+    if (r.start >= periodStart && r.start < periodEnd) {
+      kwh += r.kwh;
+      const rate = rateAtSorted(sortedUnit, r.start);
+      if (rate === null) unmatchedReadings++;
+      else valuePence += r.kwh * rate;
+    }
+  }
+  return { kwh, valuePence, unmatchedReadings };
+}
+
+// Split any billing period longer than 35 days into calendar-month
+// sub-periods, day-apportioning the real statement charge across them.
+// Split rows are flagged isSplit:true; their apportioned actual charge is a
+// display estimate, not Octopus's own per-month billing, and is excluded
+// from headline "vs statement" claims by renderResults. Shared by the live
+// path and the diagnostic-replay path.
+function splitLongPeriods(rawPeriods) {
+  const result = [];
+  for (const p of rawPeriods) {
+    const spanDays = (p.end - p.start) / (24 * 60 * 60 * 1000);
+    if (spanDays <= 35) { result.push({ ...p, isSplit: false }); continue; }
+    const totalDays = spanDays;
+    let cursor = new Date(p.start);
+    while (cursor < p.end) {
+      const subStart = new Date(cursor);
+      const nextMonth = new Date(cursor);
+      nextMonth.setUTCDate(1);
+      nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+      nextMonth.setUTCHours(0, 0, 0, 0);
+      const subEnd = nextMonth < p.end ? nextMonth : new Date(p.end);
+      const proportion = ((subEnd - subStart) / (24 * 60 * 60 * 1000)) / totalDays;
+      result.push({
+        displayStart: subStart, displayEnd: subEnd, start: subStart, end: subEnd,
+        actualChargePence: p.actualChargePence != null ? Math.round(p.actualChargePence * proportion) : null,
+        isSplit: true,
+      });
+      cursor = subEnd;
+    }
+  }
+  return result;
+}
+
+/* ------------------------------------------------------------
+   Tariff classification, statement transactions & sensitivity
+   ------------------------------------------------------------ */
+
+// Classify an Octopus tariff code into a human-friendly product kind.
+// Codes look like "E-1R-OE-FIX-12M-25-04-05-B" where the trailing "-B"
+// is only the GSP region suffix, NOT the product name. Order matters: the
+// specific product families are checked before the generic "VAR/FLEX"
+// (Flexible) match, because most codes also contain "VAR" (GO-VAR,
+// OUTGOING-VAR, INTELLI-VAR) and would otherwise all read "Flexible".
+function classifyTariffCode(code) {
+  if (!code) return { kind: "unknown", label: "unknown tariff" };
+  const c = String(code).toUpperCase();
+  // Export ("Outgoing") first: an export code can also contain AGILE or VAR.
+  // "OUTGOING" contains the substring "GO", so the Go check is hyphen-anchored.
+  if (c.includes("OUTGOING")) return { kind: "export", label: "Outgoing (export)" };
+  if (c.includes("AGILE"))    return { kind: "agile", label: "Agile" };
+  if (c.includes("TRACKER"))  return { kind: "tracker", label: "Tracker" };
+  if (c.includes("COSY"))     return { kind: "cosy", label: "Cosy" };
+  if (c.includes("INTELLI"))  return { kind: "go", label: "Intelligent Go" };
+  if (/(^|-)GO(-|$)/.test(c)) return { kind: "go", label: "Go" };
+  if (c.includes("FIX"))      return { kind: "fixed", label: "Fixed" };
+  if (c.includes("VAR") || c.includes("FLEX")) return { kind: "flexible", label: "Flexible" };
+  return { kind: "other", label: code };
+}
+
+// Summarise a statement's transactions into the electricity bill-charge
+// total, the billed consumption quantity (kWh Octopus actually invoiced),
+// and any credits — kept strictly separate so referral/goodwill credits are
+// never netted into a tariff comparison, and so GAS charges on a dual-fuel
+// account are not summed into the electricity figure. amounts.gross is
+// integer pence; consumption.quantity is decimal kWh. Returns
+// { available:false } when the node carries no transactions block.
+function summariseStatementTransactions(statementNode) {
+  const txns = statementNode && statementNode.transactions;
+  if (!txns || !Array.isArray(txns.edges)) {
+    return { available: false, complete: true, electricityChargePence: null, billedKwh: null, creditsPence: 0, credits: [], charges: [] };
+  }
+  const nodes = txns.edges.map(e => e && e.node).filter(Boolean);
+  const grossOf = n => (n.amounts && typeof n.amounts.gross === "number") ? n.amounts.gross : 0;
+
+  const billCharges = nodes.filter(n => n.__typename === "BillCharge");
+  // Prefer charges explicitly titled "Electricity"; fall back to any
+  // bill-charge carrying a consumption quantity, for single-fuel accounts
+  // whose charge title differs. Deliberately avoids summing a gas charge.
+  let electricityCharges = billCharges.filter(n => /electric/i.test(n.title || ""));
+  if (electricityCharges.length === 0) {
+    electricityCharges = billCharges.filter(n => n.consumption && n.consumption.quantity != null);
+  }
+
+  let electricityChargePence = null;
+  let billedKwh = null;
+  for (const c of electricityCharges) {
+    electricityChargePence = (electricityChargePence || 0) + grossOf(c);
+    if (c.consumption && c.consumption.quantity != null) {
+      billedKwh = (billedKwh || 0) + Number(c.consumption.quantity);
+    }
+  }
+
+  const creditNodes = nodes.filter(n => n.__typename === "BillCredit");
+  let creditsPence = 0;
+  const credits = creditNodes.map(n => {
+    const grossPence = grossOf(n);
+    creditsPence += grossPence;
+    return { title: n.title || "Credit", reasonCode: n.reasonCode || "", grossPence };
+  });
+
+  return {
+    available: true,
+    complete: !(txns.pageInfo && txns.pageInfo.hasNextPage),
+    electricityChargePence,
+    billedKwh,
+    creditsPence,
+    credits,
+    charges: electricityCharges.map(c => ({
+      title: c.title || "Charge",
+      grossPence: grossOf(c),
+      kwh: (c.consumption && c.consumption.quantity != null) ? Number(c.consumption.quantity) : null,
+    })),
+  };
+}
+
+// True when a statement's billed kWh and the half-hourly readings actually
+// summed diverge enough that comparing their costs would mislead.
+// Threshold is max(50 kWh, 2%) of the billed quantity.
+function billedKwhMismatch(billedKwh, observedKwh) {
+  if (billedKwh == null || observedKwh == null) return false;
+  const threshold = Math.max(50, 0.02 * Math.abs(billedKwh));
+  return Math.abs(billedKwh - observedKwh) > threshold;
+}
+
+// Estimate how much consumption the missing half-hour slots probably
+// represent, using the median observed kWh for the same half-hour of day.
+// Sensitivity figure only — base totals still treat missing slots as zero.
+function estimateMissingKwh(readings, gaps) {
+  const empty = { totalKwh: 0, slots: 0, perGap: [] };
+  if (!gaps || gaps.length === 0 || !readings || readings.length === 0) return empty;
+  const slotOfDay = d => d.getUTCHours() * 2 + (d.getUTCMinutes() >= 30 ? 1 : 0);
+  const buckets = Array.from({ length: 48 }, () => []);
+  for (const r of readings) buckets[slotOfDay(r.start)].push(r.kwh);
+  const medians = buckets.map(vals => {
+    if (vals.length === 0) return 0;
+    const s = [...vals].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  });
+  const stepMs = 30 * 60 * 1000;
+  let totalKwh = 0, totalSlots = 0;
+  const perGap = [];
+  for (const g of gaps) {
+    let gapKwh = 0, gapSlots = 0;
+    for (let t = g.start.getTime(); t <= g.end.getTime(); t += stepMs) {
+      gapKwh += medians[slotOfDay(new Date(t))];
+      gapSlots++;
+    }
+    totalKwh += gapKwh; totalSlots += gapSlots;
+    perGap.push({ from: new Date(g.start), to: new Date(g.end), slots: gapSlots, kwh: gapKwh });
+  }
+  return { totalKwh, slots: totalSlots, perGap };
+}
+
+// Escape a string for safe interpolation into innerHTML. Used for every
+// externally-influenced value (API tariff codes, transaction titles/reason
+// codes, error messages/bodies, region, addresses, postcode area).
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /* ============================================================
@@ -1079,6 +1353,39 @@ async function fetchConsumption(mpan, serial, periodFrom, periodTo) {
   }));
 }
 
+// Fetch consumption across ALL meter serials on a meter point and merge by
+// interval. An MPAN can have more than one meter record after a meter
+// exchange: the old serial holds the earlier readings, the new serial the
+// later ones. Reading only the first serial (as the picker no longer lets
+// the user correct it) could miss data; merging by interval_start tiles the
+// timeline and de-duplicates any overlap. Order serials so a later fetch
+// can't clobber an earlier serial's reading for the same interval.
+async function fetchConsumptionMerged(mpan, serials, periodFrom, periodTo) {
+  const list = (serials && serials.length ? serials : []).filter(Boolean);
+  if (list.length <= 1) return fetchConsumption(mpan, list[0], periodFrom, periodTo);
+  const byInterval = new Map();
+  for (const serial of list) {
+    let readings;
+    try {
+      readings = await fetchConsumption(mpan, serial, periodFrom, periodTo);
+    } catch (e) {
+      // A 404 means this serial isn't a valid/active meter record for this
+      // MPAN (e.g. a stale registration that never returned data) — safe to
+      // skip. Any OTHER error (network, CORS, 5xx) could be hiding real
+      // readings from an older serial; treating it as empty would silently
+      // undercount consumption (and detectGaps can't flag a missing window
+      // START), so we fail the run rather than report wrong numbers.
+      if (e instanceof OctopusApiError && e.status === 404) continue;
+      throw e;
+    }
+    for (const r of readings) {
+      const key = r.start.getTime();
+      if (!byInterval.has(key)) byInterval.set(key, r); // keep first serial's value for an interval
+    }
+  }
+  return [...byInterval.values()].sort((a, b) => a.start - b.start);
+}
+
 async function fetchProductTariffCode(productCode, regionLetter) {
   const detail = await restGetRaw(`${REST_BASE}/products/${productCode}/`);
   const regionKey = "_" + regionLetter;
@@ -1102,6 +1409,110 @@ async function findLiveProductCodeByDisplayName(displayName) {
   // Prefer one with no available_to (still live) if present
   const live = candidates.find(p => !p.available_to);
   return (live || candidates[0]).code;
+}
+
+// Discover ALL product versions for a display name whose availability
+// overlaps the comparison window — not just the currently-live one. Octopus
+// periodically retires a product code and replaces it (e.g. AGILE-22-08-31 →
+// AGILE-24-10-01); a comparison window spanning that switch needs BOTH
+// versions' rate history, or the older period's readings have no matching
+// rate. `/products/` returns products available "now" by default, so we
+// sample `available_at` across the window to surface since-retired versions,
+// then dedupe by code and keep those whose availability overlaps the window.
+async function findProductsByDisplayNameOverlapping(displayName, periodFrom, periodTo) {
+  const samples = [];
+  // ~6-weekly probes: dense enough to catch a short-lived product version
+  // that started and retired between sparser samples, without an excessive
+  // number of product-list calls on a multi-year window.
+  const stepMs = 45 * 24 * 60 * 60 * 1000;
+  for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) samples.push(new Date(t));
+  samples.push(periodTo);
+  samples.push(null); // null = current (no available_at filter)
+  const byCode = new Map();
+  const probe = async (at) => {
+    const params = { brand: "OCTOPUS_ENERGY", is_variable: "true" };
+    if (at) params.available_at = at.toISOString();
+    let results;
+    try { results = await restGetAllPages("/products/", params); } catch (e) { return; }
+    for (const p of results) {
+      if (p.display_name === displayName && !p.is_business && !p.is_prepay && !byCode.has(p.code)) {
+        byCode.set(p.code, { code: p.code, available_from: p.available_from || null, available_to: p.available_to || null });
+      }
+    }
+  };
+  // Pass 1: regular sampling across the window.
+  for (const at of samples) await probe(at);
+  // Pass 2: boundary probes. A product version that started AND retired
+  // entirely between two pass-1 samples would be missed; probing a day either
+  // side of each discovered version's availability edges surfaces a short-
+  // lived version sitting in the gap between two known versions. Bounded by
+  // the number of versions already found, so it adds only a few calls.
+  const fromMs = periodFrom.getTime(), toMs = periodTo.getTime(), dayMs = 24 * 60 * 60 * 1000;
+  const boundaries = new Set();
+  for (const p of [...byCode.values()]) {
+    for (const edge of [p.available_from, p.available_to]) {
+      if (!edge) continue;
+      const ms = new Date(edge).getTime();
+      for (const side of [-dayMs, dayMs]) {
+        const t = ms + side;
+        if (t > fromMs && t < toMs) boundaries.add(Math.floor(t / dayMs) * dayMs);
+      }
+    }
+  }
+  for (const t of boundaries) await probe(new Date(t));
+  const products = [...byCode.values()];
+  const overlapping = products.filter(p => {
+    const af = p.available_from ? new Date(p.available_from).getTime() : -Infinity;
+    const at = p.available_to ? new Date(p.available_to).getTime() : Infinity;
+    return af < periodTo.getTime() && at > periodFrom.getTime();
+  });
+  const chosen = overlapping.length ? overlapping : products;
+  chosen.sort((a, b) => new Date(a.available_from || 0) - new Date(b.available_from || 0));
+  return chosen;
+}
+
+// Fetch and merge rate windows across several product versions. Each
+// version's fetch is clamped to where it was actually available, so we don't
+// request (nonexistent) rates outside its lifetime, and the merged windows
+// tile the whole comparison window. Returns the merged, chronologically
+// sorted windows plus the list of product codes that actually contributed.
+async function fetchMergedRateWindows(products, regionLetter, kind, periodFrom, periodTo) {
+  let all = [];
+  const used = [];
+  // Count raw rows returned BEFORE clipping. A caller distinguishes "no rates
+  // exist at all" (a real lookup failure worth erroring on) from "rates exist
+  // but none overlap the comparison window" (a coverage gap that should surface
+  // as unmatched readings, not a hard error) — clipping can empty `windows`
+  // for the latter, so length alone can't tell them apart.
+  let rawCount = 0;
+  for (const p of products) {
+    const from = (p.available_from && new Date(p.available_from) > periodFrom) ? new Date(p.available_from) : periodFrom;
+    const to = (p.available_to && new Date(p.available_to) < periodTo) ? new Date(p.available_to) : periodTo;
+    if (from >= to) continue;
+    let tariffCode = null;
+    try { tariffCode = await fetchProductTariffCode(p.code, regionLetter); } catch (e) { tariffCode = null; }
+    if (!tariffCode) continue;
+    let windows = [];
+    try { windows = await fetchRateWindows(p.code, tariffCode, kind, from, to); } catch (e) { windows = []; }
+    rawCount += windows.length;
+    // Clip every returned window to THIS product's availability range [from, to)
+    // and drop any that don't overlap it. Octopus can return an open-ended
+    // (valid_to:null) row even for a retired product; left unclipped, the
+    // binary-search lookup would let that stale rate run to Infinity, silently
+    // covering dates that belong to a newer product version — and hiding a
+    // genuine missing-version gap (the readings would never be flagged
+    // unmatched). Clipping pins each version's rates to when it was actually
+    // available, so a real gap between versions stays visible.
+    const clipped = [];
+    for (const w of windows) {
+      const wf = w.validFrom > from ? w.validFrom : from;
+      const wt = (w.validTo && w.validTo < to) ? w.validTo : to;
+      if (wf < wt) clipped.push({ validFrom: wf, validTo: wt, value: w.value });
+    }
+    if (clipped.length) { all = all.concat(clipped); used.push(p.code); }
+  }
+  all.sort((a, b) => a.validFrom - b.validFrom);
+  return { windows: all, used, rawCount };
 }
 
 async function fetchRateWindows(productCode, tariffCode, kind, periodFrom, periodTo) {
@@ -1134,6 +1545,22 @@ async function fetchStatements(token, accountNumber) {
                 startAt
                 endAt
                 totalCharges { grossTotal }
+                totalCredits { grossTotal }
+                transactions(first: 100) {
+                  totalCount
+                  pageInfo { hasNextPage endCursor }
+                  edges {
+                    node {
+                      __typename
+                      title
+                      reasonCode
+                      amounts { gross net tax }
+                      ... on BillCharge {
+                        consumption { startDate endDate quantity unit }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -1143,22 +1570,31 @@ async function fetchStatements(token, accountNumber) {
   let statements = [];
   let after = null;
   let guard = 0;
+  let incomplete = false;
+  const ledgersWithStatements = new Set();
   while (guard < 30) {
     const data = await graphqlRequest(query, { accountNumber, after }, token);
-    let anyNext = false;
-    for (const ledger of data.account.ledgers || []) {
-      const stmts = ledger.statements;
-      if (!stmts) continue;
+    const ledgers = data.account.ledgers || [];
+    let ledgersWantingMore = 0;
+    let nextCursor = null;
+    for (let li = 0; li < ledgers.length; li++) {
+      const stmts = ledgers[li].statements;
+      if (!stmts || !stmts.edges) continue;
+      if (stmts.edges.length) ledgersWithStatements.add(li);
       for (const edge of stmts.edges) statements.push(edge.node);
-      if (stmts.pageInfo.hasNextPage) {
-        anyNext = true;
-        after = stmts.pageInfo.endCursor;
-      }
+      if (stmts.pageInfo && stmts.pageInfo.hasNextPage) { ledgersWantingMore++; nextCursor = stmts.pageInfo.endCursor; }
     }
     guard++;
-    if (!anyNext) break;
+    if (ledgersWantingMore === 0) break; // every ledger fully paged
+    // A single $after cursor can only paginate ONE statements connection
+    // safely. If more than one ledger wants another page — or more than one
+    // ledger has statements at all — reusing one cursor across them would
+    // skip or duplicate statements. Stop and report the history as
+    // incomplete rather than returning silently-wrong billing periods.
+    if (ledgersWantingMore > 1 || ledgersWithStatements.size > 1) { incomplete = true; break; }
+    after = nextCursor; // exactly one statement-bearing ledger → safe to page
   }
-  return statements;
+  return { statements, incomplete: incomplete || guard >= 30 };
 }
 
 /* ============================================================
@@ -1170,10 +1606,72 @@ const state = {
   accountNumber: "",
   mpan: "",
   serial: "",
-  allSerials: [],   // all serials for this MPAN, newest first — for meter exchange fallback
+  serials: [],   // all serials for this MPAN, newest first — consumption is fetched and merged across them
   accountData: null,
+  isExport: false,
   diagnostics: null,
+  failureDiag: null,
 };
+
+// Strip identifying values (MPAN, meter serials, API key) out of any free text
+// before it lands in a DOWNLOADED artifact. Thrown errors and progress-log lines
+// can interpolate the MPAN/serial into their message text; the saved diagnostics
+// must not carry them — the UI promises no MPAN/serial/API key in downloaded
+// files, and the structured fields are already redacted to counts. Applied as a
+// belt-and-braces pass so any future identifier-bearing string is covered
+// without auditing every throw site. Account number is intentionally NOT
+// redacted: support needs it to locate the account and the promise doesn't
+// exclude it.
+function redactPII(text) {
+  if (text == null) return text;
+  let s = String(text);
+  if (state.mpan) s = s.split(state.mpan).join("[MPAN redacted]");
+  const serials = (state.serials && state.serials.length) ? state.serials : (state.serial ? [state.serial] : []);
+  for (const sn of serials) { if (sn) s = s.split(sn).join("[serial redacted]"); }
+  if (state.apiKey) s = s.split(state.apiKey).join("[API key redacted]");
+  return s;
+}
+
+// Capture a failure diagnostic — everything known at the point of failure, for
+// the user to download and send to support. PII-light: includes the account
+// number (support needs it to locate the account) but NO MPAN, meter serial,
+// address, or API key; error text and progress-log lines are run through
+// redactPII. Shared by both the import (runComparison) and export
+// (runExportComparison) flows so an export failure produces a diagnostic too,
+// rather than leaving the download button to no-op or emit stale data.
+function captureFailureDiag(err) {
+  state.failureDiag = {
+    generatedAt: new Date().toISOString(),
+    appVersion: `agile-compare v0.2.0-rc12 / github.com/AuthEnergy/agile-compare`,
+    error: {
+      message: redactPII(err.message),
+      type: err instanceof OctopusApiError ? "OctopusApiError" : err.constructor.name,
+      status: err.status || null,
+      corsLikely: err.corsLikely || false,
+    },
+    account: {
+      number: state.accountNumber || null,
+      // MPAN and meter serials are deliberately omitted (PII); counts/flags are
+      // kept so support can reason about meter shape without identifying it.
+      serialCount: (state.serials && state.serials.length) ? state.serials.length : (state.serial ? 1 : 0),
+      isExport: !!state.isExport,
+      postcodeArea: state.accountData ? getPostcodeAreaForMpan(state.accountData, state.mpan) : null,
+      agreements: state.accountData ? (getAgreementsForMpan(state.accountData, state.mpan) || []).map(a => ({
+        tariffCode: a.tariff_code,
+        validFrom: a.valid_from,
+        validTo: a.valid_to || null,
+      })) : [],
+      metersOnAccount: state.accountData ? (state.accountData.properties || []).flatMap(p =>
+        (p.electricity_meter_points || []).map(em => ({
+          serialCount: (em.meters || []).length,
+          isExport: em.is_export,
+          currentTariff: (em.agreements || []).find(a => !a.valid_to)?.tariff_code || null,
+        }))
+      ) : [],
+    },
+    progressLog: Array.from(document.querySelectorAll("#progress-log .line")).map(el => redactPII(el.textContent)),
+  };
+}
 
 function log(message, cls = "") {
   const el = document.getElementById("progress-log");
@@ -1222,7 +1720,9 @@ function validateInputs() {
   return true;
 }
 
-// Collect all non-export electricity meters from the account, across all properties.
+// Collect all electricity meters from the account, across all properties. Both
+// import and export meters are returned (flagged via isExport); export meters
+// take the export-comparison path rather than being hidden.
 function collectMeters(accountData) {
   const EXPORT_PATTERNS = /EXPORT|OUTGOING|SEG|GENERATION/i;
 
@@ -1231,28 +1731,35 @@ function collectMeters(accountData) {
     const addr = [prop.address_line_1, prop.address_line_2, prop.address_line_3, prop.town, prop.postcode]
       .filter(Boolean).join(", ");
     for (const em of prop.electricity_meter_points || []) {
-      if (em.is_export) continue;
       const serials = (em.meters || []).map(m => m.serial_number).filter(Boolean);
       if (serials.length === 0) continue;
-      // Use the last serial (most recent meter after any exchanges).
-      // The consumption fetch will try this first; if it returns nothing
-      // it falls through to the error handling which gives a clear message.
+      // Primary serial = the most recent meter (after any exchange); ALL serials
+      // are kept so consumption can be fetched and merged across them, so a meter
+      // swap loses no readings.
       const serial = serials[serials.length - 1];
-      const allSerials = [...serials].reverse(); // newest first for fallback
+      const mergedSerials = [...serials].reverse(); // newest meter first
       const agreements = em.agreements || [];
-      // Detect export meters from tariff codes when is_export is not set —
-      // reliable because Octopus consistently uses EXPORT/OUTGOING/SEG in
-      // export tariff codes. Skip any MPAN where ALL agreements look like export.
-      if (agreements.length > 0 && agreements.every(a => EXPORT_PATTERNS.test(a.tariff_code || ""))) continue;
+      // Detect an export meter even when is_export isn't set — Octopus
+      // consistently uses EXPORT/OUTGOING/SEG/GENERATION in export tariff codes.
+      // We do NOT skip export meters: they are flagged and routed to the export
+      // -comparison path (which values exported kWh, with no standing charge).
+      const looksExport = !!em.is_export
+        || (agreements.length > 0 && agreements.every(a => EXPORT_PATTERNS.test(a.tariff_code || "")));
       const current = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
       meters.push({
         accountNumber: accountData.number,
         mpan: em.mpan,
         serial,
-        allSerials,
+        // All serials for this MPAN (a meter exchange leaves >1); consumption is
+        // fetched and merged across them so no readings are missed.
+        serials: mergedSerials,
         address: addr,
         tariffCode: current ? current.tariff_code : "unknown",
         gsp: em.gsp || null,
+        // Export meters measure electricity sent BACK to the grid (e.g. solar).
+        // They are valued under an export tariff, so they take a different
+        // comparison path — flagged here, never silently hidden.
+        isExport: looksExport,
       });
     }
   }
@@ -1293,17 +1800,10 @@ async function fetchAndPickMeter() {
       allMeters = allMeters.concat(collectMeters(acctData).map(m => ({ ...m, _acctData: acctData })));
     }
 
-    if (allMeters.length === 0) throw new Error("No electricity import meters found on this account.");
+    if (allMeters.length === 0) throw new Error("No electricity meters found on this account.");
 
     if (allMeters.length === 1) {
-      const m = allMeters[0];
-      state.accountNumber = m.accountNumber;
-      state.mpan = m.mpan;
-      state.serial = m.serial;
-      state.allSerials = m.allSerials || [m.serial];
-      state.accountData = m._acctData;
-      saveOrClearCredentials();
-      runComparison();
+      selectMeter(allMeters[0]);
     } else {
       showMeterPicker(allMeters);
     }
@@ -1318,27 +1818,34 @@ async function fetchAndPickMeter() {
   }
 }
 
+// Apply a chosen meter to state and run the right comparison: export meters
+// are valued under export tariffs (Outgoing vs Agile Outgoing); import meters
+// take the Flexible-vs-Agile path.
+function selectMeter(m) {
+  state.accountNumber = m.accountNumber;
+  state.mpan = m.mpan;
+  state.serial = m.serial;
+  state.serials = m.serials && m.serials.length ? m.serials : [m.serial];
+  state.accountData = m._acctData;
+  state.isExport = !!m.isExport;
+  saveOrClearCredentials();
+  if (m.isExport) runExportComparison();
+  else runComparison();
+}
+
 function showMeterPicker(meters) {
   const list = document.getElementById("meter-list");
+  // All fields are API-derived, so escape them before interpolation.
   list.innerHTML = meters.map((m, i) => `
     <div class="meter-option" data-idx="${i}">
-      <div class="meter-address">${m.address || "Unknown address"}</div>
-      <div class="meter-detail">MPAN ${m.mpan} &middot; Serial ${m.serial}</div>
-      <div class="meter-tariff">${m.tariffCode}</div>
+      <div class="meter-address">${escapeHtml(m.address || "Unknown address")}</div>
+      <div class="meter-detail">${m.isExport ? "Export meter (solar/generation)" : "Import meter"} &middot; MPAN ${escapeHtml(m.mpan)} &middot; Serial ${escapeHtml(m.serial)}</div>
+      <div class="meter-tariff">${escapeHtml(classifyTariffCode(m.tariffCode).label)} &middot; <code>${escapeHtml(m.tariffCode)}</code></div>
     </div>
   `).join("");
 
   list.querySelectorAll(".meter-option").forEach(el => {
-    el.addEventListener("click", () => {
-      const m = meters[parseInt(el.dataset.idx)];
-      state.accountNumber = m.accountNumber;
-      state.mpan = m.mpan;
-      state.serial = m.serial;
-      state.allSerials = m.allSerials || [m.serial];
-      state.accountData = m._acctData;
-      saveOrClearCredentials();
-      runComparison();
-    });
+    el.addEventListener("click", () => selectMeter(meters[parseInt(el.dataset.idx)]));
   });
 
   showScreen("screen-pick-meter");
@@ -1379,11 +1886,11 @@ async function runComparison() {
     setProgress(15);
 
     line = log("Fetching statements (real bill periods + amounts)...", "active");
-    const allStatements = await fetchStatements(token, state.accountNumber);
+    const { statements: allStatements, incomplete: statementsIncomplete } = await fetchStatements(token, state.accountNumber);
     if (allStatements.length === 0) {
       throw new Error("No statements found on this account. Your account may not have statement history available via the API.");
     }
-    setActiveLine(line, `Found ${allStatements.length} statement(s) on this account.`, "ok");
+    setActiveLine(line, `Found ${allStatements.length} statement(s) on this account${statementsIncomplete ? " (history may be incomplete — see results)" : ""}.`, statementsIncomplete ? "err" : "ok");
     setProgress(20);
 
     // --- Step 3: date window, derived from real statement boundaries ---
@@ -1416,25 +1923,16 @@ async function runComparison() {
 
     // --- Step 4: consumption ---
     line = log("Fetching half-hourly consumption (this is the slow part)...", "active");
-    let readings = [];
-    let usedSerial = state.serial;
-    const serialsToTry = state.allSerials && state.allSerials.length > 0
-      ? state.allSerials
-      : [state.serial];
-    for (const trySerial of serialsToTry) {
-      readings = await fetchConsumption(state.mpan, trySerial, periodFrom, periodTo);
-      if (readings.length > 0) { usedSerial = trySerial; break; }
-    }
-    if (usedSerial !== state.serial) {
-      log(`Note: consumption data found under previous meter serial ${usedSerial}`, "ok");
-      state.serial = usedSerial;
-    }
+    // Fetch and MERGE consumption across every serial on the MPAN. After a
+    // meter exchange both the old and new meter can hold readings in different
+    // date ranges; merging captures them all (rc11's try-first-serial fallback
+    // would miss the older meter's readings).
+    const readings = await fetchConsumptionMerged(state.mpan, state.serials || [state.serial], periodFrom, periodTo);
     if (readings.length === 0) {
-      // No data in the comparison window — check if any data exists at all
-      // for this meter, to give a more specific error message.
-      // All serials tried, none had data in the window — check if any data
-      // exists at all to give a more specific error.
-      const testPath = `/electricity-meter-points/${state.mpan}/meters/${usedSerial}/consumption/`;
+      // None of the meter's serials had readings in the comparison window —
+      // probe once more (the most recent serial) to distinguish "no data at
+      // all" from "data exists but predates the window", for a clearer message.
+      const testPath = `/electricity-meter-points/${state.mpan}/meters/${state.serial}/consumption/`;
       const testData = await restGetAllPages(testPath, { page_size: 1 });
       if (testData.length === 0) {
         throw new Error(`No half-hourly consumption data found for MPAN ${state.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`);
@@ -1452,6 +1950,9 @@ async function runComparison() {
     const totalExpectedSlots = Math.round((gapInfo.latest - gapInfo.earliest) / (30 * 60 * 1000)) + 1;
     const missingSlots = gapInfo.gaps.reduce((sum, g) => sum + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0);
     setActiveLine(line, `${gapInfo.gaps.length} gap range(s), ${missingSlots} missing slots out of ${totalExpectedSlots} expected.`, gapInfo.gaps.length > 0 ? "err" : "ok");
+    // Median-profile sensitivity for the missing slots (shown separately,
+    // never folded into the base totals).
+    const missingEstimate = estimateMissingKwh(readings, gapInfo.gaps);
     setProgress(45);
 
     // --- Step 6: turn statements into billing periods for costing ---
@@ -1463,17 +1964,68 @@ async function runComparison() {
       .map(s => {
         const rawStart = new Date(s.startAt);
         const rawEnd = new Date(s.endAt);
+        const totalChargesPence = s.totalCharges && s.totalCharges.grossTotal != null ? s.totalCharges.grossTotal : null;
+        // Per-transaction detail: the ELECTRICITY bill-charge (its gross
+        // amount and the kWh Octopus actually invoiced) plus any credits.
+        // Using the electricity charge — not totalCharges.grossTotal —
+        // excludes gas on dual-fuel accounts and keeps referral/goodwill
+        // credits out of the comparison baseline. Falls back to the
+        // statement total when a node carries no transaction detail.
+        const txn = summariseStatementTransactions(s);
+        // Only trust transaction-derived figures when the transaction list
+        // was COMPLETE. A statement with >100 transactions returns only the
+        // first page, so its electricity charge / billed kWh / credits would
+        // be partial — presenting those as the statement's values would be
+        // wrong, so we drop them (no actual comparison for that period) and
+        // fall back to the statement total only when there is no transaction
+        // detail at all (older API responses / fixtures).
+        const txnUsable = txn.available && txn.complete;
+        const electricityChargePence = txnUsable && txn.electricityChargePence != null
+          ? txn.electricityChargePence
+          : (txn.available ? null : totalChargesPence);
         return {
           displayStart: rawStart,
           displayEnd: rawEnd,
           start: rawStart < periodFrom ? periodFrom : rawStart,
           end: rawEnd > periodTo ? periodTo : rawEnd,
-          actualChargePence: s.totalCharges && s.totalCharges.grossTotal != null ? s.totalCharges.grossTotal : null,
+          actualChargePence: electricityChargePence,
+          billedKwh: txnUsable ? txn.billedKwh : null,
+          creditsPence: txnUsable ? txn.creditsPence : 0,
+          credits: txnUsable ? txn.credits : [],
+          transactionsAvailable: txn.available,
+          transactionsComplete: txn.complete,
         };
       })
       .filter(p => p.end > periodFrom && p.start < periodTo && p.end > p.start)
       .sort((a, b) => a.start - b.start);
 
+    // Statement-level billed-vs-observed validation. Billed kWh is a
+    // whole-statement quantity, so this is computed BEFORE the month-split
+    // below. For each statement, compare the kWh Octopus billed with the
+    // half-hourly readings that actually fall inside its window; a material
+    // gap (or partly-missing readings) means the statement charge can't be
+    // lined up against the consumption-derived Flexible/Agile costs.
+    const statementValidation = rawBillingPeriods.map(p => {
+      const observedKwh = readings.reduce((sum, r) => (r.start >= p.start && r.start < p.end ? sum + r.kwh : sum), 0);
+      const wasClamped = p.start.getTime() !== p.displayStart.getTime() || p.end.getTime() !== p.displayEnd.getTime();
+      return {
+        displayStart: p.displayStart, displayEnd: p.displayEnd,
+        billedKwh: p.billedKwh, observedKwh,
+        electricityChargePence: p.actualChargePence,
+        creditsPence: p.creditsPence, credits: p.credits || [],
+        transactionsAvailable: p.transactionsAvailable, transactionsComplete: p.transactionsComplete,
+        wasClamped,
+        // Only flag a mismatch where readings fully cover the statement —
+        // a clamped (partial) statement is expected to under-count and is
+        // handled by its own "partial" flag, not the billing-mismatch one.
+        mismatch: !wasClamped && billedKwhMismatch(p.billedKwh, observedKwh),
+      };
+    });
+
+    // Split any period longer than 35 days into calendar months (shared with
+    // the diagnostic-replay path so a long single statement is broken up the
+    // same way live and on replay). Split rows carry a day-apportioned
+    // (estimated) actual charge and are flagged as estimates downstream.
     const billingPeriods = splitLongPeriods(rawBillingPeriods);
 
     if (billingPeriods.length === 0) {
@@ -1484,38 +2036,53 @@ async function runComparison() {
     setProgress(50);
 
     // --- Step 6: Flexible Octopus historical rates ---
-    line = log("Discovering current Flexible Octopus product...", "active");
-    const flexProductCode = await findLiveProductCodeByDisplayName("Flexible Octopus");
-    if (!flexProductCode) throw new Error("Could not find a live Flexible Octopus product via the API.");
-    setActiveLine(line, `Flexible Octopus product: ${flexProductCode}`, "ok");
-    const flexTariffCode = await fetchProductTariffCode(flexProductCode, regionLetter);
-    if (!flexTariffCode) throw new Error(`Could not find a Flexible Octopus tariff for region ${regionLetter}.`);
-    line = log("Fetching Flexible Octopus historical rates...", "active");
-    const flexUnitRates = await fetchRateWindows(flexProductCode, flexTariffCode, "standard-unit-rates", periodFrom, periodTo);
-    const flexStandingCharges = await fetchRateWindows(flexProductCode, flexTariffCode, "standing-charges", periodFrom, periodTo);
-    setActiveLine(line, `Flexible Octopus: ${flexUnitRates.length} rate window(s), ${flexStandingCharges.length} standing charge window(s).`, "ok");
+    line = log("Discovering Flexible Octopus product version(s) for this window...", "active");
+    const flexProducts = await findProductsByDisplayNameOverlapping("Flexible Octopus", periodFrom, periodTo);
+    if (flexProducts.length === 0) throw new Error("Could not find a Flexible Octopus product via the API.");
+    setActiveLine(line, `Flexible Octopus: ${flexProducts.length} product version(s) overlapping the window.`, "ok");
+    line = log("Fetching Flexible Octopus historical rates (merging product versions)...", "active");
+    const flexUnitMerged = await fetchMergedRateWindows(flexProducts, regionLetter, "standard-unit-rates", periodFrom, periodTo);
+    const flexStandingMerged = await fetchMergedRateWindows(flexProducts, regionLetter, "standing-charges", periodFrom, periodTo);
+    const flexUnitRates = flexUnitMerged.windows;
+    const flexStandingCharges = flexStandingMerged.windows;
+    // Diagnostics labels: the product/tariff codes that actually contributed.
+    const flexProductCode = flexUnitMerged.used.join(", ") || (flexProducts[0] && flexProducts[0].code) || "not found";
+    const flexTariffCode = flexProductCode;
+    // Only a hard error when NO Flexible rates were returned at all (a genuine
+    // lookup failure). If rows came back but clip away to nothing — they exist
+    // yet don't overlap this window — proceed: the readings fall out as
+    // unmatched and the period is flagged not-confident, rather than aborting.
+    if (flexUnitRates.length === 0 && flexUnitMerged.rawCount === 0) throw new Error(`Could not find Flexible Octopus rates for region ${regionLetter}.`);
+    setActiveLine(line, flexUnitRates.length === 0
+      ? `Flexible Octopus: rates returned but none cover this window — readings will be flagged unmatched (see warnings).`
+      : `Flexible Octopus: ${flexUnitRates.length} unit rate window(s) merged across ${flexUnitMerged.used.length} version(s).`, "ok");
     setProgress(60);
 
     // --- Step 7: Agile Octopus historical rates ---
-    line = log("Discovering current Agile Octopus product...", "active");
-    const agileProductCode = await findLiveProductCodeByDisplayName("Agile Octopus");
-    let agileTariffCode = agileProductCode ? await fetchProductTariffCode(agileProductCode, regionLetter) : null;
+    line = log("Discovering Agile Octopus product version(s) for this window...", "active");
+    const agileProducts = await findProductsByDisplayNameOverlapping("Agile Octopus", periodFrom, periodTo);
     let agileUnitRates = [];
     let agileStandingCharges = [];
     let agileAvailable = true;
-    if (!agileTariffCode) {
+    let agileProductCode = agileProducts.map(p => p.code).join(", ");
+    let agileTariffCode = agileProductCode;
+    if (agileProducts.length === 0) {
       agileAvailable = false;
-      setActiveLine(line, "Could not resolve a live Agile Octopus tariff for this region — Agile comparison will be skipped.", "err");
+      setActiveLine(line, "Could not resolve an Agile Octopus product for this region — Agile comparison will be skipped.", "err");
     } else {
-      setActiveLine(line, `Agile Octopus product: ${agileProductCode}`, "ok");
-      line = log("Fetching Agile Octopus historical half-hourly rates (many calls, may take a moment)...", "active");
+      setActiveLine(line, `Agile Octopus: ${agileProducts.length} product version(s) overlapping the window.`, "ok");
+      line = log("Fetching Agile Octopus historical half-hourly rates (merging versions, many calls)...", "active");
       try {
-        agileUnitRates = await fetchRateWindows(agileProductCode, agileTariffCode, "standard-unit-rates", periodFrom, periodTo);
-        agileStandingCharges = await fetchRateWindows(agileProductCode, agileTariffCode, "standing-charges", periodFrom, periodTo);
-        setActiveLine(line, `Agile Octopus: ${agileUnitRates.length} rate window(s) fetched.`, "ok");
+        const agileUnitMerged = await fetchMergedRateWindows(agileProducts, regionLetter, "standard-unit-rates", periodFrom, periodTo);
+        const agileStandingMerged = await fetchMergedRateWindows(agileProducts, regionLetter, "standing-charges", periodFrom, periodTo);
+        agileUnitRates = agileUnitMerged.windows;
+        agileStandingCharges = agileStandingMerged.windows;
+        agileProductCode = agileUnitMerged.used.join(", ") || agileProductCode;
+        agileTariffCode = agileProductCode;
+        setActiveLine(line, `Agile Octopus: ${agileUnitRates.length} rate window(s) merged across ${agileUnitMerged.used.length} version(s).`, "ok");
         if (agileUnitRates.length === 0) {
           agileAvailable = false;
-          log("No Agile rate history returned for this window — this product may not have existed for the full comparison period. Agile comparison will be skipped.", "err");
+          log("No Agile rate history returned for this window — Agile comparison will be skipped.", "err");
         }
       } catch (e) {
         agileAvailable = false;
@@ -1526,10 +2093,15 @@ async function runComparison() {
 
     // --- Step 8: calculate per period ---
     line = log("Calculating costs per billing period...", "active");
+    // Pre-sort unit-rate windows ONCE (they already come sorted from the
+    // merge; this makes it explicit) so the per-period calculateCost calls
+    // don't re-sort the same large Agile window array for every split month.
+    const flexUnitSorted = [...flexUnitRates].sort((a, b) => a.validFrom - b.validFrom);
+    const agileUnitSorted = agileAvailable ? [...agileUnitRates].sort((a, b) => a.validFrom - b.validFrom) : [];
     const results = billingPeriods.map(period => {
-      const flex = calculateCost(readings, period.start, period.end, flexUnitRates, flexStandingCharges);
+      const flex = calculateCost(readings, period.start, period.end, flexUnitSorted, flexStandingCharges, true);
       const agile = agileAvailable
-        ? calculateCost(readings, period.start, period.end, agileUnitRates, agileStandingCharges)
+        ? calculateCost(readings, period.start, period.end, agileUnitSorted, agileStandingCharges, true)
         : null;
       const wasClamped = period.start.getTime() !== period.displayStart.getTime() || period.end.getTime() !== period.displayEnd.getTime();
 
@@ -1544,7 +2116,9 @@ async function runComparison() {
 
       return { period, flex, agile, wasClamped, suspectActual,
         // confident = data is complete enough to include in the summary totals
-        confident: !wasClamped && !suspectActual && flex.unmatchedReadings === 0 && (!agile || agile.unmatchedReadings === 0),
+        confident: !wasClamped && !suspectActual
+          && flex.unmatchedReadings === 0 && flex.unmatchedStandingDays === 0
+          && (!agile || (agile.unmatchedReadings === 0 && agile.unmatchedStandingDays === 0)),
       };
     });
     setActiveLine(line, "Done.", "ok");
@@ -1573,6 +2147,8 @@ async function runComparison() {
 
     const totalFlexUnmatched = results.reduce((s, r) => s + r.flex.unmatchedReadings, 0);
     const totalAgileUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.unmatchedReadings : 0), 0) : 0;
+    const totalFlexStandingUnmatched = results.reduce((s, r) => s + (r.flex.unmatchedStandingDays || 0), 0);
+    const totalAgileStandingUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? (r.agile.unmatchedStandingDays || 0) : 0), 0) : 0;
     const totalKwhDiag = results.reduce((s, r) => s + r.flex.kwh, 0);
     const clampedPeriods = results.filter(r => r.wasClamped).length;
 
@@ -1584,6 +2160,10 @@ async function runComparison() {
       const mid = new Date((r.period.start.getTime() + r.period.end.getTime()) / 2);
       const actualTariffCode = diagTariffAtDate(mid);
       const preSwitch = !!(actualTariffCode && actualTariffCode !== currentTariffCode);
+      // A period that straddles an agreement change can't be attributed to one
+      // tariff; flag it so the consistent-tariff subtotal below excludes it,
+      // matching renderResults (which keeps mixed periods out of the headline).
+      const mixedTariff = tariffCodesInRange(agreements, r.period.start, r.period.end).size > 1;
       // "preSwitch" here means "on a different tariff than the current one" —
       // e.g. on Fixed when you're now on Agile, or on Agile when you've
       // switched back to Flexible. The label in the UI uses the actual
@@ -1593,7 +2173,9 @@ async function runComparison() {
         calculationPeriod: `${fmtDate(r.period.start)} to ${fmtDate(r.period.end)}`,
         actualTariffCode: actualTariffCode || "unknown",
         preSwitch,
+        mixedTariff,
         clamped: r.wasClamped,
+        confident: !!r.confident,
         kwh: r.flex.kwh.toFixed(2),
         actualPence: r.period.actualChargePence != null ? r.period.actualChargePence.toFixed(0) : "n/a",
         suspectActual: r.suspectActual || false,
@@ -1601,15 +2183,17 @@ async function runComparison() {
         flexStandingPence: r.flex.standingChargePence.toFixed(0),
         flexTotalPence: r.flex.totalPence.toFixed(0),
         flexUnmatched: r.flex.unmatchedReadings,
+        flexUnmatchedStanding: r.flex.unmatchedStandingDays || 0,
         agileEnergyPence: r.agile ? r.agile.energyCostPence.toFixed(0) : "n/a",
         agileStandingPence: r.agile ? r.agile.standingChargePence.toFixed(0) : "n/a",
         agileTotalPence: r.agile ? r.agile.totalPence.toFixed(0) : "n/a",
         agileUnmatched: r.agile ? r.agile.unmatchedReadings : "n/a",
+        agileUnmatchedStanding: r.agile ? (r.agile.unmatchedStandingDays || 0) : "n/a",
       };
     });
 
     // Agile-only subtotals (periods where actual bill was on Agile)
-    const consistentOnlyDiag = diagBillingPeriods.filter(p => !p.preSwitch && p.actualPence !== "n/a");
+    const consistentOnlyDiag = diagBillingPeriods.filter(p => !p.preSwitch && !p.mixedTariff && p.confident && p.actualPence !== "n/a");
     const agileOnlyTotals = {
       periodCount: consistentOnlyDiag.length,
       actualPence: consistentOnlyDiag.reduce((s, p) => s + parseInt(p.actualPence), 0),
@@ -1619,7 +2203,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc11 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc12 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1641,6 +2225,11 @@ async function runComparison() {
         duplicateCount: gapInfo.duplicates.length,
         missingSlots: gapInfo.gaps.reduce((s, g) => s + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0),
         ranges: gapInfo.gaps.map(g => `${g.start.toISOString().slice(0,16)} to ${g.end.toISOString().slice(0,16)}`),
+        // Persist the missing-kwh sensitivity estimate so a diagnostics replay
+        // reproduces the figure the live run showed (only totalKwh is displayed,
+        // but the per-gap breakdown round-trips too for a faithful replay).
+        medianProfileKwhEstimate: missingEstimate.totalKwh.toFixed(2),
+        medianProfilePerGap: missingEstimate.perGap.map(g => ({ from: g.from.toISOString(), to: g.to.toISOString(), slots: g.slots, kwh: g.kwh })),
       },
       products: {
         flexProductCode: flexProductCode || "not found",
@@ -1659,56 +2248,195 @@ async function runComparison() {
         rawAgileStandingCharges: agileAvailable ? agileStandingCharges.map(w => ({ from: w.validFrom.toISOString(), to: w.validTo ? w.validTo.toISOString() : null, p: w.value })) : [],
       },
       billingPeriods: diagBillingPeriods,
+      // Whole-statement billed-vs-observed context (the class of issue this
+      // build validates). PII-light: dates, kWh, pence and flags only.
+      statementsIncomplete: !!statementsIncomplete,
+      statementValidation: statementValidation.map(v => ({
+        period: `${fmtDate(v.displayStart)} to ${fmtDate(v.displayEnd)}`,
+        billedKwh: v.billedKwh != null ? v.billedKwh.toFixed(2) : "n/a",
+        observedKwh: v.observedKwh.toFixed(2),
+        mismatch: !!v.mismatch,
+        transactionsAvailable: v.transactionsAvailable,
+        transactionsComplete: v.transactionsComplete,
+        electricityChargePence: v.electricityChargePence != null ? v.electricityChargePence.toFixed(0) : "n/a",
+        creditsPence: (v.creditsPence || 0).toFixed(0),
+        clamped: v.wasClamped,
+      })),
       totals: {
         allPeriods: {
           flexUnmatchedReadings: totalFlexUnmatched,
           agileUnmatchedReadings: totalAgileUnmatched,
+          flexUnmatchedStandingDays: totalFlexStandingUnmatched,
+          agileUnmatchedStandingDays: totalAgileStandingUnmatched,
           clampedPeriods,
         },
-        consistentOnly: agileOnlyTotals,
+        // Key must match what downloadDiagnostics() reads (consistentOnlyDiag);
+        // a prior mismatch (stored "consistentOnly") crashed the download.
+        consistentOnlyDiag: agileOnlyTotals,
       },
     };
 
-    renderResults({ results, gapInfo, regionLetter, currentAgreement, agreements, periodFrom, periodTo, agileAvailable, postcodeArea });
+    renderResults({ results, gapInfo, regionLetter, currentAgreement, agreements, periodFrom, periodTo, agileAvailable, postcodeArea, statementValidation, missingEstimate, statementsIncomplete });
     showScreen("screen-results");
 
   } catch (err) {
-    // Build a failure diagnostic — captures everything known at point of failure
-    // without any API key, for sharing with support to diagnose issues.
-    state.failureDiag = {
-      generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc11 / github.com/AuthEnergy/agile-compare`,
-      error: {
-        message: err.message,
-        type: err instanceof OctopusApiError ? "OctopusApiError" : err.constructor.name,
-        status: err.status || null,
-        corsLikely: err.corsLikely || false,
-      },
-      account: {
-        number: state.accountNumber || null,
-        mpan: state.mpan || null,
-        serialUsed: state.serial || null,
-        allSerials: state.allSerials || [],
-        postcodeArea: state.accountData ? getPostcodeAreaForMpan(state.accountData, state.mpan) : null,
-        agreements: state.accountData ? (getAgreementsForMpan(state.accountData, state.mpan) || []).map(a => ({
-          tariffCode: a.tariff_code,
-          validFrom: a.valid_from,
-          validTo: a.valid_to || null,
-        })) : [],
-        metersOnAccount: state.accountData ? (state.accountData.properties || []).flatMap(p =>
-          (p.electricity_meter_points || []).map(em => ({
-            mpan: em.mpan,
-            serials: (em.meters || []).map(m => m.serial_number),
-            isExport: em.is_export,
-            currentTariff: (em.agreements || []).find(a => !a.valid_to)?.tariff_code || null,
-          }))
-        ) : [],
-      },
-      progressLog: Array.from(document.querySelectorAll("#progress-log .line")).map(el => el.textContent),
-    };
+    captureFailureDiag(err);
     renderError(err);
     showScreen("screen-results");
   }
+}
+
+/* ============================================================
+   EXPORT METER PATH — value exported energy under export tariffs
+   ============================================================ */
+
+async function runExportComparison() {
+  showScreen("screen-progress");
+  document.getElementById("progress-log").innerHTML = "";
+  setProgress(2);
+
+  try {
+    let line = log("Verifying export meter...", "active");
+    const accountData = state.accountData;
+    const regionLetter = getRegionLetterFromAccount(accountData, state.mpan);
+    if (regionLetter === null || regionLetter === "MPAN_FOUND_NO_REGION") {
+      throw new Error(`Could not determine the region for export MPAN ${state.mpan}.`);
+    }
+    setActiveLine(line, `Export meter verified. Region ${regionLetter}.`, "ok");
+    setProgress(10);
+
+    // Window: up to 7 days ago (data settling), reaching back ~13 months.
+    const periodTo = new Date();
+    periodTo.setUTCDate(periodTo.getUTCDate() - 7);
+    periodTo.setUTCHours(0, 0, 0, 0);
+    const periodFrom = new Date(periodTo);
+    periodFrom.setUTCFullYear(periodFrom.getUTCFullYear() - 1);
+    periodFrom.setUTCMonth(periodFrom.getUTCMonth() - 1);
+
+    line = log("Fetching half-hourly export readings (energy you sent to the grid)...", "active");
+    const readings = await fetchConsumptionMerged(state.mpan, state.serials || [state.serial], periodFrom, periodTo);
+    if (readings.length === 0) {
+      throw new Error("No export readings were returned for this meter in the last year. Either the export meter has no smart data yet, or it has not exported any energy in this window.");
+    }
+    const gapInfo = detectGaps(readings);
+    // Clamp the display/calculation window to where readings actually exist.
+    const dataFrom = gapInfo.earliest || periodFrom;
+    const dataTo = gapInfo.latest ? new Date(gapInfo.latest.getTime() + 30 * 60 * 1000) : periodTo;
+    const exportKwh = readings.reduce((s, r) => s + r.kwh, 0);
+    setActiveLine(line, `Fetched ${readings.length} half-hourly reading(s); ${exportKwh.toFixed(1)} kWh exported.`, "ok");
+    setProgress(40);
+
+    // Discover and merge the two main export tariffs for this region.
+    line = log("Fetching Outgoing Octopus (flat export) rates...", "active");
+    const flatProducts = await findProductsByDisplayNameOverlapping("Outgoing Octopus", dataFrom, dataTo);
+    const flatMerged = await fetchMergedRateWindows(flatProducts, regionLetter, "standard-unit-rates", dataFrom, dataTo);
+    setActiveLine(line, `Outgoing Octopus: ${flatMerged.windows.length} rate window(s).`, flatMerged.windows.length ? "ok" : "err");
+    setProgress(65);
+
+    line = log("Fetching Agile Outgoing (half-hourly export) rates...", "active");
+    const agileProducts = await findProductsByDisplayNameOverlapping("Agile Outgoing Octopus", dataFrom, dataTo);
+    const agileMerged = await fetchMergedRateWindows(agileProducts, regionLetter, "standard-unit-rates", dataFrom, dataTo);
+    setActiveLine(line, `Agile Outgoing: ${agileMerged.windows.length} rate window(s).`, agileMerged.windows.length ? "ok" : "err");
+    setProgress(85);
+
+    const flat = flatMerged.windows.length ? calculateExportValue(readings, dataFrom, dataTo, flatMerged.windows) : null;
+    const agile = agileMerged.windows.length ? calculateExportValue(readings, dataFrom, dataTo, agileMerged.windows) : null;
+    if (!flat && !agile) {
+      throw new Error("Could not fetch any export tariff rates for this region, so no export comparison is possible.");
+    }
+    setProgress(100);
+
+    state.diagnostics = {
+      generatedAt: new Date().toISOString(),
+      mode: "export",
+      region: regionLetter,
+      comparisonWindow: { from: dataFrom.toISOString(), to: dataTo.toISOString() },
+      exportKwh: exportKwh.toFixed(2),
+      outgoingFlat: flat ? { products: flatMerged.used, valuePence: flat.valuePence.toFixed(0), unmatchedReadings: flat.unmatchedReadings } : "unavailable",
+      agileOutgoing: agile ? { products: agileMerged.used, valuePence: agile.valuePence.toFixed(0), unmatchedReadings: agile.unmatchedReadings } : "unavailable",
+      // Export timestamps would reveal a solar generation pattern, so the
+      // export diagnostic keeps only aggregate figures — no raw per-slot times.
+      readings: { count: readings.length, totalKwh: exportKwh.toFixed(2) },
+    };
+
+    renderExportResults({ regionLetter, periodFrom: dataFrom, periodTo: dataTo, exportKwh, flat, agile, gapInfo });
+    showScreen("screen-results");
+
+  } catch (err) {
+    captureFailureDiag(err);
+    renderError(err);
+    showScreen("screen-results");
+  }
+}
+
+function renderExportResults({ regionLetter, periodFrom, periodTo, exportKwh, flat, agile, gapInfo }) {
+  const container = document.getElementById("results-content");
+  const flatVal = flat ? flat.valuePence : null;
+  const agileVal = agile ? agile.valuePence : null;
+
+  // Unmatched export rates or export-data gaps make the "X pays more" headline
+  // unreliable, so it's only stated firmly when both are clean.
+  const unmatched = (flat ? flat.unmatchedReadings : 0) + (agile ? agile.unmatchedReadings : 0);
+  const exportReliable = unmatched === 0 && gapInfo.gaps.length === 0;
+
+  let verdictHtml = "";
+  if (flatVal !== null && agileVal !== null) {
+    const better = agileVal > flatVal ? "Agile Outgoing" : "Outgoing Octopus";
+    const diff = Math.abs(agileVal - flatVal);
+    verdictHtml = exportReliable
+      ? `<div class="verdict">Over this period you exported <strong>${exportKwh.toFixed(0)} kWh</strong>. Priced on your real half-hourly export, <strong>${escapeHtml(better)}</strong> would have paid you ${fmtMoney(diff)} more than the other. Export is paid to you per kWh, with no standing charge.</div>`
+      : `<div class="verdict">Over this period you exported <strong>${exportKwh.toFixed(0)} kWh</strong>. On the data available, <strong>${escapeHtml(better)}</strong> looks higher &mdash; but some export readings had no matching rate or are missing (see the warnings above), so treat this as approximate rather than a firm result.</div>`;
+  } else {
+    verdictHtml = `<div class="verdict">Over this period you exported <strong>${exportKwh.toFixed(0)} kWh</strong>. Only one export tariff's rates were available, so a side-by-side comparison isn't possible for this region/window.</div>`;
+  }
+  const coverageHtml = unmatched > 0
+    ? `<div class="gap-warning"><div class="title">Export rate history didn't fully cover the window</div><div>${unmatched} half-hour reading(s) had no matching export rate, so the figures below understate the true payment for the affected period(s).</div></div>`
+    : "";
+  let gapHtml = "";
+  if (gapInfo.gaps.length > 0) {
+    gapHtml = `<div class="gap-warning"><div class="title">${gapInfo.gaps.length} gap(s) in your export data</div><div>Payments below treat missing slots as zero export.</div></div>`;
+  }
+
+  const summaryHtml = `
+    <div class="summary-row">
+      <div class="summary-card actual">
+        <div class="label">Exported</div>
+        <div class="value">${exportKwh.toFixed(0)} kWh</div>
+        <div class="delta">${fmtDate(periodFrom)} to ${fmtDate(periodTo)}</div>
+      </div>
+      <div class="summary-card flexible">
+        <div class="label">Outgoing Octopus (flat)</div>
+        <div class="value">${flatVal !== null ? fmtMoney(flatVal) : "n/a"}</div>
+        <div class="delta">paid to you</div>
+      </div>
+      <div class="summary-card agile">
+        <div class="label">Agile Outgoing</div>
+        <div class="value">${agileVal !== null ? fmtMoney(agileVal) : "n/a"}</div>
+        <div class="delta">paid to you</div>
+      </div>
+    </div>`;
+
+  container.innerHTML = `
+    ${coverageHtml}
+    ${gapHtml}
+    ${summaryHtml}
+    ${verdictHtml}
+    <p class="footnote">Region ${escapeHtml(regionLetter)}. Export window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Both figures are what each export tariff would have paid you for your real half-hourly export over this period, using each tariff's real historical rates. Export tariffs pay per kWh exported and carry no standing charge. Past export performance does not indicate future performance.</p>
+    <div class="actions-block">
+      <div class="action-row">
+        <button class="secondary" id="btn-export-diagnostics">Download diagnostics</button>
+        <span class="action-desc">Saves a JSON file with the export tariff figures and aggregate totals. No address, MPAN, API key, or per-slot generation timestamps included.</span>
+      </div>
+      <div class="action-row">
+        <button class="secondary" id="btn-restart">Run again</button>
+        <span class="action-desc">Return to the input screen.</span>
+      </div>
+    </div>
+  `;
+
+  const diagBtn = document.getElementById("btn-export-diagnostics");
+  if (diagBtn) diagBtn.addEventListener("click", downloadDiagnostics);
+  document.getElementById("btn-restart").addEventListener("click", () => showScreen("screen-input"));
 }
 
 function renderError(err) {
@@ -1717,18 +2445,18 @@ function renderError(err) {
   if (err instanceof OctopusApiError && err.corsLikely) {
     extra = `<p>This specific failure pattern (no HTTP status, request just fails) is the signature of a CORS block: the browser is refusing to let this page read the response from api.octopus.energy. Open the browser console (F12 or Cmd+Option+J) for the exact reason &mdash; it will say something like "blocked by CORS policy" if that's what happened. If so, this tool cannot work as a pure browser page against this API unless Octopus's API sends the right CORS headers for direct browser access.</p>`;
   } else if (err instanceof OctopusApiError && err.status) {
-    extra = `<p>HTTP status: ${err.status}</p><p style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);">${(err.body || "").slice(0, 400)}</p>`;
+    extra = `<p>HTTP status: ${escapeHtml(err.status)}</p><p style="font-family:var(--mono);font-size:12px;color:var(--ink-dim);">${escapeHtml((err.body || "").slice(0, 400))}</p>`;
   }
   container.innerHTML = `
     <div class="error-banner">
       <div class="title">Something went wrong</div>
-      <p>${err.message}</p>
+      <p>${escapeHtml(err.message)}</p>
       ${extra}
     </div>
     <div class="actions-block" style="margin-top:16px;">
       <div class="action-row">
         <button class="secondary" id="btn-failure-diag">Download failure diagnostic</button>
-        <span class="action-desc">Saves a JSON file with account structure, meter details, and the error — no API key included. Send to hello@auth.energy to help diagnose the problem.</span>
+        <span class="action-desc">Saves a JSON file with your account number, meter/tariff structure, and the error, so support can locate your account &mdash; but no MPAN, meter serial, address, or API key. Send to hello@auth.energy to help diagnose the problem.</span>
       </div>
       <div class="action-row">
         <button class="secondary" id="btn-restart-from-error">Try again</button>
@@ -1739,39 +2467,6 @@ function renderError(err) {
 
   document.getElementById("btn-failure-diag").addEventListener("click", downloadFailureDiag);
   document.getElementById("btn-restart-from-error").addEventListener("click", () => showScreen("screen-input"));
-}
-
-function splitLongPeriods(rawPeriods) {
-  const result = [];
-  for (const p of rawPeriods) {
-    const spanDays = (p.end - p.start) / (24 * 60 * 60 * 1000);
-    if (spanDays <= 35) {
-      result.push({ ...p, isSplit: false });
-      continue;
-    }
-    const totalDays = spanDays;
-    let cursor = new Date(p.start);
-    while (cursor < p.end) {
-      const subStart = new Date(cursor);
-      const nextMonth = new Date(cursor);
-      nextMonth.setUTCDate(1);
-      nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-      nextMonth.setUTCHours(0, 0, 0, 0);
-      const subEnd = nextMonth < p.end ? nextMonth : new Date(p.end);
-      const subDays = (subEnd - subStart) / (24 * 60 * 60 * 1000);
-      const proportion = subDays / totalDays;
-      result.push({
-        displayStart: subStart,
-        displayEnd: subEnd,
-        start: subStart,
-        end: subEnd,
-        actualChargePence: p.actualChargePence != null ? Math.round(p.actualChargePence * proportion) : null,
-        isSplit: true,
-      });
-      cursor = subEnd;
-    }
-  }
-  return result;
 }
 
 function makeTariffAtDateFn(agreements) {
@@ -1786,7 +2481,27 @@ function makeTariffAtDateFn(agreements) {
   };
 }
 
-function renderResults({ results, gapInfo, regionLetter, currentAgreement, agreements, periodFrom, periodTo, agileAvailable, postcodeArea }) {
+// Distinct tariff codes in force at any instant during [start, end). A single
+// statement can straddle an agreement change (e.g. a tariff switch mid-month);
+// classifying it by its midpoint alone would attribute the whole period to one
+// tariff and silently fold a pre-switch span into a "current tariff" total.
+// Callers use this to detect such mixed-tariff periods and keep them out of the
+// current-tariff headline/share comparison instead of mis-attributing them.
+function tariffCodesInRange(agreements, start, end) {
+  const sorted = [...(agreements || [])].sort((a, b) => new Date(a.valid_from) - new Date(b.valid_from));
+  const codes = new Set();
+  for (const a of sorted) {
+    const from = new Date(a.valid_from);
+    const to = a.valid_to ? new Date(a.valid_to) : null;
+    // Agreement [from, to) overlaps the period [start, end)?
+    if (from < end && (!to || to > start)) codes.add(a.tariff_code);
+  }
+  return codes;
+}
+
+function renderResults({ results, gapInfo, regionLetter, currentAgreement, agreements, periodFrom, periodTo, agileAvailable, postcodeArea, statementValidation, missingEstimate, statementsIncomplete }) {
+  statementValidation = statementValidation || [];
+  missingEstimate = missingEstimate || { totalKwh: 0, slots: 0, perGap: [] };
   const container = document.getElementById("results-content");
 
   // Determine which tariff was active at the midpoint of each billing
@@ -1805,8 +2520,13 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const currentTariff = currentAgreement ? currentAgreement.tariff_code : null;
   const consistentResults = currentTariff
     ? results.filter(r => {
-        const mid = new Date((r.period.start.getTime() + r.period.end.getTime()) / 2);
-        return tariffAtDate(mid) === currentTariff && r.confident;
+        // A period counts towards the current-tariff comparison only if the
+        // current tariff was in force across the WHOLE period — a single code
+        // throughout, equal to today's. A period straddling an agreement change
+        // is mixed and excluded here (rather than mis-attributed by midpoint),
+        // so a pre-switch span can't be folded into the current-tariff total.
+        const codes = tariffCodesInRange(agreements, r.period.start, r.period.end);
+        return codes.size === 1 && codes.has(currentTariff) && r.confident;
       })
     : results.filter(r => r.confident);
   const hasConsistentResults = consistentResults.length > 0 && consistentResults.length < results.length;
@@ -1817,25 +2537,118 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
 
   const hasActual = results.some(r => r.period.actualChargePence != null && !r.suspectActual);
 
+  // --- Billed-vs-observed kWh validation (statement level) ---------------
+  // Octopus bills the electricity charge against a metered quantity that can
+  // differ materially from the half-hourly readings the API returns (a
+  // genuine billing difference, or simply incomplete half-hourly history).
+  // When it does, comparing the statement charge with consumption-derived
+  // tariff costs is apples-to-oranges, so we flag it and stop presenting the
+  // "vs statement" deltas as if they were directly comparable.
+  const billedStatements = statementValidation.filter(v => v.billedKwh != null && !v.wasClamped);
+  const billedKwhTotal = billedStatements.reduce((s, v) => s + v.billedKwh, 0);
+  // Scope the mismatch / truncated-transaction signals (and the banner's billed
+  // -vs-observed figures) to the statements that overlap the SUMMARY scope — the
+  // periods actually headlined, which narrow to current-tariff-only when the
+  // account switched tariff. A pre-switch statement's billed-vs-observed
+  // mismatch or truncated transactions must not caveat, warn about, or flag
+  // "not directly comparable" on a clean current-tariff summary. When the
+  // summary isn't narrowed the scope is every period, so this is a no-op for the
+  // common single-tariff case. (hasConsistentResults mirrors useConsistentOnly,
+  // defined below; both are just consistentResults.length>0 && <results.length.)
+  const flagScope = hasConsistentResults ? consistentResults : results;
+  const validationInScope = v => flagScope.some(r => v.displayStart < r.period.end && v.displayEnd > r.period.start);
+  const scopedBilled = billedStatements.filter(validationInScope);
+  const scopedBilledKwh = scopedBilled.reduce((s, v) => s + v.billedKwh, 0);
+  const scopedObservedKwh = scopedBilled.reduce((s, v) => s + v.observedKwh, 0);
+  const anyMismatch = statementValidation.some(v => v.mismatch && validationInScope(v));
+  const anyTxnIncomplete = statementValidation.some(v => v.transactionsAvailable && !v.transactionsComplete && validationInScope(v));
+
+  let mismatchHtml = "";
+  if (anyMismatch) {
+    const diff = scopedBilledKwh - scopedObservedKwh;
+    const plural = scopedBilled.length > 1 ? "these statement periods" : "this statement";
+    mismatchHtml = `
+      <div class="mismatch-warning">
+        <div class="title">Statement and smart-meter usage don't match — the &ldquo;vs statement&rdquo; figures aren't directly comparable</div>
+        <div>Octopus billed ${plural} for <strong>${scopedBilledKwh.toFixed(1)} kWh</strong>, but the half-hourly readings the API returned total <strong>${scopedObservedKwh.toFixed(1)} kWh</strong> &mdash; a difference of <strong>${Math.abs(diff).toFixed(1)} kWh</strong>. This can happen when Octopus billed on a different metered quantity, or when half-hourly data isn't available for the whole period. Either way, the Flexible and Agile figures below are priced on the half-hourly readings, so they can't be lined up against the statement charge. The Agile-vs-Flexible comparison is unaffected, because both use the same readings.</div>
+        <div class="figures">billed ${scopedBilledKwh.toFixed(2)} kWh &nbsp;·&nbsp; returned ${scopedObservedKwh.toFixed(2)} kWh &nbsp;·&nbsp; gap ${diff >= 0 ? "+" : ""}${diff.toFixed(2)} kWh</div>
+      </div>`;
+  }
+
+  // --- Statement reconciliation (electricity charge / credits / net) -----
+  // Credits are shown as reconciliation only, never folded into a delta.
+  const reconCharge = statementValidation.reduce((s, v) => s + (v.electricityChargePence != null ? v.electricityChargePence : 0), 0);
+  const reconCredits = statementValidation.reduce((s, v) => s + (v.creditsPence || 0), 0);
+  const allCredits = statementValidation.flatMap(v => v.credits || []);
+  let reconHtml = "";
+  if (hasActual && (reconCredits > 0 || allCredits.length > 0)) {
+    const creditRows = (allCredits.length > 0
+      ? allCredits.map(c => `<div class="recon-row"><span>${escapeHtml(c.title)}${c.reasonCode ? ` (${escapeHtml(c.reasonCode)})` : ""}</span><span class="amt">&minus;${fmtMoney(c.grossPence)}</span></div>`)
+      : [`<div class="recon-row"><span>Statement credits</span><span class="amt">&minus;${fmtMoney(reconCredits)}</span></div>`]).join("");
+    reconHtml = `
+      <div class="recon">
+        <div class="recon-row"><span>Statement electricity charge</span><span class="amt">${fmtMoney(reconCharge)}</span></div>
+        ${creditRows}
+        <div class="recon-row net"><span>Net statement charge</span><span class="amt">${fmtMoney(reconCharge - reconCredits)}</span></div>
+      </div>`;
+  }
+
+  // --- Period tariff(s) vs current tariff (kept clearly separate) --------
+  // List every tariff any period actually touched (not just the midpoint code),
+  // so a statement straddling a switch contributes both its tariffs here.
+  const periodTariffLabels = [...new Set(
+    results.flatMap(r => [...tariffCodesInRange(agreements, r.period.start, r.period.end)])
+      .map(c => classifyTariffCode(c).label)
+  )];
+  const currentClass = currentAgreement ? classifyTariffCode(currentAgreement.tariff_code) : null;
+  let tariffContextHtml = "";
+  if (periodTariffLabels.length > 0 || currentClass) {
+    const lines = [];
+    if (periodTariffLabels.length > 0) {
+      const verb = results.length > 1 ? "These billing periods were on" : "This billing period was on";
+      lines.push(`${verb} ${periodTariffLabels.map(l => `<strong>${escapeHtml(l)}</strong>`).join(", ")}.`);
+    }
+    if (currentClass) {
+      lines.push(`Your current tariff is <strong>${escapeHtml(currentClass.label)}</strong> (<code>${escapeHtml(currentAgreement.tariff_code)}</code>).`);
+    }
+    tariffContextHtml = `<div class="tariff-context">${lines.join(" ")}</div>`;
+  }
+
+  const incompleteTxnHtml = anyTxnIncomplete
+    ? `<div class="gap-warning"><div class="title">Statement transactions were truncated</div><div>A statement has more transactions than were fetched in one page, so the billed-usage and credit figures may be incomplete. Treat the reconciliation as indicative.</div></div>`
+    : "";
+
   let gapHtml = "";
 
   const totalFlexUnmatched = results.reduce((s, r) => s + r.flex.unmatchedReadings, 0);
   const totalAgileUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.unmatchedReadings : 0), 0) : 0;
+  const totalFlexStandingUnmatched = results.reduce((s, r) => s + (r.flex.unmatchedStandingDays || 0), 0);
+  const totalAgileStandingUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? (r.agile.unmatchedStandingDays || 0) : 0), 0) : 0;
   let rateCoverageHtml = "";
-  if (totalFlexUnmatched > 0 || totalAgileUnmatched > 0) {
+  if (totalFlexUnmatched > 0 || totalAgileUnmatched > 0 || totalFlexStandingUnmatched > 0 || totalAgileStandingUnmatched > 0) {
+    const standingNote = (totalFlexStandingUnmatched > 0 || totalAgileStandingUnmatched > 0)
+      ? `${totalFlexStandingUnmatched > 0 ? `${totalFlexStandingUnmatched} day(s) had no matching Flexible standing charge. ` : ""}${totalAgileStandingUnmatched > 0 ? `${totalAgileStandingUnmatched} day(s) had no matching Agile standing charge. ` : ""}`
+      : "";
     rateCoverageHtml = `
       <div class="gap-warning">
         <div class="title">Rate history didn't fully cover the comparison window</div>
-        <div>${totalFlexUnmatched > 0 ? `${totalFlexUnmatched} half-hour reading(s) had no matching Flexible rate window. ` : ""}${totalAgileUnmatched > 0 ? `${totalAgileUnmatched} half-hour reading(s) had no matching Agile rate window. ` : ""}This usually means the product changed code at some point in the window and an older version's history wasn't picked up &mdash; the totals below will understate the true cost for the affected period(s).</div>
+        <div>${totalFlexUnmatched > 0 ? `${totalFlexUnmatched} half-hour reading(s) had no matching Flexible unit rate. ` : ""}${totalAgileUnmatched > 0 ? `${totalAgileUnmatched} half-hour reading(s) had no matching Agile unit rate. ` : ""}${standingNote}This usually means the product changed code at some point in the window and an older version's history wasn't picked up &mdash; the totals below will understate the true cost for the affected period(s).</div>
       </div>`;
   }
 
   if (gapInfo.gaps.length > 0) {
     const missingSlots = gapInfo.gaps.reduce((sum, g) => sum + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0);
+    let estimateLine = "";
+    if (missingEstimate.totalKwh > 0) {
+      const flexUnit = results.length && results[0].flex.kwh > 0 ? results[0].flex.energyCostPence / results[0].flex.kwh : null;
+      const costNote = flexUnit ? `, roughly ${fmtMoney(missingEstimate.totalKwh * flexUnit)} at your average Flexible unit rate` : "";
+      estimateLine = `<div>Estimated missing usage: about <strong>${missingEstimate.totalKwh.toFixed(1)} kWh</strong> (rough median-profile estimate, bucketed by UTC half-hour of day)${costNote}. This is a sensitivity figure only &mdash; it is not added to the totals below.</div>`;
+    }
     gapHtml = `
       <div class="gap-warning">
         <div class="title">${gapInfo.gaps.length} gap${gapInfo.gaps.length > 1 ? "s" : ""} found in your consumption data (${missingSlots} missing half-hour slots)</div>
         <div>Costs below will be slightly understated for any billing period overlapping these dates, since missing slots contribute zero consumption rather than an estimate.</div>
+        ${estimateLine}
         <ul>
           ${gapInfo.gaps.slice(0, 10).map(g => `<li>${g.start.toISOString().slice(0,16).replace("T"," ")} to ${g.end.toISOString().slice(0,16).replace("T"," ")}</li>`).join("")}
           ${gapInfo.gaps.length > 10 ? `<li>...and ${gapInfo.gaps.length - 10} more</li>` : ""}
@@ -1850,51 +2663,75 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const summaryFlex = useConsistentOnly ? consistentFlex : totalFlex;
   const summaryAgile = useConsistentOnly ? consistentAgileCalc : totalAgile;
   const agileKwh = useConsistentOnly ? consistentKwh : totalKwh;
-
-  // Whether all periods in the window predate the current tariff
-  const allPreSwitch = currentTariff && results.length > 0 && consistentResults.length === 0
-    && results.every(r => {
-      const mid = new Date((r.period.start.getTime() + r.period.end.getTime()) / 2);
-      return tariffAtDate(mid) !== currentTariff;
-    });
-
   const summaryLabel = useConsistentOnly
     ? `Current tariff, complete data (${consistentResults.length} of ${results.length} periods)`
-    : allPreSwitch
-      ? `All periods on previous tariff — full window shown`
-      : "Full period";
+    : "Full period";
 
-  // Show a notice when all comparison data predates the current tariff
-  const preSwitchNotice = allPreSwitch ? `
-    <div class="verdict">All billing periods in this window were on a previous tariff. The table below shows the full comparison — what you were actually charged vs what Flexible and Agile would have cost. ${currentAgreement ? `You're currently on <strong>${currentAgreement.tariff_code}</strong>.` : ""}</div>
-  ` : "";
+  // A headline comparison is only trustworthy when the summary scope is made
+  // entirely of confident periods — either we narrowed to confident current
+  // -tariff periods, or every period is confident. If the only way to fill a
+  // headline would be to lean on periods already flagged not-confident
+  // (missing rate coverage, clamped data, suspect actuals), suppress it.
+  const allConfident = results.length > 0 && results.every(r => r.confident);
+  // Also untrustworthy if statement history itself may be incomplete (a
+  // multi-ledger account we couldn't page safely) — missing periods would
+  // skew any headline, so suppress the verdict/share in that case too.
+  const headlineTrustworthy = (useConsistentOnly || allConfident) && !statementsIncomplete;
+  const summaryScope = useConsistentOnly ? consistentResults : results;
+  // The Statement-charge card and the "vs statement" deltas describe the SUMMARY
+  // scope, which may be narrowed to just the current-tariff periods. Whether ANY
+  // period in the whole window was billed (hasActual) is the wrong test for
+  // those: if the summary scope itself has no usable actual — e.g. only a
+  // pre-switch period carried a statement charge while the current-tariff period
+  // had none — summaryActual sums to 0 and the card would read a misleading
+  // £0.00. Gate the actual on the summary scope so it shows n/a instead.
+  const summaryHasActual = summaryScope.some(r => r.period.actualChargePence != null && !r.suspectActual);
+  // Long statements are split into months with a day-apportioned (estimated)
+  // actual charge. That estimate must not drive a "vs statement" claim, so an
+  // estimated split in scope demotes the vs-statement deltas (the Flexible-vs
+  // -Agile comparison, which uses real readings, is unaffected).
+  const anyActualEstimated = summaryScope.some(r => r.period.isSplit && r.period.actualChargePence != null);
+  // "vs statement" deltas are meaningful only with an actual charge present,
+  // comparable billed/observed kWh, complete transactions, and no estimated
+  // apportioned charge in scope.
+  const actualComparable = summaryHasActual && !anyMismatch && !anyTxnIncomplete && !anyActualEstimated;
 
   let verdictHtml = "";
-  if (!allPreSwitch && hasActual && summaryAgile !== null) {
+  if (!headlineTrustworthy && (statementsIncomplete || results.some(r => !r.confident))) {
+    verdictHtml = `<div class="verdict">There isn't enough complete data for a reliable headline comparison over this window &mdash; ${statementsIncomplete ? "the statement history may be incomplete" : "some billing periods have missing rate coverage, partial/clamped data, excluded charges, or estimated long-statement splits"} (see the warnings above). The per-period table below still shows the detail.</div>`;
+  } else if (headlineTrustworthy && hasActual && summaryAgile !== null) {
     const cheaper = summaryFlex < summaryAgile ? "Flexible" : "Agile";
     const cheaperPence = Math.abs(summaryFlex - summaryAgile);
     const scopeNote = useConsistentOnly
       ? ` Comparison covers ${consistentResults.length} of ${results.length} billing periods (those on your current tariff).`
       : "";
-    verdictHtml = `<div class="verdict">Over ${useConsistentOnly ? "the periods on your current tariff" : "this period"}, <strong>${cheaper}</strong> would have been ${fmtMoney(cheaperPence)} cheaper than the other.${scopeNote} ${currentAgreement ? `You're currently on <strong>${currentAgreement.tariff_code}</strong>.` : ""}</div>`;
+    verdictHtml = `<div class="verdict">Over ${useConsistentOnly ? "the periods on your current tariff" : "this period"}, priced on your real half-hourly usage, <strong>${cheaper}</strong> would have been ${fmtMoney(cheaperPence)} cheaper than the other.${scopeNote}</div>`;
   }
 
+  // "vs statement" deltas are shown only when the billed and returned kWh
+  // are comparable; otherwise the cards carry a "not directly comparable"
+  // note and the mismatch banner above explains why.
+  const deltaCell = calc => {
+    if (!summaryHasActual) return "";
+    if (!actualComparable) return `<div class="delta not-comparable">not directly comparable</div>`;
+    return `<div class="delta">${(calc >= summaryActual ? "+" : "") + fmtMoney(calc - summaryActual)} vs statement</div>`;
+  };
   const summaryHtml = `
     <div class="summary-row">
       <div class="summary-card actual">
-        <div class="label">Actual charged</div>
-        <div class="value">${hasActual ? fmtMoney(summaryActual) : "n/a"}</div>
-        <div class="delta">${summaryLabel}</div>
+        <div class="label">Statement charge</div>
+        <div class="value">${summaryHasActual ? fmtMoney(summaryActual) : "n/a"}</div>
+        <div class="delta">${escapeHtml(summaryLabel)}${reconCredits > 0 ? " · electricity charge, before credits" : ""}</div>
       </div>
       <div class="summary-card flexible">
         <div class="label">Flexible (calculated)</div>
         <div class="value">${fmtMoney(summaryFlex)}</div>
-        <div class="delta">${hasActual ? (summaryFlex >= summaryActual ? "+" : "") + fmtMoney(summaryFlex - summaryActual) + " vs actual" : ""}</div>
+        ${deltaCell(summaryFlex)}
       </div>
       <div class="summary-card agile">
         <div class="label">Agile (calculated)</div>
         <div class="value">${summaryAgile !== null ? fmtMoney(summaryAgile) : "n/a"}</div>
-        <div class="delta">${hasActual && summaryAgile !== null ? (summaryAgile >= summaryActual ? "+" : "") + fmtMoney(summaryAgile - summaryActual) + " vs actual" : ""}</div>
+        ${summaryAgile !== null ? deltaCell(summaryAgile) : `<div class="delta"></div>`}
       </div>
     </div>
   `;
@@ -1909,14 +2746,21 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     const flexStr = fmtMoney(r.flex.totalPence);
     const agileStr = r.agile ? fmtMoney(r.agile.totalPence) : "n/a";
 
-    // What tariff was actually in force at the midpoint of this period?
+    // Which tariff(s) were actually in force during this period? A period that
+    // straddles an agreement change is "mixed" and can't be cleanly attributed
+    // to one tariff, so it's labelled as such rather than by its midpoint.
+    const periodCodes = tariffCodesInRange(agreements, r.period.start, r.period.end);
+    const isMixed = periodCodes.size > 1;
     const periodMid = new Date((r.period.start.getTime() + r.period.end.getTime()) / 2);
     const actualTariff = tariffAtDate(periodMid);
-    // Flag the period if it was on a different tariff than the current one.
-    // Show a human-readable label derived from the tariff code suffix.
-    const onCurrentTariff = actualTariff === currentTariff;
-    const tariffFlag = !actualTariff || onCurrentTariff ? "" :
-      `<span class="tariff-flag">actual on ${actualTariff.split("-").slice(-2).join(" ").toLowerCase()}</span>`;
+    // On the current tariff only if a single code spanned the whole period and
+    // it is today's. Otherwise flag it: "mixed tariff" when it spans a switch,
+    // else "actual on Fixed" / "actual on Go" (classified, never a raw code).
+    const onCurrentTariff = periodCodes.size === 1 && periodCodes.has(currentTariff);
+    const tariffFlag = isMixed
+      ? `<span class="tariff-flag">mixed tariff &mdash; spans a switch</span>`
+      : (!actualTariff || onCurrentTariff ? "" :
+        `<span class="tariff-flag">actual on ${escapeHtml(classifyTariffCode(actualTariff).label)}</span>`);
 
     const staleFlag = r.flex.unmatchedReadings > 0
       ? `<span class="stale-flag">${r.flex.unmatchedReadings} flex unmatched</span>`
@@ -1933,7 +2777,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     const suspectFlag = r.suspectActual
       ? `<span class="stale-flag">actual excluded &mdash; likely reconciliation charge</span>`
       : "";
-    return `<tr${!onCurrentTariff && actualTariff ? ' class="pre-switch"' : ''}>
+    return `<tr${(!onCurrentTariff && actualTariff) || isMixed ? ' class="pre-switch"' : ''}>
       <td>${periodLabel}${tariffFlag}${staleFlag}${agileStaleFlag}${clampedFlag}${splitFlag}${suspectFlag}</td>
       <td>${r.flex.kwh.toFixed(1)}</td>
       <td>${actualStr}</td>
@@ -1946,7 +2790,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     <div class="table-scroll">
     <table class="results">
       <thead>
-        <tr><th>Period</th><th>kWh</th><th>Actual</th><th>Flexible</th><th>Agile</th></tr>
+        <tr><th>Period</th><th>kWh</th><th>Statement</th><th>Flexible</th><th>Agile</th></tr>
       </thead>
       <tbody>${rowsHtml}</tbody>
       <tfoot>
@@ -1960,7 +2804,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
         ${useConsistentOnly ? `<tr>
           <td>Total (current tariff periods only)</td>
           <td>${agileKwh.toFixed(1)}</td>
-          <td>${fmtMoney(consistentActual)}</td>
+          <td>${summaryHasActual ? fmtMoney(consistentActual) : "n/a"}</td>
           <td>${fmtMoney(consistentFlex)}</td>
           <td>${consistentAgileCalc !== null ? fmtMoney(consistentAgileCalc) : "n/a"}</td>
         </tr>` : ""}
@@ -1973,17 +2817,40 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const emailBodyLines = [
     `Postcode area: ${postcodeArea || "not available"}`,
     `Period: ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}`,
-    `Total consumption: ${totalKwh.toFixed(1)} kWh`,
-    `Actual charged: ${hasActual ? fmtMoney(totalActual) : "n/a"}`,
+    `Returned half-hourly usage: ${totalKwh.toFixed(1)} kWh`,
+  ];
+  if (billedKwhTotal > 0) emailBodyLines.push(`Statement billed usage: ${billedKwhTotal.toFixed(1)} kWh`);
+  emailBodyLines.push(
+    `Statement electricity charge: ${hasActual ? fmtMoney(reconCharge) : "n/a"}`,
     `Flexible (calculated): ${fmtMoney(totalFlex)}`,
     `Agile (calculated): ${totalAgile !== null ? fmtMoney(totalAgile) : "n/a"}`,
-  ];
+  );
+  // The email reports WHOLE-WINDOW figures (totalKwh, billedKwhTotal, totalFlex,
+  // totalAgile), so its mismatch caveat must reflect a whole-window mismatch —
+  // not the headline-scoped anyMismatch (which can hide a pre-switch mismatch
+  // that's excluded from the current-tariff headline yet still baked into these
+  // full-window totals).
+  const anyMismatchAllPeriods = statementValidation.some(v => v.mismatch);
+  if (anyMismatchAllPeriods) emailBodyLines.push(`Note: billed and returned usage differ, so the calculated figures are not directly comparable with the statement charge.`);
+  // Carry the same caveats the on-screen warnings show, so an emailed summary
+  // can't present untrusted totals as if they were a clean comparison.
+  const emailCaveats = [];
+  if (!headlineTrustworthy) emailCaveats.push("the headline comparison is not reliable for this window");
+  if (statementsIncomplete) emailCaveats.push("statement history may be incomplete");
+  if (totalFlexUnmatched > 0 || totalAgileUnmatched > 0 || totalFlexStandingUnmatched > 0 || totalAgileStandingUnmatched > 0) emailCaveats.push("some tariff rate history was missing, so calculated totals understate the true cost");
+  if (gapInfo.gaps.length > 0) emailCaveats.push("there are gaps in the half-hourly data (counted as zero)");
+  if (anyActualEstimated) emailCaveats.push("a long statement was split into months with day-apportioned (estimated) charges");
+  if (emailCaveats.length) emailBodyLines.push(`Caveats: ${emailCaveats.join("; ")}.`);
   const emailBody = emailBodyLines.join("\n");
   const mailtoHref = `mailto:hello@auth.energy?subject=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(emailBody)}`;
 
-  // --- Share panel ---
+  // --- Share panel (only when the headline comparison is trustworthy) ---
+  // Gated on Agile actually being available: the share is an Agile-vs-Flexible
+  // claim, so with no Agile figure (summaryAgile/totalAgile null) there is
+  // nothing comparative to share — and an unguarded null would coerce to 0 and
+  // produce a bogus "Agile saved me 100.0%".
   const shareLines = [];
-  if (useConsistentOnly && hasActual) {
+  if (headlineTrustworthy && useConsistentOnly && hasActual && summaryAgile !== null) {
     const saved = summaryFlex - summaryAgile;
     const vsActual = summaryAgile - summaryActual;
     const savedPct = (summaryFlex - summaryAgile) / summaryFlex * 100;
@@ -1992,14 +2859,17 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     shareLines.push(``);
     if (saved > 0) {
       shareLines.push(`Agile saved me ${savedPct.toFixed(1)}% vs Flexible over this period.`);
-      shareLines.push(`Calculated Agile was ${Math.abs(vsActualPct).toFixed(1)}% ${vsActualPct <= 0 ? "below" : "above"} my actual charges.`);
     } else {
       shareLines.push(`Flexible would have been ${Math.abs(savedPct).toFixed(1)}% cheaper than Agile over this period.`);
+    }
+    // Only claim a "vs my actual charges" figure when billed and returned
+    // kWh are comparable — otherwise it compares different quantities.
+    if (actualComparable) {
       shareLines.push(`Calculated Agile was ${Math.abs(vsActualPct).toFixed(1)}% ${vsActualPct <= 0 ? "below" : "above"} my actual charges.`);
     }
     shareLines.push(``);
     shareLines.push(`Try it: authenergy.github.io/agile-compare/v2  #DynamicTariffCheck`);
-  } else if (hasActual) {
+  } else if (headlineTrustworthy && hasActual && totalAgile !== null) {
     shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${totalKwh.toFixed(0)} kWh):`);
     shareLines.push(``);
     const cheaperAmt = totalAgile !== null ? Math.abs(totalFlex - totalAgile) : null;
@@ -2015,20 +2885,28 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const sharePanelHtml = shareLines.length > 0 ? `
     <div class="share-panel" id="share-panel">
       <div class="share-label">Share on social media</div>
-      <div class="share-text" id="share-text">${shareText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
+      <div class="share-text" id="share-text">${escapeHtml(shareText)}</div>
       <button class="copy-btn" id="btn-copy-share">Copy to clipboard</button>
     </div>
   ` : "";
 
+  const statementsIncompleteHtml = statementsIncomplete
+    ? `<div class="mismatch-warning"><div class="title">Statement history may be incomplete</div><div>This account has statements across more than one ledger and the API couldn't be paged safely with a single cursor, so some billing periods may be missing. The figures below cover only the statements that were retrieved.</div></div>`
+    : "";
+
   container.innerHTML = `
+    ${statementsIncompleteHtml}
+    ${mismatchHtml}
     ${gapHtml}
     ${rateCoverageHtml}
+    ${incompleteTxnHtml}
     ${summaryHtml}
-    ${preSwitchNotice}
     ${verdictHtml}
+    ${tariffContextHtml}
+    ${reconHtml}
     ${sharePanelHtml}
     ${tableHtml}
-    <p class="footnote">Region ${regionLetter}. Comparison window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Flexible and Agile costs are calculated using each tariff's real historical rates for the exact dates of each billing period, including correctly splitting any period that spans a rate change. "Actual charged" comes directly from your real statement totals where available.</p>
+    <p class="footnote">Region ${escapeHtml(regionLetter)}. Comparison window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Flexible and Agile costs are calculated from your real half-hourly readings using each tariff's real historical rates for the exact dates of each billing period. Long statements are shown split into months for readability, with the real statement charge apportioned by day count — those split rows are display estimates, not Octopus's own per-month billing, so they are excluded from headline statement comparisons. The statement charge comes from your real Octopus statement; where Octopus billed a different metered quantity than the half-hourly readings return, the two are not directly comparable and that is flagged above.</p>
     <div class="actions-block">
       <div class="action-row">
         <a class="secondary" href="${mailtoHref}">Email summary</a>
@@ -2069,154 +2947,145 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   }
 }
 
+// Replay a previously-downloaded diagnostics JSON, re-rendering the results
+// screen with NO live API calls. Reconstructs the inputs from the file's raw
+// arrays and re-renders through the same renderResults path, so a customer
+// (or support) can reproduce exactly what was shown. Long single periods are
+// re-split into months and re-costed from the raw readings/rate windows.
 function processDiagnosticFile(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     let d;
-    try {
-      d = JSON.parse(e.target.result);
-    } catch (err) {
-      alert("Could not parse this file as JSON. Make sure you're uploading a diagnostic file downloaded from this tool.");
+    try { d = JSON.parse(e.target.result); }
+    catch (err) { alert("Could not parse this file as JSON. Upload a diagnostics file downloaded from this tool."); return; }
+
+    if (d.mode === "export") {
+      alert("This is an export-meter diagnostic. Replay currently supports import-meter diagnostics only.");
       return;
     }
-
-    // Validate it looks like one of our diagnostic files
     if (!d.billingPeriods || !d.readings || !d.rateWindows) {
-      alert("This doesn't look like an Octopus Tariff Check diagnostic file. Please upload a file downloaded using the 'Download diagnostics' button on the results screen.");
+      alert("This doesn't look like an Octopus Tariff Check diagnostics file. Use one downloaded via 'Download diagnostics' on the results screen.");
+      return;
+    }
+    // Schema/size sanity caps: a real diagnostic is a few years of half-hourly
+    // data at most. Refuse anything absurdly large or malformed so a huge or
+    // hand-edited file can't freeze the tab mapping arrays.
+    const len = a => Array.isArray(a) ? a.length : 0;
+    if (len(d.readings.raw) > 200000 || len(d.billingPeriods) > 5000 ||
+        len(d.rateWindows.rawAgileUnitRates) > 200000 || len(d.rateWindows.rawFlexUnitRates) > 200000 ||
+        len(d.rateWindows.rawAgileStandingCharges) > 50000 || len(d.rateWindows.rawFlexStandingCharges) > 50000) {
+      alert("This diagnostics file is unexpectedly large (too many readings, rate windows, or periods). Refusing to render it to avoid freezing the tab.");
+      return;
+    }
+    if (!d.comparisonWindow || isNaN(new Date(d.comparisonWindow.from).getTime()) || isNaN(new Date(d.comparisonWindow.to).getTime())) {
+      alert("This diagnostics file is missing a valid comparison window, so it can't be replayed.");
       return;
     }
 
     try {
-      // Reconstruct gapInfo from the stored gap ranges
+      const num = v => (v === "n/a" || v == null) ? null : parseInt(v);
+      const fnum = v => (v === "n/a" || v == null) ? null : parseFloat(v);
+
       const gapInfo = {
-        gaps: (d.gaps.ranges || []).map(r => {
-          const parts = r.split(" to ");
-          return { start: new Date(parts[0]), end: new Date(parts[1]) };
-        }),
+        gaps: (d.gaps.ranges || []).map(r => { const p = r.split(" to "); return { start: new Date(p[0]), end: new Date(p[1]) }; }),
         duplicates: [],
         earliest: d.readings.earliest ? new Date(d.readings.earliest) : null,
         latest: d.readings.latest ? new Date(d.readings.latest) : null,
       };
-
-      // Reconstruct rate windows
-      const toWindows = arr => (arr || []).map(w => ({
-        validFrom: new Date(w.from),
-        validTo: w.to ? new Date(w.to) : null,
-        value: w.p,
-      }));
+      const toWindows = arr => (arr || []).map(w => ({ validFrom: new Date(w.from), validTo: w.to ? new Date(w.to) : null, value: w.p }));
       const flexUnitRates = toWindows(d.rateWindows.rawFlexUnitRates);
       const flexStandingCharges = toWindows(d.rateWindows.rawFlexStandingCharges);
       const agileUnitRates = toWindows(d.rateWindows.rawAgileUnitRates);
       const agileStandingCharges = toWindows(d.rateWindows.rawAgileStandingCharges);
       const agileAvailable = agileUnitRates.length > 0;
-
-      // Reconstruct readings
-      const readings = (d.readings.raw || []).map(r => ({
-        start: new Date(r.t),
-        end: new Date(new Date(r.t).getTime() + 30 * 60 * 1000),
-        kwh: r.kwh,
-      }));
-
-      // Reconstruct agreements
-      const agreements = (d.agreements || []).map(a => ({
-        tariff_code: a.tariffCode,
-        valid_from: a.validFrom,
-        valid_to: a.validTo,
-      }));
+      const readings = (d.readings.raw || []).map(r => ({ start: new Date(r.t), end: new Date(new Date(r.t).getTime() + 30 * 60 * 1000), kwh: r.kwh }));
+      const agreements = (d.agreements || []).map(a => ({ tariff_code: a.tariffCode, valid_from: a.validFrom, valid_to: a.validTo }));
       const currentAgreement = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
 
-      // Reconstruct billing periods from the diagnostic, applying the same
-      // monthly splitting logic used in the live path so long periods
-      // (like a single 8-month fixed-tariff statement) are broken up.
+      // Pre-split periods from the stored billing periods, then re-split long
+      // ones (so an older file with one long period is broken into months).
       const rawDiagPeriods = d.billingPeriods.map(p => {
-        const displayStart = new Date(p.displayPeriod.split(" to ")[0]);
-        const displayEnd = new Date(p.displayPeriod.split(" to ")[1]);
-        const calcStart = new Date(p.calculationPeriod.split(" to ")[0]);
-        const calcEnd = new Date(p.calculationPeriod.split(" to ")[1]);
+        const ds = new Date(p.displayPeriod.split(" to ")[0]);
+        const de = new Date(p.displayPeriod.split(" to ")[1]);
+        const cs = new Date(p.calculationPeriod.split(" to ")[0]);
+        const ce = new Date(p.calculationPeriod.split(" to ")[1]);
         return {
-          displayStart,
-          displayEnd,
-          start: calcStart,
-          end: calcEnd,
-          actualChargePence: p.actualPence !== "n/a" ? parseInt(p.actualPence) : null,
-          // Carry through the original flex/agile stored values for use
-          // after splitting (proportioned in splitLongPeriods if needed).
-          _flex: p,
-          _agile: p,
-          isSplit: false,
+          displayStart: ds, displayEnd: de, start: cs, end: ce,
+          actualChargePence: num(p.actualPence),
+          billedKwh: fnum(p.billedKwh),
+          credits: [],
+          transactionsAvailable: true, transactionsComplete: true,
+          _orig: p, isSplit: false,
         };
       });
       const splitDiagPeriods = splitLongPeriods(rawDiagPeriods);
+      const flexUnitSorted = [...flexUnitRates].sort((a, b) => a.validFrom - b.validFrom);
+      const agileUnitSorted = [...agileUnitRates].sort((a, b) => a.validFrom - b.validFrom);
+      const diagInt = v => (v === "n/a" || v == null) ? 0 : (parseInt(v) || 0);
 
-      // For split sub-periods, re-calculate flex/agile costs from the raw
-      // readings and rate windows (which are in the file) so each month
-      // gets accurate calculated costs rather than a proportional split.
       const results = splitDiagPeriods.map(p => {
+        const orig = p._orig || d.billingPeriods.find(bp => new Date(bp.displayPeriod.split(" to ")[0]).getTime() === p.displayStart.getTime()) || d.billingPeriods[0];
         let flex, agile;
-
         if (p.isSplit && readings.length > 0) {
-          // Re-calculate from raw data for accuracy
-          flex = calculateCost(readings, p.start, p.end, flexUnitRates, flexStandingCharges);
-          agile = agileAvailable
-            ? calculateCost(readings, p.start, p.end, agileUnitRates, agileStandingCharges)
-            : null;
+          flex = calculateCost(readings, p.start, p.end, flexUnitSorted, flexStandingCharges, true);
+          agile = agileAvailable ? calculateCost(readings, p.start, p.end, agileUnitSorted, agileStandingCharges, true) : null;
         } else {
-          // Use stored values directly (single non-split period)
-          const orig = d.billingPeriods.find(bp =>
-            new Date(bp.displayPeriod.split(" to ")[0]).getTime() === p.displayStart.getTime()
-          ) || d.billingPeriods[0];
-          flex = {
-            kwh: parseFloat(orig.kwh),
-            energyCostPence: parseInt(orig.flexEnergyPence) || 0,
-            standingChargePence: parseInt(orig.flexStandingPence) || 0,
-            totalPence: parseInt(orig.flexTotalPence) || 0,
-            unmatchedReadings: orig.flexUnmatched || 0,
-          };
-          agile = orig.agileTotalPence !== "n/a" ? {
-            kwh: parseFloat(orig.kwh),
-            energyCostPence: parseInt(orig.agileEnergyPence) || 0,
-            standingChargePence: parseInt(orig.agileStandingPence) || 0,
-            totalPence: parseInt(orig.agileTotalPence) || 0,
-            unmatchedReadings: orig.agileUnmatched || 0,
-          } : null;
+          flex = { kwh: parseFloat(orig.kwh) || 0, energyCostPence: num(orig.flexEnergyPence) || 0, standingChargePence: num(orig.flexStandingPence) || 0, totalPence: num(orig.flexTotalPence) || 0, unmatchedReadings: orig.flexUnmatched || 0, unmatchedStandingDays: diagInt(orig.flexUnmatchedStanding) };
+          agile = orig.agileTotalPence !== "n/a" ? { kwh: parseFloat(orig.kwh) || 0, energyCostPence: num(orig.agileEnergyPence) || 0, standingChargePence: num(orig.agileStandingPence) || 0, totalPence: num(orig.agileTotalPence) || 0, unmatchedReadings: orig.agileUnmatched || 0, unmatchedStandingDays: diagInt(orig.agileUnmatchedStanding) } : null;
         }
-
+        const wasClamped = !p.isSplit && !!orig.clamped;
+        const suspectActual = !p.isSplit && !!orig.suspectActual;
         return {
-          period: p,
-          flex,
-          agile,
-          wasClamped: false,
-          suspectActual: false,
-          confident: flex.unmatchedReadings === 0 && (!agile || agile.unmatchedReadings === 0),
+          period: p, flex, agile, wasClamped, suspectActual,
+          confident: !wasClamped && !suspectActual
+            && flex.unmatchedReadings === 0 && (flex.unmatchedStandingDays || 0) === 0
+            && (!agile || (agile.unmatchedReadings === 0 && (agile.unmatchedStandingDays || 0) === 0)),
+          actualTariffCode: orig.actualTariffCode,
+          actualTariffCalc: null, actualTariffModelled: false,
+          actualTariffUnavailable: !p.isSplit && !!orig.actualTariffUnavailable,
+          actualTariffNotModelledLabel: null,
+          billedKwh: p.billedKwh, kwhMismatch: !p.isSplit && !!orig.kwhMismatch,
         };
       });
+
+      // Statement-level validation + missing-data estimate (present in files
+      // from this build; absent in older ones, handled with safe defaults).
+      const statementValidation = (d.statementValidation || []).map(v => {
+        const parts = (v.period || " to ").split(" to ");
+        return {
+          displayStart: new Date(parts[0]), displayEnd: new Date(parts[1]),
+          billedKwh: v.billedKwh === "n/a" ? null : parseFloat(v.billedKwh),
+          observedKwh: parseFloat(v.observedKwh) || 0,
+          electricityChargePence: v.electricityChargePence === "n/a" ? null : parseInt(v.electricityChargePence),
+          creditsPence: parseInt(v.creditsPence) || 0, credits: [],
+          transactionsAvailable: v.transactionsAvailable, transactionsComplete: v.transactionsComplete,
+          wasClamped: v.clamped, mismatch: v.mismatch,
+        };
+      });
+      const missingEstimate = {
+        totalKwh: parseFloat(d.gaps.medianProfileKwhEstimate) || 0, slots: 0,
+        perGap: (d.gaps.medianProfilePerGap || []).map(g => ({ from: new Date(g.from), to: new Date(g.to), slots: g.slots, kwh: g.kwh })),
+      };
 
       const periodFrom = new Date(d.comparisonWindow.from);
       const periodTo = new Date(d.comparisonWindow.to);
 
-      // Show the results screen
       showScreen("screen-results");
       renderResults({
-        results,
-        gapInfo,
-        regionLetter: d.region,
-        currentAgreement,
-        agreements,
-        periodFrom,
-        periodTo,
-        agileAvailable,
-        postcodeArea: d.postcodeArea,
+        results, gapInfo, regionLetter: d.region, currentAgreement, agreements,
+        periodFrom, periodTo, agileAvailable, postcodeArea: d.postcodeArea,
+        statementValidation, missingEstimate, statementsIncomplete: !!d.statementsIncomplete,
       });
 
-      // Prepend a banner noting this is a replayed diagnostic
+      // Prepend a banner noting this is replayed (textContent, so a hostile
+      // appVersion string in the file can't inject markup).
       const container = document.getElementById("results-content");
       const banner = document.createElement("div");
       banner.className = "diag-replay-banner";
-      banner.innerHTML = `<strong>Replayed from diagnostic file</strong> &mdash; ${d.appVersion || "unknown version"}, generated ${new Date(d.generatedAt).toLocaleString()}. No live API calls were made.`;
+      banner.textContent = `Replayed from a diagnostics file — ${d.appVersion || "unknown version"}, generated ${d.generatedAt ? new Date(d.generatedAt).toLocaleString() : "unknown"}. No live API calls were made.`;
       container.insertBefore(banner, container.firstChild);
-
     } catch (err) {
-      alert("Error processing diagnostic file: " + err.message);
+      alert("Error processing diagnostics file: " + err.message);
     }
   };
   reader.readAsText(file);
@@ -2236,10 +3105,9 @@ function downloadFailureDiag() {
     d.error.corsLikely ? `(likely CORS block)` : "",
     ``,
     `ACCOUNT:`,
-    `  Number:      ${d.account.number || "not yet fetched"}`,
-    `  MPAN:        ${d.account.mpan || "not yet fetched"}`,
-    `  Serial used: ${d.account.serialUsed || "not yet fetched"}`,
-    `  All serials: ${(d.account.allSerials || []).join(", ") || "none"}`,
+    `  Number:        ${d.account.number || "not yet fetched"}`,
+    `  Meter serials: ${d.account.serialCount} on the selected MPAN (values omitted — PII)`,
+    `  Export meter:  ${d.account.isExport ? "yes" : "no"}`,
     `  Postcode area: ${d.account.postcodeArea || "not available"}`,
     ``,
     `AGREEMENTS:`,
@@ -2247,16 +3115,20 @@ function downloadFailureDiag() {
       ? d.account.agreements.map(a => `  ${a.tariffCode}  from ${(a.validFrom || "").slice(0,10)}${a.validTo ? ` to ${a.validTo.slice(0,10)}` : " (current)"}`)
       : ["  none fetched"]),
     ``,
-    `ALL METERS ON ACCOUNT:`,
+    `ALL METERS ON ACCOUNT (MPAN/serials omitted — PII):`,
     ...(d.account.metersOnAccount.length
-      ? d.account.metersOnAccount.map(m => `  MPAN ${m.mpan}  serials=[${m.serials.join(", ")}]  export=${m.isExport}  tariff=${m.currentTariff || "unknown"}`)
+      ? d.account.metersOnAccount.map((m, i) => `  meter ${i + 1}:  ${m.serialCount} serial(s)  export=${m.isExport}  tariff=${m.currentTariff || "unknown"}`)
       : ["  none fetched"]),
     ``,
     `PROGRESS LOG:`,
     ...(d.progressLog.length ? d.progressLog.map(l => `  ${l}`) : ["  (no progress logged)"]),
   ].filter(l => l !== undefined);
 
-  const output = JSON.stringify({ _summary: lines.join("\n"), ...d }, null, 2);
+  // Final belt-and-braces redaction over the WHOLE serialised artifact — covers
+  // any identifier that slipped through a field-level path (error.message,
+  // progress log, or a future addition) so the saved file can never carry the
+  // MPAN/serial/API key.
+  const output = redactPII(JSON.stringify({ _summary: lines.join("\n"), ...d }, null, 2));
   const blob = new Blob([output], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -2273,20 +3145,36 @@ function downloadDiagnostics() {
 
   const d = state.diagnostics;
 
+  // Export-meter runs carry a different (smaller) diagnostics shape.
+  if (d.mode === "export") {
+    const exportSummary = [
+      `Octopus Tariff Check — export diagnostic`,
+      `Generated: ${d.generatedAt}`,
+      ``,
+      `EXPORT WINDOW:      ${d.comparisonWindow.from.slice(0,10)} to ${d.comparisonWindow.to.slice(0,10)}`,
+      `REGION:             ${d.region}`,
+      `EXPORTED:           ${d.exportKwh} kWh`,
+      ``,
+      `OUTGOING (flat):    ${d.outgoingFlat === "unavailable" ? "unavailable" : `${d.outgoingFlat.valuePence}p (£${(d.outgoingFlat.valuePence/100).toFixed(2)}) via ${(d.outgoingFlat.products||[]).join(", ")} [unmatched ${d.outgoingFlat.unmatchedReadings}]`}`,
+      `AGILE OUTGOING:     ${d.agileOutgoing === "unavailable" ? "unavailable" : `${d.agileOutgoing.valuePence}p (£${(d.agileOutgoing.valuePence/100).toFixed(2)}) via ${(d.agileOutgoing.products||[]).join(", ")} [unmatched ${d.agileOutgoing.unmatchedReadings}]`}`,
+      ``,
+      `READINGS:           ${d.readings.count} half-hour export slots`,
+    ];
+    const out = redactPII(JSON.stringify({ _summary: exportSummary.join("\n"), ...d }, null, 2));
+    const blob = new Blob([out], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `octopus-export-diag-${d.generatedAt.slice(0,10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return;
+  }
+
   // Human-readable summary as first key — readable at a glance
   // before anyone loads the raw arrays into a tool.
-  // Handle both old (onAgileOnly) and new (consistentOnly) key names
-  const ct = d.totals.consistentOnly || d.totals.onAgileOnly;
-  const ctLines = ct ? [
-    ``,
-    `TOTALS (current tariff periods only — ${ct.periodCount} periods):`,
-    `  Actual charged:           ${ct.actualPence}p (£${(ct.actualPence/100).toFixed(2)})`,
-    `  Flexible calculated:      ${ct.flexTotalPence}p (£${(ct.flexTotalPence/100).toFixed(2)})`,
-    `  Agile calculated:         ${ct.agileTotalPence}p (£${(ct.agileTotalPence/100).toFixed(2)})`,
-    `  Agile vs actual:          ${((ct.agileTotalPence - ct.actualPence)/100).toFixed(2)} (${ct.agileTotalPence <= ct.actualPence ? "calculated lower" : "calculated higher"})`,
-    `  Agile vs flex:            £${((ct.flexTotalPence - ct.agileTotalPence)/100).toFixed(2)} ${ct.agileTotalPence <= ct.flexTotalPence ? "saved on Agile" : "more expensive on Agile"}`,
-  ] : [``, `TOTALS (current tariff periods only): not available`];
-
   const summaryLines = [
     `Octopus Tariff Check — diagnostic export`,
     `Generated: ${d.generatedAt}`,
@@ -2319,21 +3207,35 @@ function downloadDiagnostics() {
     ``,
     `BILLING PERIODS:`,
     ...d.billingPeriods.map(p => {
-      return `  ${p.displayPeriod}  ${p.kwh} kWh  [${p.preSwitch ? `PRE-SWITCH on ${p.actualTariffCode}` : p.actualTariffCode}]` +
+      // A mixed period straddles a tariff switch and is excluded from the
+      // current-tariff totals; surface that here so it can't read as "clean"
+      // just because its midpoint happens to land on the current tariff.
+      const tariffTag = p.mixedTariff
+        ? `MIXED tariff — spans a switch (midpoint ${p.actualTariffCode})`
+        : (p.preSwitch ? `PRE-SWITCH on ${p.actualTariffCode}` : p.actualTariffCode);
+      return `  ${p.displayPeriod}  ${p.kwh} kWh  [${tariffTag}]` +
         `  actual=${p.actualPence}p${p.suspectActual ? " [SUSPECT]" : ""}` +
-        `  flex=${p.flexTotalPence}p (energy=${p.flexEnergyPence} sc=${p.flexStandingPence} unmatched=${p.flexUnmatched})` +
-        `  agile=${p.agileTotalPence}p (energy=${p.agileEnergyPence} sc=${p.agileStandingPence} unmatched=${p.agileUnmatched})` +
+        `  flex=${p.flexTotalPence}p (energy=${p.flexEnergyPence} sc=${p.flexStandingPence} unmatched=${p.flexUnmatched} sc-days-unmatched=${p.flexUnmatchedStanding})` +
+        `  agile=${p.agileTotalPence}p (energy=${p.agileEnergyPence} sc=${p.agileStandingPence} unmatched=${p.agileUnmatched} sc-days-unmatched=${p.agileUnmatchedStanding})` +
         (p.clamped ? `  [PARTIAL]` : ``);
     }),
     ``,
     `TOTALS (all periods):`,
-    `  Flex unmatched readings:  ${d.totals.allPeriods.flexUnmatchedReadings}`,
-    `  Agile unmatched readings: ${d.totals.allPeriods.agileUnmatchedReadings}`,
-    `  Clamped periods:          ${d.totals.allPeriods.clampedPeriods}`,
-    ...ctLines,
+    `  Flex unmatched readings:       ${d.totals.allPeriods.flexUnmatchedReadings}`,
+    `  Agile unmatched readings:      ${d.totals.allPeriods.agileUnmatchedReadings}`,
+    `  Flex unmatched standing days:  ${d.totals.allPeriods.flexUnmatchedStandingDays != null ? d.totals.allPeriods.flexUnmatchedStandingDays : "n/a"}`,
+    `  Agile unmatched standing days: ${d.totals.allPeriods.agileUnmatchedStandingDays != null ? d.totals.allPeriods.agileUnmatchedStandingDays : "n/a"}`,
+    `  Clamped periods:               ${d.totals.allPeriods.clampedPeriods}`,
+    ``,
+    `TOTALS (current tariff periods only — ${d.totals.consistentOnlyDiag.periodCount} periods):`,
+    `  Actual charged:              ${d.totals.consistentOnlyDiag.actualPence}p (£${(d.totals.consistentOnlyDiag.actualPence/100).toFixed(2)})`,
+    `  Flexible calculated:      ${d.totals.consistentOnlyDiag.flexTotalPence}p (£${(d.totals.consistentOnlyDiag.flexTotalPence/100).toFixed(2)})`,
+    `  Agile calculated:         ${d.totals.consistentOnlyDiag.agileTotalPence}p (£${(d.totals.consistentOnlyDiag.agileTotalPence/100).toFixed(2)})`,
+    `  Agile vs actual:          ${((d.totals.consistentOnlyDiag.agileTotalPence - d.totals.consistentOnlyDiag.actualPence)/100).toFixed(2)} (${d.totals.consistentOnlyDiag.agileTotalPence <= d.totals.consistentOnlyDiag.actualPence ? "calculated lower" : "calculated higher"})`,
+    `  Agile vs flex:            £${((d.totals.consistentOnlyDiag.flexTotalPence - d.totals.consistentOnlyDiag.agileTotalPence)/100).toFixed(2)} ${d.totals.consistentOnlyDiag.agileTotalPence <= d.totals.consistentOnlyDiag.flexTotalPence ? "saved on Agile" : "more expensive on Agile"}`,
   ];
 
-  const output = JSON.stringify({ _summary: summaryLines.join("\n"), ...d }, null, 2);
+  const output = redactPII(JSON.stringify({ _summary: summaryLines.join("\n"), ...d }, null, 2));
 
   const blob = new Blob([output], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -2358,14 +3260,19 @@ document.getElementById("btn-submit").addEventListener("click", () => {
   fetchAndPickMeter();
 });
 
+// Diagnostic-file replay: the visible link triggers the hidden file input.
 document.getElementById("upload-diag-link").addEventListener("click", () => {
   document.getElementById("input-diag-file").click();
 });
-
 document.getElementById("input-diag-file").addEventListener("change", (e) => {
   const file = e.target.files[0];
+  if (file && file.size > 60 * 1024 * 1024) {
+    alert("That file is over 60 MB — far larger than any real diagnostics file. Not loading it, to avoid freezing the tab.");
+    e.target.value = "";
+    return;
+  }
   if (file) processDiagnosticFile(file);
-  e.target.value = ""; // reset so same file can be re-uploaded
+  e.target.value = ""; // allow re-selecting the same file
 });
 
 /* ============================================================

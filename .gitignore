@@ -1,1 +1,6 @@
 .DS_Store
+
+# Generated test module — rebuilt from index.html by tests/extract_module.js
+# before each test run, so it should never be committed.
+tests/app_module.js
+v2/tests/app_module.js

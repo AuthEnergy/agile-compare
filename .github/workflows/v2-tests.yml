@@ -1,0 +1,42 @@
+name: v2 tests
+
+on:
+  push:
+    branches:
+      - main
+      - l-wip
+    paths:
+      - "v2/**"
+      - ".github/workflows/v2-tests.yml"
+  pull_request:
+    paths:
+      - "v2/**"
+      - ".github/workflows/v2-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Node ${{ matrix.node-version }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version:
+          - 20
+          - 22
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Run v2 tests
+        working-directory: v2
+        run: npm test

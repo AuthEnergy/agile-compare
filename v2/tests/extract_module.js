@@ -54,7 +54,13 @@ const exported = [
   "fetchConsumption", "detectGaps", "findLiveProductCodeByDisplayName",
   "fetchProductTariffCode", "fetchRateWindows", "calculateCost",
   "getAgreementsForMpan", "getPostcodeAreaForMpan", "obtainKrakenToken", "fetchStatements",
-  "runComparison", "renderResults", "renderError", "rateAt",
+  "runComparison", "renderResults", "renderError", "rateAt", "downloadDiagnostics",
+  "classifyTariffCode", "summariseStatementTransactions", "billedKwhMismatch",
+  "estimateMissingKwh", "escapeHtml",
+  "findProductsByDisplayNameOverlapping", "fetchMergedRateWindows",
+  "calculateExportValue", "collectMeters", "runExportComparison", "renderExportResults",
+  "rateAtSorted", "fetchConsumptionMerged", "splitLongPeriods", "processDiagnosticFile",
+  "tariffCodesInRange", "makeTariffAtDateFn", "downloadDiagnostics", "redactPII",
 ];
 
 const output = `${src}\nmodule.exports = { ${exported.join(", ")} };\n`;

@@ -19,7 +19,7 @@ Nowhere except Octopus, with one optional exception. This is a static HTML file 
 
 The one exception: a results screen button labelled "Email this summary to auth.energy." It opens a pre-filled draft in your own email app — it does not send anything automatically — containing only your postcode's outward code (e.g. "N15", never the full postcode), the comparison period, total kWh, and the three totals (actual, calculated Flexible, calculated Agile). It never includes your API key, account number, MPAN, meter serial, or raw consumption data. You can review or cancel the draft before it ever leaves your device.
 
-By default, your API key, account number, MPAN, and meter serial are only ever held in your browser's memory for the duration of the page being open, and are gone the moment you close or reload the tab. There's an optional "remember these details in this browser" checkbox if you'd rather not re-enter them every time — ticking it saves them to that browser's `localStorage` (not a cookie, never transmitted anywhere) until you clear them via the button that appears once something's saved, or clear your browser's site data for the page.
+You only ever enter your API key — your account number, MPAN, and meter serial are discovered from Octopus each run and are **never stored**. By default the API key is held only in your browser's memory for the duration of the page being open, and is gone the moment you close or reload the tab. There's an optional "Store my API key on this device" checkbox (off by default) — ticking it saves **only the API key** to that browser's `localStorage` (not a cookie, never transmitted anywhere) until you clear it via the button that appears once something's saved, or clear your browser's site data for the page. Note that any script running on this page's origin could read `localStorage`, so leave it off on shared or public computers.
 
 **You should still treat your API key like a password.** Don't paste it into a copy of this tool you don't trust, don't share a screenshot or recording that shows it, and avoid using the "remember" option on a shared or public computer.
 
@@ -33,18 +33,13 @@ By default, your API key, account number, MPAN, and meter serial are only ever h
 **Option B — just open the file:**
 Download `index.html` and open it directly in Chrome (or any modern browser). No server, no build step, no install.
 
-You'll need four things from your Octopus dashboard at [octopus.energy/dashboard/developer](https://octopus.energy/dashboard/developer/):
-- Your API key
-- Your account number (format `A-AAAA1111`)
-- Your electricity meter's MPAN (13 digits)
-- Your meter's serial number
-
-The app's input screen links to that dashboard page and explains where to find each one.
+You'll need **just one thing** from your Octopus dashboard at [octopus.energy/dashboard/developer](https://octopus.energy/dashboard/developer/): **your API key**. The app discovers your account(s), electricity meter(s), MPAN, serial number(s) and tariffs from Octopus automatically. If you have more than one electricity meter it shows a picker so you can choose which to analyse — **import** meters are compared on Flexible vs Agile, and **export** meters (solar/generation) are valued under the export tariffs (Outgoing Octopus vs Agile Outgoing).
 
 ## Known limitations
 
-- **CORS is unverified.** This tool calls Octopus's API directly from your browser. Whether Octopus's API sends the right CORS headers to permit that from an arbitrary page hasn't been confirmed against the live API at the time of writing. If it doesn't, the app will fail clearly on the very first request with a message explaining that's likely what happened — it won't hang or fail silently. If this turns out to be a real blocker, the fix would be routing requests through a small serverless proxy, which is a different piece of infrastructure than what's here today. Contributions/reports on this welcome.
-- **Standing-charge and unit-rate history depends on Octopus's product codes staying the same.** Flexible Octopus's product code has been stable since November 2022, and Agile Octopus's since October 2024; the app discovers the current live product dynamically rather than hardcoding either, but if Octopus retires a product mid-comparison-window without the older one's rate history remaining queryable, some readings may show as "unmatched" in the results — this is flagged in the output rather than silently miscalculated.
+- **Standing-charge and unit-rate history across retired product codes.** Octopus periodically retires a product code and replaces it (Agile has gone through several versions). The app discovers **all** Flexible/Agile product versions whose availability overlaps your comparison window and merges their rate windows, so a window spanning a product switch is priced correctly. If coverage still has a gap, the affected readings are flagged as "unmatched" rather than silently miscalculated.
+- **Statement history across multiple ledgers.** Octopus exposes statements per ledger but the API can't be paged safely with a single cursor across several paginated ledgers, so on those rare accounts the app stops and flags the history as possibly incomplete rather than risk skipped/duplicated periods.
+- **Statements with more than 100 transactions** return only the first page; the app detects this and does not present that statement's electricity charge or billed kWh as complete.
 - **Gaps in your smart-meter data reduce accuracy.** Missing half-hour readings contribute zero consumption for that slot rather than an estimate, so a billing period with reading gaps will show as understated. The gap report tells you exactly which dates are affected.
 - **This is not financial advice and not affiliated with Octopus Energy.** It's a calculator built from Octopus's own public API. Always check your actual bills and Octopus's own tariff comparison tools before making a switching decision.
 
@@ -56,7 +51,7 @@ The calculation logic (gap detection, rate-window matching, period costing) is c
 npm test
 ```
 
-This regenerates the test module from `index.html` and runs five suites: core calculation logic (including region detection against a real account response shape, and the defensive guard against implausible date ranges), a mocked end-to-end pipeline run, orchestration regression tests covering both the original billing-period-date-clamping bug and a since-fixed bug where billing history older than a fixed lookback window was incorrectly clamped, a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny, and the "remember my details" localStorage save/load/clear behaviour.
+This regenerates the test module from `index.html` and runs the suites under `/tests`: core calculation logic, a mocked end-to-end pipeline run, billing-period clamping regressions, a realistic-case to-the-penny sanity check, the API-key `localStorage` save/load/clear behaviour, billed-vs-observed validation (statement charge/credit/net split, dual-fuel electricity isolation, tariff classification, HTML escaping, diagnostics download), the historical-product-merge and export-tariff features, and the beta-review hardening (per-ledger statement pagination safety, the incomplete-transaction guard, the no-confident-periods headline suppression, split-period handling, multi-serial consumption merge, and a rate-lookup performance smoke test).
 
 ## Contributing
 

@@ -174,7 +174,7 @@ const { runComparison, validateInputs } = require('./app_module.js');
 
   const flexMatch = content.match(/Flexible \(calculated\)<\/div>\s*<div class="value">£([\d.]+)</);
   const agileMatch = content.match(/Agile \(calculated\)<\/div>\s*<div class="value">£([\d.]+)</);
-  const actualMatch = content.match(/Actual charged<\/div>\s*<div class="value">£([\d.]+)</);
+  const actualMatch = content.match(/Statement charge<\/div>\s*<div class="value">£([\d.]+)</);
 
   assert.ok(flexMatch, "should find a Flexible total in the rendered output");
   assert.ok(agileMatch, "should find an Agile total in the rendered output");

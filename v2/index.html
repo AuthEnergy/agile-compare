@@ -688,7 +688,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc1</span>
+      <span class="brand-version">v0.2.0-rc2</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -977,7 +977,7 @@ async function obtainKrakenToken(apiKey) {
     mutation ObtainKrakenToken($input: ObtainJSONWebTokenInput!) {
       obtainKrakenToken(input: $input) { token }
     }`;
-  const data = await graphqlRequest(query, { input: { apiKey: apiKey } });
+  const data = await graphqlRequest(query, { input: { APIKey: apiKey } });
   return data.obtainKrakenToken.token;
 }
 
@@ -1241,10 +1241,19 @@ async function fetchAndPickMeter() {
     const accountNumbers = (gqlData.viewer.accounts || []).map(a => a.number);
     if (accountNumbers.length === 0) throw new Error("No accounts found for this API key.");
 
-    // Fetch full account data and collect all import electricity meters
+    // Fetch full account data for each account number.
+    // Skip any that return 403 — an API key can be associated with multiple
+    // accounts (e.g. a personal account and a business account) but may only
+    // have REST access to some of them.
     let allMeters = [];
     for (const number of accountNumbers) {
-      const acctData = await fetchAccount(number);
+      let acctData;
+      try {
+        acctData = await fetchAccount(number);
+      } catch (e) {
+        if (e instanceof OctopusApiError && e.status === 403) continue;
+        throw e;
+      }
       acctData.number = number;
       allMeters = allMeters.concat(collectMeters(acctData).map(m => ({ ...m, _acctData: acctData })));
     }
@@ -1584,7 +1593,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc1 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc2 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",

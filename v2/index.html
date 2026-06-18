@@ -977,7 +977,7 @@ async function obtainKrakenToken(apiKey) {
     mutation ObtainKrakenToken($input: ObtainJSONWebTokenInput!) {
       obtainKrakenToken(input: $input) { token }
     }`;
-  const data = await graphqlRequest(query, { input: { APIKey: apiKey } });
+  const data = await graphqlRequest(query, { input: { apiKey: apiKey } });
   return data.obtainKrakenToken.token;
 }
 
@@ -1227,29 +1227,31 @@ function collectMeters(accountData) {
 async function fetchAndPickMeter() {
   if (!validateInputs()) return;
 
-  // Show a brief loading state on the button
   const btn = document.getElementById("btn-submit");
   btn.disabled = true;
   btn.textContent = "Looking up your account…";
 
   try {
-    // Fetch accounts linked to this API key
-    const accountsResp = await restGetRaw(`${REST_BASE}/accounts/`);
-    const accounts = accountsResp.results || [];
-    if (accounts.length === 0) throw new Error("No accounts found for this API key.");
+    // Get account numbers via GraphQL viewer query — the REST /accounts/ list
+    // endpoint requires elevated permissions not available to customer API keys,
+    // but the GraphQL viewer approach works for all accounts.
+    const token = await obtainKrakenToken(state.apiKey);
+    const query = `{ viewer { accounts { number } } }`;
+    const gqlData = await graphqlRequest(query, {}, token);
+    const accountNumbers = (gqlData.viewer.accounts || []).map(a => a.number);
+    if (accountNumbers.length === 0) throw new Error("No accounts found for this API key.");
 
-    // Collect all import electricity meters across all accounts
+    // Fetch full account data and collect all import electricity meters
     let allMeters = [];
-    for (const acct of accounts) {
-      const acctData = await fetchAccount(acct.number);
-      acctData.number = acct.number;
+    for (const number of accountNumbers) {
+      const acctData = await fetchAccount(number);
+      acctData.number = number;
       allMeters = allMeters.concat(collectMeters(acctData).map(m => ({ ...m, _acctData: acctData })));
     }
 
     if (allMeters.length === 0) throw new Error("No electricity import meters found on this account.");
 
     if (allMeters.length === 1) {
-      // Only one meter — proceed directly
       const m = allMeters[0];
       state.accountNumber = m.accountNumber;
       state.mpan = m.mpan;
@@ -1258,7 +1260,6 @@ async function fetchAndPickMeter() {
       saveOrClearCredentials();
       runComparison();
     } else {
-      // Multiple meters — show picker
       showMeterPicker(allMeters);
     }
   } catch (err) {
@@ -1868,7 +1869,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
       shareLines.push(`Calculated Agile was ${Math.abs(vsActualPct).toFixed(1)}% ${vsActualPct <= 0 ? "below" : "above"} my actual charges.`);
     }
     shareLines.push(``);
-    shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare/v2  #DynamicTariffCheck`);
   } else if (hasActual) {
     shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${totalKwh.toFixed(0)} kWh):`);
     shareLines.push(``);
@@ -1878,7 +1879,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
       shareLines.push(`${totalFlex < totalAgile ? "Flexible" : "Agile"} would have been ${cheaperPct.toFixed(1)}% cheaper over this period.`);
     }
     shareLines.push(``);
-    shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare/v2  #DynamicTariffCheck`);
   }
 
   const shareText = shareLines.join("\n");

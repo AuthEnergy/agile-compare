@@ -708,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc7</span>
+      <span class="brand-version">v0.2.0-rc8</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1619,7 +1619,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc7 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc8 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1673,6 +1673,39 @@ async function runComparison() {
     showScreen("screen-results");
 
   } catch (err) {
+    // Build a failure diagnostic — captures everything known at point of failure
+    // without any API key, for sharing with support to diagnose issues.
+    state.failureDiag = {
+      generatedAt: new Date().toISOString(),
+      appVersion: `agile-compare v0.2.0-rc8 / github.com/AuthEnergy/agile-compare`,
+      error: {
+        message: err.message,
+        type: err instanceof OctopusApiError ? "OctopusApiError" : err.constructor.name,
+        status: err.status || null,
+        corsLikely: err.corsLikely || false,
+      },
+      account: {
+        number: state.accountNumber || null,
+        mpan: state.mpan || null,
+        serialUsed: state.serial || null,
+        allSerials: state.allSerials || [],
+        postcodeArea: state.accountData ? getPostcodeAreaForMpan(state.accountData, state.mpan) : null,
+        agreements: state.accountData ? (getAgreementsForMpan(state.accountData, state.mpan) || []).map(a => ({
+          tariffCode: a.tariff_code,
+          validFrom: a.valid_from,
+          validTo: a.valid_to || null,
+        })) : [],
+        metersOnAccount: state.accountData ? (state.accountData.properties || []).flatMap(p =>
+          (p.electricity_meter_points || []).map(em => ({
+            mpan: em.mpan,
+            serials: (em.meters || []).map(m => m.serial_number),
+            isExport: em.is_export,
+            currentTariff: (em.agreements || []).find(a => !a.valid_to)?.tariff_code || null,
+          }))
+        ) : [],
+      },
+      progressLog: Array.from(document.querySelectorAll("#progress-log .line")).map(el => el.textContent),
+    };
     renderError(err);
     showScreen("screen-results");
   }
@@ -1692,7 +1725,20 @@ function renderError(err) {
       <p>${err.message}</p>
       ${extra}
     </div>
+    <div class="actions-block" style="margin-top:16px;">
+      <div class="action-row">
+        <button class="secondary" id="btn-failure-diag">Download failure diagnostic</button>
+        <span class="action-desc">Saves a JSON file with account structure, meter details, and the error — no API key included. Send to hello@auth.energy to help diagnose the problem.</span>
+      </div>
+      <div class="action-row">
+        <button class="secondary" id="btn-restart-from-error">Try again</button>
+        <span class="action-desc">Return to the input screen.</span>
+      </div>
+    </div>
   `;
+
+  document.getElementById("btn-failure-diag").addEventListener("click", downloadFailureDiag);
+  document.getElementById("btn-restart-from-error").addEventListener("click", () => showScreen("screen-input"));
 }
 
 function splitLongPeriods(rawPeriods) {
@@ -2174,6 +2220,52 @@ function processDiagnosticFile(file) {
     }
   };
   reader.readAsText(file);
+}
+
+function downloadFailureDiag() {
+  const d = state.failureDiag;
+  if (!d) return;
+
+  const lines = [
+    `Octopus Tariff Check — failure diagnostic`,
+    `Generated: ${d.generatedAt}`,
+    `Version: ${d.appVersion}`,
+    ``,
+    `ERROR: ${d.error.message}`,
+    d.error.status ? `HTTP status: ${d.error.status}` : "",
+    d.error.corsLikely ? `(likely CORS block)` : "",
+    ``,
+    `ACCOUNT:`,
+    `  Number:      ${d.account.number || "not yet fetched"}`,
+    `  MPAN:        ${d.account.mpan || "not yet fetched"}`,
+    `  Serial used: ${d.account.serialUsed || "not yet fetched"}`,
+    `  All serials: ${(d.account.allSerials || []).join(", ") || "none"}`,
+    `  Postcode area: ${d.account.postcodeArea || "not available"}`,
+    ``,
+    `AGREEMENTS:`,
+    ...(d.account.agreements.length
+      ? d.account.agreements.map(a => `  ${a.tariffCode}  from ${(a.validFrom || "").slice(0,10)}${a.validTo ? ` to ${a.validTo.slice(0,10)}` : " (current)"}`)
+      : ["  none fetched"]),
+    ``,
+    `ALL METERS ON ACCOUNT:`,
+    ...(d.account.metersOnAccount.length
+      ? d.account.metersOnAccount.map(m => `  MPAN ${m.mpan}  serials=[${m.serials.join(", ")}]  export=${m.isExport}  tariff=${m.currentTariff || "unknown"}`)
+      : ["  none fetched"]),
+    ``,
+    `PROGRESS LOG:`,
+    ...(d.progressLog.length ? d.progressLog.map(l => `  ${l}`) : ["  (no progress logged)"]),
+  ].filter(l => l !== undefined);
+
+  const output = JSON.stringify({ _summary: lines.join("\n"), ...d }, null, 2);
+  const blob = new Blob([output], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `octopus-tariff-failure-${d.generatedAt.slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function downloadDiagnostics() {

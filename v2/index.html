@@ -708,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc4</span>
+      <span class="brand-version">v0.2.0-rc5</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1436,41 +1436,7 @@ async function runComparison() {
       .filter(p => p.end > periodFrom && p.start < periodTo && p.end > p.start)
       .sort((a, b) => a.start - b.start);
 
-    // Split any period longer than 35 days into calendar months.
-    // The actual charge is distributed proportionally by number of days
-    // in each sub-period. Flag split periods so the table labels them
-    // as "estimated" rather than implying they're real monthly bills.
-    const billingPeriods = [];
-    for (const p of rawBillingPeriods) {
-      const spanDays = (p.end - p.start) / (24 * 60 * 60 * 1000);
-      if (spanDays <= 35) {
-        billingPeriods.push({ ...p, isSplit: false });
-        continue;
-      }
-      // Split into calendar months
-      const totalDays = spanDays;
-      let cursor = new Date(p.start);
-      while (cursor < p.end) {
-        const subStart = new Date(cursor);
-        // End of this sub-period: first of next month, clamped to p.end
-        const nextMonth = new Date(cursor);
-        nextMonth.setUTCDate(1);
-        nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
-        nextMonth.setUTCHours(0, 0, 0, 0);
-        const subEnd = nextMonth < p.end ? nextMonth : new Date(p.end);
-        const subDays = (subEnd - subStart) / (24 * 60 * 60 * 1000);
-        const proportion = subDays / totalDays;
-        billingPeriods.push({
-          displayStart: subStart,
-          displayEnd: subEnd,
-          start: subStart,
-          end: subEnd,
-          actualChargePence: p.actualChargePence != null ? Math.round(p.actualChargePence * proportion) : null,
-          isSplit: true,
-        });
-        cursor = subEnd;
-      }
-    }
+    const billingPeriods = splitLongPeriods(rawBillingPeriods);
 
     if (billingPeriods.length === 0) {
       throw new Error("No statements found covering this window. Your account may not have statement history available via the API.");
@@ -1615,7 +1581,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc4 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc5 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1689,6 +1655,39 @@ function renderError(err) {
       ${extra}
     </div>
   `;
+}
+
+function splitLongPeriods(rawPeriods) {
+  const result = [];
+  for (const p of rawPeriods) {
+    const spanDays = (p.end - p.start) / (24 * 60 * 60 * 1000);
+    if (spanDays <= 35) {
+      result.push({ ...p, isSplit: false });
+      continue;
+    }
+    const totalDays = spanDays;
+    let cursor = new Date(p.start);
+    while (cursor < p.end) {
+      const subStart = new Date(cursor);
+      const nextMonth = new Date(cursor);
+      nextMonth.setUTCDate(1);
+      nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+      nextMonth.setUTCHours(0, 0, 0, 0);
+      const subEnd = nextMonth < p.end ? nextMonth : new Date(p.end);
+      const subDays = (subEnd - subStart) / (24 * 60 * 60 * 1000);
+      const proportion = subDays / totalDays;
+      result.push({
+        displayStart: subStart,
+        displayEnd: subEnd,
+        start: subStart,
+        end: subEnd,
+        actualChargePence: p.actualChargePence != null ? Math.round(p.actualChargePence * proportion) : null,
+        isSplit: true,
+      });
+      cursor = subEnd;
+    }
+  }
+  return result;
 }
 
 function makeTariffAtDateFn(agreements) {
@@ -2042,48 +2041,69 @@ function processDiagnosticFile(file) {
       }));
       const currentAgreement = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
 
-      // Reconstruct billing periods and results
-      // Use stored calculated values since raw readings + rate windows are also
-      // present and could be re-calculated, but using stored values is faster
-      // and exactly reproduces what the customer saw.
-      const results = d.billingPeriods.map(p => {
+      // Reconstruct billing periods from the diagnostic, applying the same
+      // monthly splitting logic used in the live path so long periods
+      // (like a single 8-month fixed-tariff statement) are broken up.
+      const rawDiagPeriods = d.billingPeriods.map(p => {
         const displayStart = new Date(p.displayPeriod.split(" to ")[0]);
         const displayEnd = new Date(p.displayPeriod.split(" to ")[1]);
         const calcStart = new Date(p.calculationPeriod.split(" to ")[0]);
         const calcEnd = new Date(p.calculationPeriod.split(" to ")[1]);
-
-        const period = {
+        return {
           displayStart,
           displayEnd,
           start: calcStart,
           end: calcEnd,
           actualChargePence: p.actualPence !== "n/a" ? parseInt(p.actualPence) : null,
-          isSplit: p.displayPeriod !== p.calculationPeriod && (displayEnd - displayStart) < 40 * 24 * 60 * 60 * 1000,
+          // Carry through the original flex/agile stored values for use
+          // after splitting (proportioned in splitLongPeriods if needed).
+          _flex: p,
+          _agile: p,
+          isSplit: false,
         };
+      });
+      const splitDiagPeriods = splitLongPeriods(rawDiagPeriods);
 
-        const flex = {
-          kwh: parseFloat(p.kwh),
-          energyCostPence: parseInt(p.flexEnergyPence) || 0,
-          standingChargePence: parseInt(p.flexStandingPence) || 0,
-          totalPence: parseInt(p.flexTotalPence) || 0,
-          unmatchedReadings: p.flexUnmatched || 0,
-        };
+      // For split sub-periods, re-calculate flex/agile costs from the raw
+      // readings and rate windows (which are in the file) so each month
+      // gets accurate calculated costs rather than a proportional split.
+      const results = splitDiagPeriods.map(p => {
+        let flex, agile;
 
-        const agile = p.agileTotalPence !== "n/a" ? {
-          kwh: parseFloat(p.kwh),
-          energyCostPence: parseInt(p.agileEnergyPence) || 0,
-          standingChargePence: parseInt(p.agileStandingPence) || 0,
-          totalPence: parseInt(p.agileTotalPence) || 0,
-          unmatchedReadings: p.agileUnmatched || 0,
-        } : null;
+        if (p.isSplit && readings.length > 0) {
+          // Re-calculate from raw data for accuracy
+          flex = calculateCost(readings, p.start, p.end, flexUnitRates, flexStandingCharges);
+          agile = agileAvailable
+            ? calculateCost(readings, p.start, p.end, agileUnitRates, agileStandingCharges)
+            : null;
+        } else {
+          // Use stored values directly (single non-split period)
+          const orig = d.billingPeriods.find(bp =>
+            new Date(bp.displayPeriod.split(" to ")[0]).getTime() === p.displayStart.getTime()
+          ) || d.billingPeriods[0];
+          flex = {
+            kwh: parseFloat(orig.kwh),
+            energyCostPence: parseInt(orig.flexEnergyPence) || 0,
+            standingChargePence: parseInt(orig.flexStandingPence) || 0,
+            totalPence: parseInt(orig.flexTotalPence) || 0,
+            unmatchedReadings: orig.flexUnmatched || 0,
+          };
+          agile = orig.agileTotalPence !== "n/a" ? {
+            kwh: parseFloat(orig.kwh),
+            energyCostPence: parseInt(orig.agileEnergyPence) || 0,
+            standingChargePence: parseInt(orig.agileStandingPence) || 0,
+            totalPence: parseInt(orig.agileTotalPence) || 0,
+            unmatchedReadings: orig.agileUnmatched || 0,
+          } : null;
+        }
 
         return {
-          period,
+          period: p,
           flex,
           agile,
           wasClamped: false,
-          suspectActual: p.suspectActual || false,
-          confident: !p.suspectActual && (p.flexUnmatched || 0) === 0 && (p.agileUnmatched || 0) === 0,
+          suspectActual: false,
+          confident: flex.unmatchedReadings === 0 && (!agile || agile.unmatchedReadings === 0),
         };
       });
 

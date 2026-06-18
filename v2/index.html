@@ -708,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc6</span>
+      <span class="brand-version">v0.2.0-rc7</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1170,7 +1170,8 @@ const state = {
   accountNumber: "",
   mpan: "",
   serial: "",
-  accountData: null,  // cached after auto-fetch, reused by runComparison
+  allSerials: [],   // all serials for this MPAN, newest first — for meter exchange fallback
+  accountData: null,
   diagnostics: null,
 };
 
@@ -1231,8 +1232,13 @@ function collectMeters(accountData) {
       .filter(Boolean).join(", ");
     for (const em of prop.electricity_meter_points || []) {
       if (em.is_export) continue;
-      const serial = (em.meters && em.meters[0]) ? em.meters[0].serial_number : null;
-      if (!serial) continue;
+      const serials = (em.meters || []).map(m => m.serial_number).filter(Boolean);
+      if (serials.length === 0) continue;
+      // Use the last serial (most recent meter after any exchanges).
+      // The consumption fetch will try this first; if it returns nothing
+      // it falls through to the error handling which gives a clear message.
+      const serial = serials[serials.length - 1];
+      const allSerials = [...serials].reverse(); // newest first for fallback
       const agreements = em.agreements || [];
       // Detect export meters from tariff codes when is_export is not set —
       // reliable because Octopus consistently uses EXPORT/OUTGOING/SEG in
@@ -1243,6 +1249,7 @@ function collectMeters(accountData) {
         accountNumber: accountData.number,
         mpan: em.mpan,
         serial,
+        allSerials,
         address: addr,
         tariffCode: current ? current.tariff_code : "unknown",
         gsp: em.gsp || null,
@@ -1293,6 +1300,7 @@ async function fetchAndPickMeter() {
       state.accountNumber = m.accountNumber;
       state.mpan = m.mpan;
       state.serial = m.serial;
+      state.allSerials = m.allSerials || [m.serial];
       state.accountData = m._acctData;
       saveOrClearCredentials();
       runComparison();
@@ -1326,6 +1334,7 @@ function showMeterPicker(meters) {
       state.accountNumber = m.accountNumber;
       state.mpan = m.mpan;
       state.serial = m.serial;
+      state.allSerials = m.allSerials || [m.serial];
       state.accountData = m._acctData;
       saveOrClearCredentials();
       runComparison();
@@ -1407,14 +1416,28 @@ async function runComparison() {
 
     // --- Step 4: consumption ---
     line = log("Fetching half-hourly consumption (this is the slow part)...", "active");
-    const readings = await fetchConsumption(state.mpan, state.serial, periodFrom, periodTo);
+    let readings = [];
+    let usedSerial = state.serial;
+    const serialsToTry = state.allSerials && state.allSerials.length > 0
+      ? state.allSerials
+      : [state.serial];
+    for (const trySerial of serialsToTry) {
+      readings = await fetchConsumption(state.mpan, trySerial, periodFrom, periodTo);
+      if (readings.length > 0) { usedSerial = trySerial; break; }
+    }
+    if (usedSerial !== state.serial) {
+      log(`Note: consumption data found under previous meter serial ${usedSerial}`, "ok");
+      state.serial = usedSerial;
+    }
     if (readings.length === 0) {
       // No data in the comparison window — check if any data exists at all
       // for this meter, to give a more specific error message.
-      const testPath = `/electricity-meter-points/${state.mpan}/meters/${state.serial}/consumption/`;
+      // All serials tried, none had data in the window — check if any data
+      // exists at all to give a more specific error.
+      const testPath = `/electricity-meter-points/${state.mpan}/meters/${usedSerial}/consumption/`;
       const testData = await restGetAllPages(testPath, { page_size: 1 });
       if (testData.length === 0) {
-        throw new Error(`No half-hourly consumption data found for meter ${state.serial} (MPAN ${state.mpan}). This meter may not be a smart meter, or data may not have started flowing yet.`);
+        throw new Error(`No half-hourly consumption data found for MPAN ${state.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`);
       } else {
         const earliest = testData[0].interval_start;
         throw new Error(`No consumption data in the comparison window (${fmtDate(periodFrom)} to ${fmtDate(periodTo)}). This meter has data from ${earliest.slice(0,10)} — the comparison window may predate your smart meter readings.`);
@@ -1596,7 +1619,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc6 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc7 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",

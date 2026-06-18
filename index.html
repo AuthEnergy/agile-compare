@@ -1697,7 +1697,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
       shareLines.push(`Flexible would have been ${fmtMoney(Math.abs(saved))} cheaper than Agile over this period.`);
     }
     shareLines.push(``);
-    shareLines.push(`Try it: authenergy.github.io/agile-compare`);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);
   } else if (hasActual) {
     shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${totalKwh.toFixed(0)} kWh):`);
     shareLines.push(``);
@@ -1710,13 +1710,13 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
       shareLines.push(`${totalFlex < totalAgile ? "Flexible" : "Agile"} would have been ${fmtMoney(cheaperAmt)} cheaper over this period.`);
     }
     shareLines.push(``);
-    shareLines.push(`Try it: authenergy.github.io/agile-compare`);
+    shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);
   }
 
   const shareText = shareLines.join("\n");
   const sharePanelHtml = shareLines.length > 0 ? `
     <div class="share-panel" id="share-panel">
-      <div class="share-label">Share your result on LinkedIn</div>
+      <div class="share-label">Share on social media</div>
       <div class="share-text" id="share-text">${shareText.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div>
       <button class="copy-btn" id="btn-copy-share">Copy to clipboard</button>
     </div>

@@ -614,6 +614,26 @@
     margin-top: 28px;
   }
 
+  .upload-diag-link {
+    color: var(--ink-dim);
+    font-size: 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--hairline-strong);
+    text-decoration: none;
+  }
+  .upload-diag-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+  .diag-replay-banner {
+    border: 1px solid var(--hairline-strong);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    font-size: 12.5px;
+    color: var(--ink-dim);
+    line-height: 1.5;
+  }
+  .diag-replay-banner strong { color: var(--ink); }
+
   ::-webkit-scrollbar { width: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 4px; }
@@ -688,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc2</span>
+      <span class="brand-version">v0.2.0-rc4</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -725,6 +745,8 @@
     </div>
 
     <p class="footnote">Fetches your billing history and half-hourly consumption directly from Octopus, then calculates what you'd have paid on Flexible and Agile using real historical rates &mdash; compared against what you were actually charged.</p>
+    <p class="footnote"><span class="upload-diag-link" id="upload-diag-link">Upload diagnostics</span></p>
+    <input type="file" id="input-diag-file" accept=".json" style="display:none;">
   </div>
 
   <!-- SCREEN 1b: meter picker (only shown if multiple meters on account) -->
@@ -1593,7 +1615,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc2 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc4 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1745,12 +1767,27 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   const summaryFlex = useConsistentOnly ? consistentFlex : totalFlex;
   const summaryAgile = useConsistentOnly ? consistentAgileCalc : totalAgile;
   const agileKwh = useConsistentOnly ? consistentKwh : totalKwh;
+
+  // Whether all periods in the window predate the current tariff
+  const allPreSwitch = currentTariff && results.length > 0 && consistentResults.length === 0
+    && results.every(r => {
+      const mid = new Date((r.period.start.getTime() + r.period.end.getTime()) / 2);
+      return tariffAtDate(mid) !== currentTariff;
+    });
+
   const summaryLabel = useConsistentOnly
     ? `Current tariff, complete data (${consistentResults.length} of ${results.length} periods)`
-    : "Full period";
+    : allPreSwitch
+      ? `All periods on previous tariff — full window shown`
+      : "Full period";
+
+  // Show a notice when all comparison data predates the current tariff
+  const preSwitchNotice = allPreSwitch ? `
+    <div class="verdict">All billing periods in this window were on a previous tariff. The table below shows the full comparison — what you were actually charged vs what Flexible and Agile would have cost. ${currentAgreement ? `You're currently on <strong>${currentAgreement.tariff_code}</strong>.` : ""}</div>
+  ` : "";
 
   let verdictHtml = "";
-  if (hasActual && summaryAgile !== null) {
+  if (!allPreSwitch && hasActual && summaryAgile !== null) {
     const cheaper = summaryFlex < summaryAgile ? "Flexible" : "Agile";
     const cheaperPence = Math.abs(summaryFlex - summaryAgile);
     const scopeNote = useConsistentOnly
@@ -1904,6 +1941,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     ${gapHtml}
     ${rateCoverageHtml}
     ${summaryHtml}
+    ${preSwitchNotice}
     ${verdictHtml}
     ${sharePanelHtml}
     ${tableHtml}
@@ -1946,6 +1984,138 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
       });
     });
   }
+}
+
+function processDiagnosticFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    let d;
+    try {
+      d = JSON.parse(e.target.result);
+    } catch (err) {
+      alert("Could not parse this file as JSON. Make sure you're uploading a diagnostic file downloaded from this tool.");
+      return;
+    }
+
+    // Validate it looks like one of our diagnostic files
+    if (!d.billingPeriods || !d.readings || !d.rateWindows) {
+      alert("This doesn't look like an Octopus Tariff Check diagnostic file. Please upload a file downloaded using the 'Download diagnostics' button on the results screen.");
+      return;
+    }
+
+    try {
+      // Reconstruct gapInfo from the stored gap ranges
+      const gapInfo = {
+        gaps: (d.gaps.ranges || []).map(r => {
+          const parts = r.split(" to ");
+          return { start: new Date(parts[0]), end: new Date(parts[1]) };
+        }),
+        duplicates: [],
+        earliest: d.readings.earliest ? new Date(d.readings.earliest) : null,
+        latest: d.readings.latest ? new Date(d.readings.latest) : null,
+      };
+
+      // Reconstruct rate windows
+      const toWindows = arr => (arr || []).map(w => ({
+        validFrom: new Date(w.from),
+        validTo: w.to ? new Date(w.to) : null,
+        value: w.p,
+      }));
+      const flexUnitRates = toWindows(d.rateWindows.rawFlexUnitRates);
+      const flexStandingCharges = toWindows(d.rateWindows.rawFlexStandingCharges);
+      const agileUnitRates = toWindows(d.rateWindows.rawAgileUnitRates);
+      const agileStandingCharges = toWindows(d.rateWindows.rawAgileStandingCharges);
+      const agileAvailable = agileUnitRates.length > 0;
+
+      // Reconstruct readings
+      const readings = (d.readings.raw || []).map(r => ({
+        start: new Date(r.t),
+        end: new Date(new Date(r.t).getTime() + 30 * 60 * 1000),
+        kwh: r.kwh,
+      }));
+
+      // Reconstruct agreements
+      const agreements = (d.agreements || []).map(a => ({
+        tariff_code: a.tariffCode,
+        valid_from: a.validFrom,
+        valid_to: a.validTo,
+      }));
+      const currentAgreement = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
+
+      // Reconstruct billing periods and results
+      // Use stored calculated values since raw readings + rate windows are also
+      // present and could be re-calculated, but using stored values is faster
+      // and exactly reproduces what the customer saw.
+      const results = d.billingPeriods.map(p => {
+        const displayStart = new Date(p.displayPeriod.split(" to ")[0]);
+        const displayEnd = new Date(p.displayPeriod.split(" to ")[1]);
+        const calcStart = new Date(p.calculationPeriod.split(" to ")[0]);
+        const calcEnd = new Date(p.calculationPeriod.split(" to ")[1]);
+
+        const period = {
+          displayStart,
+          displayEnd,
+          start: calcStart,
+          end: calcEnd,
+          actualChargePence: p.actualPence !== "n/a" ? parseInt(p.actualPence) : null,
+          isSplit: p.displayPeriod !== p.calculationPeriod && (displayEnd - displayStart) < 40 * 24 * 60 * 60 * 1000,
+        };
+
+        const flex = {
+          kwh: parseFloat(p.kwh),
+          energyCostPence: parseInt(p.flexEnergyPence) || 0,
+          standingChargePence: parseInt(p.flexStandingPence) || 0,
+          totalPence: parseInt(p.flexTotalPence) || 0,
+          unmatchedReadings: p.flexUnmatched || 0,
+        };
+
+        const agile = p.agileTotalPence !== "n/a" ? {
+          kwh: parseFloat(p.kwh),
+          energyCostPence: parseInt(p.agileEnergyPence) || 0,
+          standingChargePence: parseInt(p.agileStandingPence) || 0,
+          totalPence: parseInt(p.agileTotalPence) || 0,
+          unmatchedReadings: p.agileUnmatched || 0,
+        } : null;
+
+        return {
+          period,
+          flex,
+          agile,
+          wasClamped: false,
+          suspectActual: p.suspectActual || false,
+          confident: !p.suspectActual && (p.flexUnmatched || 0) === 0 && (p.agileUnmatched || 0) === 0,
+        };
+      });
+
+      const periodFrom = new Date(d.comparisonWindow.from);
+      const periodTo = new Date(d.comparisonWindow.to);
+
+      // Show the results screen
+      showScreen("screen-results");
+      renderResults({
+        results,
+        gapInfo,
+        regionLetter: d.region,
+        currentAgreement,
+        agreements,
+        periodFrom,
+        periodTo,
+        agileAvailable,
+        postcodeArea: d.postcodeArea,
+      });
+
+      // Prepend a banner noting this is a replayed diagnostic
+      const container = document.getElementById("results-content");
+      const banner = document.createElement("div");
+      banner.className = "diag-replay-banner";
+      banner.innerHTML = `<strong>Replayed from diagnostic file</strong> &mdash; ${d.appVersion || "unknown version"}, generated ${new Date(d.generatedAt).toLocaleString()}. No live API calls were made.`;
+      container.insertBefore(banner, container.firstChild);
+
+    } catch (err) {
+      alert("Error processing diagnostic file: " + err.message);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function downloadDiagnostics() {
@@ -2030,6 +2200,16 @@ function downloadDiagnostics() {
 
 document.getElementById("btn-submit").addEventListener("click", () => {
   fetchAndPickMeter();
+});
+
+document.getElementById("upload-diag-link").addEventListener("click", () => {
+  document.getElementById("input-diag-file").click();
+});
+
+document.getElementById("input-diag-file").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) processDiagnosticFile(file);
+  e.target.value = ""; // reset so same file can be re-uploaded
 });
 
 /* ============================================================

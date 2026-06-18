@@ -510,6 +510,24 @@
     border-top: 1px solid var(--hairline);
   }
 
+  .diag-row {
+    margin-top: 14px;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .diag-row button.secondary {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .diag-row .email-results-hint {
+    margin-top: 0;
+  }
+
   .email-results-link {
     display: inline-block;
     color: var(--ink);
@@ -1022,6 +1040,7 @@ const state = {
   accountNumber: "",
   mpan: "",
   serial: "",
+  diagnostics: null, // populated after each successful run
 };
 
 function log(message, cls = "") {
@@ -1264,6 +1283,86 @@ async function runComparison() {
     setActiveLine(line, "Done.", "ok");
     setProgress(100);
 
+    // --- Capture diagnostics (no PII — no address, MPAN, keys, or raw readings) ---
+    const rateWindowSummary = (windows, label) => {
+      if (!windows || windows.length === 0) return `${label}: none fetched`;
+      const sorted = [...windows].sort((a, b) => a.validFrom - b.validFrom);
+      const earliest = sorted[0].validFrom;
+      const latest = sorted[sorted.length - 1].validTo || sorted[sorted.length - 1].validFrom;
+      // Check for gaps between windows
+      const gaps = [];
+      for (let i = 1; i < sorted.length; i++) {
+        const prevEnd = sorted[i-1].validTo;
+        if (prevEnd && sorted[i].validFrom - prevEnd > 60000) { // >1 min gap
+          gaps.push(`${prevEnd.toISOString().slice(0,16)} to ${sorted[i].validFrom.toISOString().slice(0,16)}`);
+        }
+      }
+      return `${label}: ${windows.length} window(s), ${earliest.toISOString().slice(0,10)} to ${latest.toISOString().slice(0,10)}, values ${sorted[0].value}p to ${sorted[sorted.length-1].value}p${gaps.length ? `, GAPS: ${gaps.join('; ')}` : ', no gaps'}`;
+    };
+
+    const totalFlexUnmatched = results.reduce((s, r) => s + r.flex.unmatchedReadings, 0);
+    const totalAgileUnmatched = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.unmatchedReadings : 0), 0) : 0;
+    const totalKwhDiag = results.reduce((s, r) => s + r.flex.kwh, 0);
+    const clampedPeriods = results.filter(r => r.wasClamped).length;
+
+    state.diagnostics = {
+      generatedAt: new Date().toISOString(),
+      appVersion: "agile-compare / github.com/AuthEnergy/agile-compare",
+      comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
+      region: regionLetter,
+      currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
+      postcodeArea: postcodeArea || "not available",
+      readings: {
+        count: readings.length,
+        earliest: gapInfo.earliest ? gapInfo.earliest.toISOString() : "none",
+        latest: gapInfo.latest ? gapInfo.latest.toISOString() : "none",
+        totalKwh: totalKwhDiag.toFixed(2),
+        raw: readings.map(r => ({ t: r.start.toISOString(), kwh: r.kwh })),
+      },
+      gaps: {
+        rangeCount: gapInfo.gaps.length,
+        duplicateCount: gapInfo.duplicates.length,
+        missingSlots: gapInfo.gaps.reduce((s, g) => s + Math.round((g.end - g.start) / (30*60*1000)) + 1, 0),
+        ranges: gapInfo.gaps.map(g => `${g.start.toISOString().slice(0,16)} to ${g.end.toISOString().slice(0,16)}`),
+      },
+      products: {
+        flexProductCode: flexProductCode || "not found",
+        flexTariffCode: flexTariffCode || "not found",
+        agileProductCode: agileAvailable ? (agileProductCode || "not found") : "skipped",
+        agileTariffCode: agileAvailable ? (agileTariffCode || "not found") : "skipped",
+      },
+      rateWindows: {
+        flexUnitRates: rateWindowSummary(flexUnitRates, "Flexible unit rates"),
+        flexStandingCharges: rateWindowSummary(flexStandingCharges, "Flexible standing charges"),
+        agileUnitRates: agileAvailable ? rateWindowSummary(agileUnitRates, "Agile unit rates") : "Agile skipped",
+        agileStandingCharges: agileAvailable ? rateWindowSummary(agileStandingCharges, "Agile standing charges") : "Agile skipped",
+        rawFlexUnitRates: flexUnitRates.map(w => ({ from: w.validFrom.toISOString(), to: w.validTo ? w.validTo.toISOString() : null, p: w.value })),
+        rawFlexStandingCharges: flexStandingCharges.map(w => ({ from: w.validFrom.toISOString(), to: w.validTo ? w.validTo.toISOString() : null, p: w.value })),
+        rawAgileUnitRates: agileAvailable ? agileUnitRates.map(w => ({ from: w.validFrom.toISOString(), to: w.validTo ? w.validTo.toISOString() : null, p: w.value })) : [],
+        rawAgileStandingCharges: agileAvailable ? agileStandingCharges.map(w => ({ from: w.validFrom.toISOString(), to: w.validTo ? w.validTo.toISOString() : null, p: w.value })) : [],
+      },
+      billingPeriods: results.map(r => ({
+        displayPeriod: `${fmtDate(r.period.displayStart)} to ${fmtDate(r.period.displayEnd)}`,
+        calculationPeriod: `${fmtDate(r.period.start)} to ${fmtDate(r.period.end)}`,
+        clamped: r.wasClamped,
+        kwh: r.flex.kwh.toFixed(2),
+        actualPence: r.period.actualChargePence != null ? r.period.actualChargePence.toFixed(0) : "n/a",
+        flexEnergyPence: r.flex.energyCostPence.toFixed(0),
+        flexStandingPence: r.flex.standingChargePence.toFixed(0),
+        flexTotalPence: r.flex.totalPence.toFixed(0),
+        flexUnmatched: r.flex.unmatchedReadings,
+        agileEnergyPence: r.agile ? r.agile.energyCostPence.toFixed(0) : "n/a",
+        agileStandingPence: r.agile ? r.agile.standingChargePence.toFixed(0) : "n/a",
+        agileTotalPence: r.agile ? r.agile.totalPence.toFixed(0) : "n/a",
+        agileUnmatched: r.agile ? r.agile.unmatchedReadings : "n/a",
+      })),
+      totals: {
+        flexUnmatchedReadings: totalFlexUnmatched,
+        agileUnmatchedReadings: totalAgileUnmatched,
+        clampedPeriods,
+      },
+    };
+
     renderResults({ results, gapInfo, regionLetter, currentAgreement, periodFrom, periodTo, agileAvailable, postcodeArea });
     showScreen("screen-results");
 
@@ -1416,7 +1515,73 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, perio
     ${tableHtml}
     <p class="footnote">Region ${regionLetter}. Comparison window ${fmtDate(periodFrom)} to ${fmtDate(periodTo)}. Flexible and Agile costs are calculated using each tariff's real historical rates for the exact dates of each billing period, including correctly splitting any period that spans a rate change. "Actual paid" comes directly from your real statement totals where available.</p>
     ${emailButtonHtml}
+    <div class="diag-row">
+      <button class="secondary" id="btn-diagnostics">Download diagnostics</button>
+      <span class="email-results-hint">Saves a JSON file with all rate windows, half-hourly readings, and per-period calculations. No address, MPAN, or API key included.</span>
+    </div>
   `;
+
+  document.getElementById("btn-diagnostics").addEventListener("click", downloadDiagnostics);
+}
+
+function downloadDiagnostics() {
+  if (!state.diagnostics) return;
+
+  const d = state.diagnostics;
+
+  // Human-readable summary as first key — readable at a glance
+  // before anyone loads the raw arrays into a tool.
+  const summaryLines = [
+    `Octopus Tariff Check — diagnostic export`,
+    `Generated: ${d.generatedAt}`,
+    ``,
+    `COMPARISON WINDOW:  ${d.comparisonWindow.from.slice(0,10)} to ${d.comparisonWindow.to.slice(0,10)}`,
+    `REGION:             ${d.region}`,
+    `POSTCODE AREA:      ${d.postcodeArea}`,
+    `CURRENT TARIFF:     ${d.currentTariffCode}`,
+    ``,
+    `READINGS:           ${d.readings.count} half-hour slots, ${d.readings.totalKwh} kWh total`,
+    `                    ${d.readings.earliest.slice(0,16)} to ${d.readings.latest.slice(0,16)}`,
+    ``,
+    `GAPS:               ${d.gaps.rangeCount} range(s), ${d.gaps.missingSlots} missing slots`,
+    ...(d.gaps.ranges.length ? d.gaps.ranges.map(r => `                    ${r}`) : [`                    none`]),
+    ``,
+    `PRODUCTS:`,
+    `  Flexible:         ${d.products.flexProductCode} / ${d.products.flexTariffCode}`,
+    `  Agile:            ${d.products.agileProductCode} / ${d.products.agileTariffCode}`,
+    ``,
+    `RATE WINDOWS:`,
+    `  ${d.rateWindows.flexUnitRates}`,
+    `  ${d.rateWindows.flexStandingCharges}`,
+    `  ${d.rateWindows.agileUnitRates}`,
+    `  ${d.rateWindows.agileStandingCharges}`,
+    ``,
+    `BILLING PERIODS:`,
+    ...d.billingPeriods.map(p =>
+      `  ${p.displayPeriod}  ${p.kwh} kWh` +
+      `  actual=${p.actualPence}p` +
+      `  flex=${p.flexTotalPence}p (energy=${p.flexEnergyPence} sc=${p.flexStandingPence} unmatched=${p.flexUnmatched})` +
+      `  agile=${p.agileTotalPence}p (energy=${p.agileEnergyPence} sc=${p.agileStandingPence} unmatched=${p.agileUnmatched})` +
+      (p.clamped ? `  [PARTIAL]` : ``)
+    ),
+    ``,
+    `TOTALS:`,
+    `  Flex unmatched readings:  ${d.totals.flexUnmatchedReadings}`,
+    `  Agile unmatched readings: ${d.totals.agileUnmatchedReadings}`,
+    `  Clamped periods:          ${d.totals.clampedPeriods}`,
+  ];
+
+  const output = JSON.stringify({ _summary: summaryLines.join("\n"), ...d }, null, 2);
+
+  const blob = new Blob([output], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `octopus-tariff-diag-${d.generatedAt.slice(0,10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 /* ============================================================

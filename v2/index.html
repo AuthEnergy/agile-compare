@@ -708,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc9</span>
+      <span class="brand-version">v0.2.0-rc10</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1619,7 +1619,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc9 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc10 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1677,7 +1677,7 @@ async function runComparison() {
     // without any API key, for sharing with support to diagnose issues.
     state.failureDiag = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc9 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc10 / github.com/AuthEnergy/agile-compare`,
       error: {
         message: err.message,
         type: err instanceof OctopusApiError ? "OctopusApiError" : err.constructor.name,
@@ -2275,6 +2275,18 @@ function downloadDiagnostics() {
 
   // Human-readable summary as first key — readable at a glance
   // before anyone loads the raw arrays into a tool.
+  // Handle both old (onAgileOnly) and new (consistentOnly) key names
+  const ct = d.totals.consistentOnly || d.totals.onAgileOnly;
+  const ctLines = ct ? [
+    ``,
+    `TOTALS (current tariff periods only — ${ct.periodCount} periods):`,
+    `  Actual charged:           ${ct.actualPence}p (£${(ct.actualPence/100).toFixed(2)})`,
+    `  Flexible calculated:      ${ct.flexTotalPence}p (£${(ct.flexTotalPence/100).toFixed(2)})`,
+    `  Agile calculated:         ${ct.agileTotalPence}p (£${(ct.agileTotalPence/100).toFixed(2)})`,
+    `  Agile vs actual:          ${((ct.agileTotalPence - ct.actualPence)/100).toFixed(2)} (${ct.agileTotalPence <= ct.actualPence ? "calculated lower" : "calculated higher"})`,
+    `  Agile vs flex:            £${((ct.flexTotalPence - ct.agileTotalPence)/100).toFixed(2)} ${ct.agileTotalPence <= ct.flexTotalPence ? "saved on Agile" : "more expensive on Agile"}`,
+  ] : [``, `TOTALS (current tariff periods only): not available`];
+
   const summaryLines = [
     `Octopus Tariff Check — diagnostic export`,
     `Generated: ${d.generatedAt}`,
@@ -2318,13 +2330,7 @@ function downloadDiagnostics() {
     `  Flex unmatched readings:  ${d.totals.allPeriods.flexUnmatchedReadings}`,
     `  Agile unmatched readings: ${d.totals.allPeriods.agileUnmatchedReadings}`,
     `  Clamped periods:          ${d.totals.allPeriods.clampedPeriods}`,
-    ``,
-    `TOTALS (current tariff periods only — ${d.totals.consistentOnly.periodCount} periods):`,
-    `  Actual charged:              ${d.totals.consistentOnly.actualPence}p (£${(d.totals.consistentOnly.actualPence/100).toFixed(2)})`,
-    `  Flexible calculated:      ${d.totals.consistentOnly.flexTotalPence}p (£${(d.totals.consistentOnly.flexTotalPence/100).toFixed(2)})`,
-    `  Agile calculated:         ${d.totals.consistentOnly.agileTotalPence}p (£${(d.totals.consistentOnly.agileTotalPence/100).toFixed(2)})`,
-    `  Agile vs actual:          ${((d.totals.consistentOnly.agileTotalPence - d.totals.consistentOnly.actualPence)/100).toFixed(2)} (${d.totals.consistentOnly.agileTotalPence <= d.totals.consistentOnly.actualPence ? "calculated lower" : "calculated higher"})`,
-    `  Agile vs flex:            £${((d.totals.consistentOnly.flexTotalPence - d.totals.consistentOnly.agileTotalPence)/100).toFixed(2)} ${d.totals.consistentOnly.agileTotalPence <= d.totals.consistentOnly.flexTotalPence ? "saved on Agile" : "more expensive on Agile"}`,
+    ...ctLines,
   ];
 
   const output = JSON.stringify({ _summary: summaryLines.join("\n"), ...d }, null, 2);

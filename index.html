@@ -1685,29 +1685,26 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   if (useAgileOnly && hasActual) {
     const saved = summaryFlex - summaryAgile;
     const vsActual = summaryAgile - summaryActual;
+    const savedPct = (summaryFlex - summaryAgile) / summaryFlex * 100;
+    const vsActualPct = (summaryAgile - summaryActual) / summaryActual * 100;
     shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${agileKwh.toFixed(0)} kWh):`);
     shareLines.push(``);
-    shareLines.push(`  Actual paid (Agile):      ${fmtMoney(summaryActual)}`);
-    shareLines.push(`  Calculated Agile:         ${fmtMoney(summaryAgile)}`);
-    shareLines.push(`  Calculated Flexible:      ${fmtMoney(summaryFlex)}`);
-    shareLines.push(``);
     if (saved > 0) {
-      shareLines.push(`Agile saved me ${fmtMoney(saved)} vs Flexible over this period.`);
+      shareLines.push(`Agile saved me ${savedPct.toFixed(1)}% vs Flexible over this period.`);
+      shareLines.push(`Calculated Agile was ${Math.abs(vsActualPct).toFixed(1)}% ${vsActualPct <= 0 ? "below" : "above"} my actual bills.`);
     } else {
-      shareLines.push(`Flexible would have been ${fmtMoney(Math.abs(saved))} cheaper than Agile over this period.`);
+      shareLines.push(`Flexible would have been ${Math.abs(savedPct).toFixed(1)}% cheaper than Agile over this period.`);
+      shareLines.push(`Calculated Agile was ${Math.abs(vsActualPct).toFixed(1)}% ${vsActualPct <= 0 ? "below" : "above"} my actual bills.`);
     }
     shareLines.push(``);
     shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);
   } else if (hasActual) {
     shareLines.push(`I ran my Octopus usage through the auth.energy tariff checker (${fmtDate(periodFrom)} – ${fmtDate(periodTo)}, ${totalKwh.toFixed(0)} kWh):`);
     shareLines.push(``);
-    shareLines.push(`  Actual paid:              ${fmtMoney(totalActual)}`);
-    shareLines.push(`  Calculated Flexible:      ${fmtMoney(totalFlex)}`);
-    if (totalAgile !== null) shareLines.push(`  Calculated Agile:         ${fmtMoney(totalAgile)}`);
-    shareLines.push(``);
     const cheaperAmt = totalAgile !== null ? Math.abs(totalFlex - totalAgile) : null;
     if (cheaperAmt !== null) {
-      shareLines.push(`${totalFlex < totalAgile ? "Flexible" : "Agile"} would have been ${fmtMoney(cheaperAmt)} cheaper over this period.`);
+      const cheaperPct = cheaperAmt / Math.max(totalFlex, totalAgile) * 100;
+      shareLines.push(`${totalFlex < totalAgile ? "Flexible" : "Agile"} would have been ${cheaperPct.toFixed(1)}% cheaper over this period.`);
     }
     shareLines.push(``);
     shareLines.push(`Try it: authenergy.github.io/agile-compare  #DynamicTariffCheck`);

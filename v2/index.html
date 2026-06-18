@@ -708,7 +708,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.2.0-rc5</span>
+      <span class="brand-version">v0.2.0-rc6</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1223,6 +1223,8 @@ function validateInputs() {
 
 // Collect all non-export electricity meters from the account, across all properties.
 function collectMeters(accountData) {
+  const EXPORT_PATTERNS = /EXPORT|OUTGOING|SEG|GENERATION/i;
+
   const meters = [];
   for (const prop of accountData.properties || []) {
     const addr = [prop.address_line_1, prop.address_line_2, prop.address_line_3, prop.town, prop.postcode]
@@ -1232,6 +1234,10 @@ function collectMeters(accountData) {
       const serial = (em.meters && em.meters[0]) ? em.meters[0].serial_number : null;
       if (!serial) continue;
       const agreements = em.agreements || [];
+      // Detect export meters from tariff codes when is_export is not set —
+      // reliable because Octopus consistently uses EXPORT/OUTGOING/SEG in
+      // export tariff codes. Skip any MPAN where ALL agreements look like export.
+      if (agreements.length > 0 && agreements.every(a => EXPORT_PATTERNS.test(a.tariff_code || ""))) continue;
       const current = agreements.find(a => !a.valid_to) || agreements[agreements.length - 1];
       meters.push({
         accountNumber: accountData.number,
@@ -1403,7 +1409,16 @@ async function runComparison() {
     line = log("Fetching half-hourly consumption (this is the slow part)...", "active");
     const readings = await fetchConsumption(state.mpan, state.serial, periodFrom, periodTo);
     if (readings.length === 0) {
-      throw new Error("No consumption data was returned for this window. Either this meter has no smart-meter data yet, or the MPAN/serial don't match a meter with readings.");
+      // No data in the comparison window — check if any data exists at all
+      // for this meter, to give a more specific error message.
+      const testPath = `/electricity-meter-points/${state.mpan}/meters/${state.serial}/consumption/`;
+      const testData = await restGetAllPages(testPath, { page_size: 1 });
+      if (testData.length === 0) {
+        throw new Error(`No half-hourly consumption data found for meter ${state.serial} (MPAN ${state.mpan}). This meter may not be a smart meter, or data may not have started flowing yet.`);
+      } else {
+        const earliest = testData[0].interval_start;
+        throw new Error(`No consumption data in the comparison window (${fmtDate(periodFrom)} to ${fmtDate(periodTo)}). This meter has data from ${earliest.slice(0,10)} — the comparison window may predate your smart meter readings.`);
+      }
     }
     setActiveLine(line, `Fetched ${readings.length} half-hourly readings.`, "ok");
     setProgress(40);
@@ -1581,7 +1596,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.2.0-rc5 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.2.0-rc6 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",

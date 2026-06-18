@@ -583,7 +583,7 @@
     <div class="brand-text">
       <h1>Octopus Tariff Check</h1>
       <a class="brand-byline" href="https://auth.energy" target="_blank" rel="noopener">by auth.energy</a>
-      <span class="brand-version">v0.1.0</span>
+      <span class="brand-version">v0.1.1</span>
     </div>
   </div>
   <p class="subhead">Pull a year of your real half-hourly usage and find out whether Flexible or Agile would have actually cost you less &mdash; using the real historical rates for each, not today's snapshot. Runs entirely in this browser tab; nothing is sent anywhere except Octopus's own API.</p>
@@ -1234,7 +1234,11 @@ async function runComparison() {
           // a far wider span than intended, hugely inflating the result.
           start: rawStart < periodFrom ? periodFrom : rawStart,
           end: rawEnd > periodTo ? periodTo : rawEnd,
-          actualChargePence: s.totalCharges && s.totalCharges.grossTotal != null ? s.totalCharges.grossTotal : null,
+          actualChargePence: s.totalCharges && s.totalCharges.grossTotal != null
+            ? s.totalCharges.grossTotal - (s.totalCredits && s.totalCredits.grossTotal != null ? s.totalCredits.grossTotal : 0)
+            : null,
+          actualChargesPence: s.totalCharges && s.totalCharges.grossTotal != null ? s.totalCharges.grossTotal : null,
+          actualCreditsPence: s.totalCredits && s.totalCredits.grossTotal != null ? s.totalCredits.grossTotal : null,
         };
       })
       .filter(p => p.end > periodFrom && p.start < periodTo && p.end > p.start)
@@ -1295,7 +1299,21 @@ async function runComparison() {
         ? calculateCost(readings, period.start, period.end, agileUnitRates, agileStandingCharges)
         : null;
       const wasClamped = period.start.getTime() !== period.displayStart.getTime() || period.end.getTime() !== period.displayEnd.getTime();
-      return { period, flex, agile, wasClamped };
+
+      // Detect implausible actual charges — typically a short reconciliation
+      // or admin statement generated at a tariff switch, not a real energy bill.
+      // Strategy: compute an implied unit rate from (actual - standing charge) / kWh.
+      // Anything over 150p/kWh is beyond any real tariff (Agile peak is ~100p,
+      // Flexible peak is ~35p). Suspect periods are excluded from totals and
+      // flagged in the table rather than silently distorting the comparison.
+      let suspectActual = false;
+      if (period.actualChargePence != null && flex.kwh > 0) {
+        const standingApprox = agile ? agile.standingChargePence : flex.standingChargePence;
+        const impliedUnitRate = (period.actualChargePence - standingApprox) / flex.kwh;
+        if (impliedUnitRate > 150 || impliedUnitRate < -20) suspectActual = true;
+      }
+
+      return { period, flex, agile, wasClamped, suspectActual };
     });
     setActiveLine(line, "Done.", "ok");
     setProgress(100);
@@ -1338,6 +1356,9 @@ async function runComparison() {
         clamped: r.wasClamped,
         kwh: r.flex.kwh.toFixed(2),
         actualPence: r.period.actualChargePence != null ? r.period.actualChargePence.toFixed(0) : "n/a",
+        actualChargesPence: r.period.actualChargesPence != null ? r.period.actualChargesPence.toFixed(0) : "n/a",
+        actualCreditsPence: r.period.actualCreditsPence != null ? r.period.actualCreditsPence.toFixed(0) : "n/a",
+        suspectActual: r.suspectActual || false,
         flexEnergyPence: r.flex.energyCostPence.toFixed(0),
         flexStandingPence: r.flex.standingChargePence.toFixed(0),
         flexTotalPence: r.flex.totalPence.toFixed(0),
@@ -1360,7 +1381,7 @@ async function runComparison() {
 
     state.diagnostics = {
       generatedAt: new Date().toISOString(),
-      appVersion: `agile-compare v0.1.0 / github.com/AuthEnergy/agile-compare`,
+      appVersion: `agile-compare v0.1.1 / github.com/AuthEnergy/agile-compare`,
       comparisonWindow: { from: periodFrom.toISOString(), to: periodTo.toISOString() },
       region: regionLetter,
       currentTariffCode: currentAgreement ? currentAgreement.tariff_code : "unknown",
@@ -1456,7 +1477,7 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
   // on a different tariff than the one being compared.
   const tariffAtDate = makeTariffAtDateFn(agreements);
 
-  const totalActual = results.reduce((s, r) => s + (r.flex.kwh > 0 && r.period.actualChargePence != null ? r.period.actualChargePence : 0), 0);
+  const totalActual = results.reduce((s, r) => s + (r.flex.kwh > 0 && r.period.actualChargePence != null && !r.suspectActual ? r.period.actualChargePence : 0), 0);
   const totalFlex = results.reduce((s, r) => s + r.flex.totalPence, 0);
   const totalAgile = agileAvailable ? results.reduce((s, r) => s + (r.agile ? r.agile.totalPence : 0), 0) : null;
   const totalKwh = results.reduce((s, r) => s + r.flex.kwh, 0);
@@ -1469,12 +1490,12 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     return tariffAtDate(mid) && tariffAtDate(mid).includes("AGILE");
   });
   const hasAgileResults = agileResults.length > 0;
-  const agileActual = agileResults.reduce((s, r) => s + (r.period.actualChargePence != null ? r.period.actualChargePence : 0), 0);
+  const agileActual = agileResults.reduce((s, r) => s + (r.period.actualChargePence != null && !r.suspectActual ? r.period.actualChargePence : 0), 0);
   const agileFlex = agileResults.reduce((s, r) => s + r.flex.totalPence, 0);
   const agileCalc = agileAvailable ? agileResults.reduce((s, r) => s + (r.agile ? r.agile.totalPence : 0), 0) : null;
   const agileKwh = agileResults.reduce((s, r) => s + r.flex.kwh, 0);
 
-  const hasActual = results.some(r => r.period.actualChargePence != null);
+  const hasActual = results.some(r => r.period.actualChargePence != null && !r.suspectActual);
 
   let gapHtml = "";
 
@@ -1540,7 +1561,11 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
 
   const rowsHtml = results.map(r => {
     const periodLabel = fmtDate(r.period.displayStart) + " to " + fmtDate(r.period.displayEnd);
-    const actualStr = r.period.actualChargePence != null ? fmtMoney(r.period.actualChargePence) : "n/a";
+    const actualStr = r.period.actualChargePence != null
+      ? r.suspectActual
+        ? `<span class="suspect-actual">${fmtMoney(r.period.actualChargePence)}</span>`
+        : fmtMoney(r.period.actualChargePence)
+      : "n/a";
     const flexStr = fmtMoney(r.flex.totalPence);
     const agileStr = r.agile ? fmtMoney(r.agile.totalPence) : "n/a";
 
@@ -1564,8 +1589,11 @@ function renderResults({ results, gapInfo, regionLetter, currentAgreement, agree
     const clampedFlag = r.wasClamped
       ? `<span class="stale-flag">partial &mdash; outside fetched data</span>`
       : "";
+    const suspectFlag = r.suspectActual
+      ? `<span class="stale-flag">actual excluded &mdash; likely reconciliation charge</span>`
+      : "";
     return `<tr${!onAgile && actualTariff ? ' class="pre-switch"' : ''}>
-      <td>${periodLabel}${tariffFlag}${staleFlag}${agileStaleFlag}${clampedFlag}</td>
+      <td>${periodLabel}${tariffFlag}${staleFlag}${agileStaleFlag}${clampedFlag}${suspectFlag}</td>
       <td>${r.flex.kwh.toFixed(1)}</td>
       <td>${actualStr}</td>
       <td>${flexStr}</td>
@@ -1675,13 +1703,16 @@ function downloadDiagnostics() {
     `  ${d.rateWindows.agileStandingCharges}`,
     ``,
     `BILLING PERIODS:`,
-    ...d.billingPeriods.map(p =>
-      `  ${p.displayPeriod}  ${p.kwh} kWh  [${p.preSwitch ? `PRE-SWITCH on ${p.actualTariffCode}` : p.actualTariffCode}]` +
-      `  actual=${p.actualPence}p` +
-      `  flex=${p.flexTotalPence}p (energy=${p.flexEnergyPence} sc=${p.flexStandingPence} unmatched=${p.flexUnmatched})` +
-      `  agile=${p.agileTotalPence}p (energy=${p.agileEnergyPence} sc=${p.agileStandingPence} unmatched=${p.agileUnmatched})` +
-      (p.clamped ? `  [PARTIAL]` : ``)
-    ),
+    ...d.billingPeriods.map(p => {
+      const creditNote = p.actualCreditsPence && p.actualCreditsPence !== "n/a" && parseInt(p.actualCreditsPence) > 0
+        ? ` (charges=${p.actualChargesPence}p credits=${p.actualCreditsPence}p)`
+        : "";
+      return `  ${p.displayPeriod}  ${p.kwh} kWh  [${p.preSwitch ? `PRE-SWITCH on ${p.actualTariffCode}` : p.actualTariffCode}]` +
+        `  actual=${p.actualPence}p${creditNote}${p.suspectActual ? " [SUSPECT]" : ""}` +
+        `  flex=${p.flexTotalPence}p (energy=${p.flexEnergyPence} sc=${p.flexStandingPence} unmatched=${p.flexUnmatched})` +
+        `  agile=${p.agileTotalPence}p (energy=${p.agileEnergyPence} sc=${p.agileStandingPence} unmatched=${p.agileUnmatched})` +
+        (p.clamped ? `  [PARTIAL]` : ``);
+    }),
     ``,
     `TOTALS (all periods):`,
     `  Flex unmatched readings:  ${d.totals.allPeriods.flexUnmatchedReadings}`,

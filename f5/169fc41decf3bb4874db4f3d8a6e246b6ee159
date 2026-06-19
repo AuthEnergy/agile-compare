@@ -1,0 +1,21 @@
+.claude/settings.json
+  s_e78c00b5b80333::t_c91665e98d6879 1-30
+.gitignore
+  s_e78c00b5b80333::t_644e7a98724c77 2
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "f5169fc41decf3bb4874db4f3d8a6e246b6ee159",
+  "prompts": {},
+  "sessions": {
+    "s_e78c00b5b80333": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "617bc2b0-81f2-4e13-b0f3-a79ed0339065",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

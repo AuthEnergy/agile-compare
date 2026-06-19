@@ -250,8 +250,16 @@ function reconstruct(
       valid_to: strOrNull(o['validTo']),
     };
   });
-  const currentAgreement =
+  const tariffOverride = d['tariffOverride'] === true;
+  const derivedCurrentAgreement =
     agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const currentAgreement = tariffOverride
+    ? {
+        tariff_code: 'User tariff',
+        valid_from: asStr(cw['from']),
+        valid_to: asStr(cw['to']),
+      }
+    : derivedCurrentAgreement;
   const currentTariffCode = currentAgreement?.tariff_code ?? null;
 
   // Pre-split from stored billing periods, then re-split long ones (an older file
@@ -429,6 +437,7 @@ function reconstruct(
     postcodeArea: strOrNull(d['postcodeArea']),
     currentAgreement,
     agreements,
+    tariffOverride,
     periodFrom: new Date(asStr(cw['from'])),
     periodTo: new Date(asStr(cw['to'])),
     agileAvailable,

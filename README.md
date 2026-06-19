@@ -28,7 +28,7 @@ The live site serves **v3** — a typed, modular rewrite that still builds to on
 
 **Use the hosted version** above, or run your own:
 
-**Option A — GitHub Pages (your own fork).** Pushing to the `v3` branch runs the `deploy v3 to pages` GitHub Action, which builds the app, runs the full test suite, and publishes `v3/index.html` at the root of your Pages site. Enable Pages with **Settings → Pages → Source → GitHub Actions**.
+**Option A — GitHub Pages (your own fork).** Pushing to `main` runs the `deploy v3 to pages` GitHub Action, which installs dependencies, runs the full v3 gate, rebuilds `v3/index.html`, checks the committed build is fresh, and publishes it at the root of your Pages site. Enable Pages with **Settings → Pages → Source → GitHub Actions**.
 
 **Option B — open the built file.** `v3/index.html` is a single self-contained file. Download it and open it directly in any modern browser (`file://`), or serve it from any static host — no server or build step needed to *run* it.
 

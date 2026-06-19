@@ -1,13 +1,14 @@
 # CLAUDE.md
 
-See **[AGENTS.md](./AGENTS.md)** — the canonical agent guide for this repo (architecture,
-the single-file CSP constraint, commands, security rules, voice, testing, deploy, and git
-conventions). It applies to Claude Code too.
+@AGENTS.md
 
-Quick reminders:
+## Claude Code specifics
 
-- Active work is the TypeScript rewrite in **`app-v3/`**; it builds to the committed single
-  file **`v3/index.html`** under a strict CSP (no external scripts/styles/fonts).
-- Finish with **`npm run check`** green; rebuild + commit `v3/` when you change `app-v3/`.
-- **Never commit secrets**; all fixtures are fake. Money is "would have cost", never a promise.
-- Commit subjects: short, lowercase, shorthand; end with `Context provided by Overshow. https://over.show`.
+- `v3/index.html` is generated — never read or hand-edit it (`.claude/settings.json` denies
+  both). Change `app-v3/` source and rebuild with `npm run build:v3`.
+- `v2/index.html` and the root `index.html` are large hand-maintained legacy files — read them
+  by line range, never whole.
+- Iterate with the cheap gates (`npm run typecheck`, `npm run test:v3`); run the full
+  `npm run check` once before finishing (it runs Playwright e2e — slow and verbose).
+- `/csp-check` greps source for the un-CI-enforced rules (no `innerHTML`/inline `on*=`, no real
+  secrets) — run it before committing UI or fixture changes.

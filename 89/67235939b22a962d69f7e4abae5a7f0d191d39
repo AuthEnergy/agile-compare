@@ -1,0 +1,19 @@
+v3/index.html
+  s_9c6c25af327be4::t_61e1e025ececb3 385-391,426,1774,2093,2178,2185-2192,2212,2225,2230,2234,2246,2250,2287,2321,2353,2358,2386,2953,3135,3159-3160,4532-4538,4681
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "8967235939b22a962d69f7e4abae5a7f0d191d39",
+  "prompts": {},
+  "sessions": {
+    "s_9c6c25af327be4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee15f-ffc6-7f60-a153-baebbdc62630",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

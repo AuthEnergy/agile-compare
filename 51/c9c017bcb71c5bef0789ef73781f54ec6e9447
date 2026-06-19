@@ -1,0 +1,27 @@
+app-v3/tests/diagnostics/roundtrip.test.ts
+  s_9c6c25af327be4::t_d7d54961a49c42 72-105
+app-v3/src/types/diagnostics.ts
+  s_9c6c25af327be4::t_3e6db36f6ad5b1 85
+app-v3/src/diagnostics/capture.ts
+  s_9c6c25af327be4::t_e0e5b0572f0d7a 155
+app-v3/src/diagnostics/replay.ts
+  s_9c6c25af327be4::t_007132f0a0e48a 253-254,256-262,440
+app-v3/tests/diagnostics/runFactory.ts
+  s_9c6c25af327be4::t_e4267ade92b3b3 80-83,88-100,126,128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "51c9c017bcb71c5bef0789ef73781f54ec6e9447",
+  "prompts": {},
+  "sessions": {
+    "s_9c6c25af327be4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee15f-ffc6-7f60-a153-baebbdc62630",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

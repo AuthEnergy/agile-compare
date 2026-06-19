@@ -1,0 +1,19 @@
+CLAUDE.md
+  s_e78c00b5b80333::t_33b42780154d7c 3,5,7-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "fd581e883100229ab0242497c74f4279d05ba2a9",
+  "prompts": {},
+  "sessions": {
+    "s_e78c00b5b80333": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "617bc2b0-81f2-4e13-b0f3-a79ed0339065",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+app-v3/tests-e2e/replay.spec.ts
+  s_9c6c25af327be4::t_30a8ec4d1c7a7a 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "38ead866ad1d907d3d05d4b112f57e6996870c55",
+  "prompts": {},
+  "sessions": {
+    "s_9c6c25af327be4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee15f-ffc6-7f60-a153-baebbdc62630",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

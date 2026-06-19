@@ -1,0 +1,14 @@
+[
+  ["E-1R-VAR-22-11-01-C", "flexible", "Flexible"],
+  ["E-1R-AGILE-24-10-01-C", "agile", "Agile"],
+  ["E-1R-OE-FIX-12M-25-04-05-B", "fixed", "Fixed"],
+  ["E-1R-OUTGOING-FIX-12M-19-05-13-C", "export", "Outgoing (export)"],
+  ["E-1R-AGILE-OUTGOING-19-05-13-C", "export", "Outgoing (export)"],
+  ["E-1R-INTELLI-VAR-22-10-14-C", "go", "Intelligent Go"],
+  ["E-1R-GO-VAR-22-10-14-C", "go", "Go"],
+  ["E-1R-COSY-22-12-08-C", "cosy", "Cosy"],
+  ["E-1R-SILVER-FLEX-22-11-25-C", "flexible", "Flexible"],
+  ["E-1R-PREPAY-VAR-18-09-21-C", "flexible", "Flexible"],
+  ["E-1R-SILVER-2017-1-C", "other", "E-1R-SILVER-2017-1-C"],
+  ["", "unknown", "unknown tariff"]
+]

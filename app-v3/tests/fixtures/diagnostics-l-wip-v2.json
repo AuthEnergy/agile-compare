@@ -1,0 +1,158 @@
+{
+  "generatedAt": "2026-01-15T12:00:00.000Z",
+  "appVersion": "agile-compare v0.2.0-rc12 / github.com/AuthEnergy/agile-compare",
+  "comparisonWindow": { "from": "2024-12-01T00:00:00.000Z", "to": "2025-03-01T00:00:00.000Z" },
+  "region": "C",
+  "currentTariffCode": "E-1R-VAR-22-11-01-C",
+  "postcodeArea": "AB",
+  "agreements": [
+    {
+      "tariffCode": "E-1R-VAR-22-11-01-C",
+      "validFrom": "2024-01-01T00:00:00.000Z",
+      "validTo": null
+    }
+  ],
+  "readings": {
+    "count": 3,
+    "earliest": "2025-01-01T00:00:00.000Z",
+    "latest": "2025-02-01T00:00:00.000Z",
+    "totalKwh": "900.00",
+    "raw": [
+      { "t": "2025-01-01T00:00:00.000Z", "kwh": 0.5 },
+      { "t": "2025-01-01T00:30:00.000Z", "kwh": 0.4 },
+      { "t": "2025-02-01T00:00:00.000Z", "kwh": 0.6 }
+    ]
+  },
+  "gaps": {
+    "rangeCount": 0,
+    "duplicateCount": 0,
+    "missingSlots": 0,
+    "ranges": [],
+    "medianProfileKwhEstimate": "0.00",
+    "medianProfilePerGap": []
+  },
+  "products": {
+    "flexProductCode": "VAR-22-11-01",
+    "flexTariffCode": "E-1R-VAR-22-11-01-C",
+    "agileProductCode": "AGILE-24-10-01",
+    "agileTariffCode": "E-1R-AGILE-24-10-01-C"
+  },
+  "rateWindows": {
+    "flexUnitRates": "Flexible unit rates: 1 window(s), 2024-01-01 to open, values 24.5p to 24.5p, no gaps",
+    "flexStandingCharges": "Flexible standing charges: 1 window(s), 2024-01-01 to open, values 50p to 50p, no gaps",
+    "agileUnitRates": "Agile unit rates: 1 window(s), 2024-01-01 to open, values 18.2p to 18.2p, no gaps",
+    "agileStandingCharges": "Agile standing charges: 1 window(s), 2024-01-01 to open, values 50p to 50p, no gaps",
+    "rawFlexUnitRates": [{ "from": "2024-01-01T00:00:00.000Z", "to": null, "p": 24.5 }],
+    "rawFlexStandingCharges": [{ "from": "2024-01-01T00:00:00.000Z", "to": null, "p": 50 }],
+    "rawAgileUnitRates": [{ "from": "2024-01-01T00:00:00.000Z", "to": null, "p": 18.2 }],
+    "rawAgileStandingCharges": [{ "from": "2024-01-01T00:00:00.000Z", "to": null, "p": 50 }]
+  },
+  "billingPeriods": [
+    {
+      "displayPeriod": "2024-12-01 to 2025-01-01",
+      "calculationPeriod": "2024-12-01 to 2025-01-01",
+      "actualTariffCode": "E-1R-FIX-12M-OLD-C",
+      "preSwitch": true,
+      "mixedTariff": false,
+      "clamped": false,
+      "confident": true,
+      "kwh": "290.00",
+      "actualPence": "4800",
+      "suspectActual": false,
+      "flexEnergyPence": "4100",
+      "flexStandingPence": "800",
+      "flexTotalPence": "4900",
+      "flexUnmatched": 0,
+      "flexUnmatchedStanding": 0,
+      "agileEnergyPence": "3500",
+      "agileStandingPence": "800",
+      "agileTotalPence": "4300",
+      "agileUnmatched": 0,
+      "agileUnmatchedStanding": 0
+    },
+    {
+      "displayPeriod": "2025-01-01 to 2025-02-01",
+      "calculationPeriod": "2025-01-01 to 2025-02-01",
+      "actualTariffCode": "E-1R-VAR-22-11-01-C",
+      "preSwitch": false,
+      "mixedTariff": false,
+      "clamped": false,
+      "confident": true,
+      "kwh": "300.00",
+      "actualPence": "5000",
+      "suspectActual": false,
+      "flexEnergyPence": "4200",
+      "flexStandingPence": "800",
+      "flexTotalPence": "5000",
+      "flexUnmatched": 0,
+      "flexUnmatchedStanding": 0,
+      "agileEnergyPence": "3600",
+      "agileStandingPence": "800",
+      "agileTotalPence": "4400",
+      "agileUnmatched": 0,
+      "agileUnmatchedStanding": 0
+    },
+    {
+      "displayPeriod": "2025-02-01 to 2025-03-01",
+      "calculationPeriod": "2025-02-01 to 2025-03-01",
+      "actualTariffCode": "E-1R-VAR-22-11-01-C",
+      "preSwitch": false,
+      "mixedTariff": false,
+      "clamped": false,
+      "confident": true,
+      "kwh": "310.00",
+      "actualPence": "5200",
+      "suspectActual": false,
+      "flexEnergyPence": "4300",
+      "flexStandingPence": "800",
+      "flexTotalPence": "5100",
+      "flexUnmatched": 0,
+      "flexUnmatchedStanding": 0,
+      "agileEnergyPence": "3700",
+      "agileStandingPence": "800",
+      "agileTotalPence": "4500",
+      "agileUnmatched": 0,
+      "agileUnmatchedStanding": 0
+    }
+  ],
+  "statementsIncomplete": false,
+  "statementValidation": [
+    {
+      "period": "2025-01-01 to 2025-02-01",
+      "billedKwh": "300.00",
+      "observedKwh": "300.00",
+      "mismatch": false,
+      "transactionsAvailable": true,
+      "transactionsComplete": true,
+      "electricityChargePence": "5000",
+      "creditsPence": "0",
+      "clamped": false
+    },
+    {
+      "period": "2025-02-01 to 2025-03-01",
+      "billedKwh": "310.00",
+      "observedKwh": "310.00",
+      "mismatch": false,
+      "transactionsAvailable": true,
+      "transactionsComplete": true,
+      "electricityChargePence": "5200",
+      "creditsPence": "0",
+      "clamped": false
+    }
+  ],
+  "totals": {
+    "allPeriods": {
+      "flexUnmatchedReadings": 0,
+      "agileUnmatchedReadings": 0,
+      "flexUnmatchedStandingDays": 0,
+      "agileUnmatchedStandingDays": 0,
+      "clampedPeriods": 0
+    },
+    "consistentOnlyDiag": {
+      "periodCount": 2,
+      "actualPence": 10200,
+      "flexTotalPence": 10100,
+      "agileTotalPence": 8900
+    }
+  }
+}

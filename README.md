@@ -1,66 +1,70 @@
 # Octopus Tariff Check
 
-A single-page, browser-only tool by [auth.energy](https://auth.energy) that pulls your real half-hourly Octopus Energy consumption and tells you what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements.
+A single-page, browser-only tool by [auth.energy](https://auth.energy) that pulls your real half-hourly Octopus Energy consumption and shows what it would actually have cost on **Flexible Octopus** and **Agile Octopus**, using each tariff's real historical rates for the exact dates involved — then compares both against what you actually paid, taken from your real billing statements. You can drill any complete month down to its daily totals and individual half-hour slots.
 
 **Live version:** [authenergy.github.io/agile-compare](https://authenergy.github.io/agile-compare/)
 
+The live site serves **v3** — a typed, modular rewrite that still builds to one self-contained, inspectable HTML file. The previous single-file version lives in [`v2/`](v2/).
+
 ## What it does
 
-1. Fetches your account details and confirms your meter's region.
-2. Fetches your real billing periods and the amount you were actually charged for each one.
-3. Pulls half-hourly consumption covering exactly that billing history (up to 7 days ago, since Octopus's smart-meter data typically takes a few days to settle) — the fetch window is built from your real statement dates, not a fixed calendar year, so a normal billing period is never partially cut off.
-4. Checks that data for gaps and flags any it finds.
-5. Looks up the real historical unit rates and standing charges for both Flexible Octopus (which changes roughly quarterly) and Agile Octopus (which changes every half hour) across that same window.
-6. Calculates what each billing period would have cost under each tariff, and shows it next to what you actually paid.
+1. You paste a **read-only Octopus API key** — that's the only thing you enter. Everything else (your account, meter, region, billing history) is discovered from Octopus for you, and if the key has more than one meter you pick which to compare.
+2. Fetches your real billing periods and the amount you were actually charged for each.
+3. Pulls half-hourly consumption up to ~7 days ago (Octopus's smart-meter data takes a few days to settle). Usage newer than your latest bill is still compared on rates — you just won't see an "actual paid" for it.
+4. Checks the data for gaps and flags any it finds.
+5. Looks up the real historical unit rates and standing charges for Flexible Octopus (changes roughly quarterly) and Agile Octopus (changes every half hour) across the same window.
+6. Calculates what each period would have cost under each tariff and shows it next to what you actually paid — compared against the standard tariff you're **not** already on (Agile by default; Flexible if you're already on Agile).
 
 ## Where your data goes
 
-Nowhere except Octopus, with one optional exception. This is a static HTML file with no backend, no analytics, and no server of any kind. Every request it makes goes directly from your browser to `api.octopus.energy` using your own API key. Open your browser's network tab while running it if you want to verify this yourself — that's the whole point of it being a single inspectable file rather than a packaged app.
+**Nowhere except Octopus, with manual exceptions you control.** This is a static HTML file with no backend, no analytics, and no server of any kind. Every request goes directly from your browser to `api.octopus.energy` using your own API key. The page is served under a strict Content-Security-Policy (`default-src 'none'`; the only network destination allowed is `api.octopus.energy`) and loads no external scripts, styles, fonts, or images — open your browser's network tab to verify, which is the whole point of it being one inspectable file.
 
-The one exception: a results screen button labelled "Email this summary to auth.energy." It opens a pre-filled draft in your own email app — it does not send anything automatically — containing only your postcode's outward code (e.g. "N15", never the full postcode), the comparison period, total kWh, and the three totals (actual, calculated Flexible, calculated Agile). It never includes your API key, account number, MPAN, meter serial, or raw consumption data. You can review or cancel the draft before it ever leaves your device.
+- **Storage:** by default nothing is stored. Only your **API key** is saved, and only if you tick **"remember my key"** — to your browser's `localStorage` (not a cookie, never transmitted), until you clear it. Your account number, MPAN, and meter serial are discovered from Octopus each run and are **never** stored.
+- **Diagnostics / share are manual.** "Download diagnostics", "Submit to support", and the social share are opt-in and send nothing automatically. A diagnostics bundle carries your half-hourly figures, rate windows, per-period summaries, and your postcode's **outward area only** (e.g. "N15") — never your API key, account number, MPAN, meter serial, or full address. The social share uses **percentages only**, never your bill amounts.
 
-By default, your API key, account number, MPAN, and meter serial are only ever held in your browser's memory for the duration of the page being open, and are gone the moment you close or reload the tab. There's an optional "remember these details in this browser" checkbox if you'd rather not re-enter them every time — ticking it saves them to that browser's `localStorage` (not a cookie, never transmitted anywhere) until you clear them via the button that appears once something's saved, or clear your browser's site data for the page.
-
-**You should still treat your API key like a password.** Don't paste it into a copy of this tool you don't trust, don't share a screenshot or recording that shows it, and avoid using the "remember" option on a shared or public computer.
+**Treat your API key like a password.** Don't paste it into a copy of this tool you don't trust, don't share a screenshot that shows it, and avoid the "remember" option on a shared computer.
 
 ## Running it
 
-**Option A — GitHub Pages (recommended for sharing):**
-1. Fork or clone this repo.
-2. In your repo's settings: **Settings → Pages → Source**, choose your default branch and the root folder.
-3. GitHub will publish it at `https://<your-username>.github.io/<repo-name>/` within a minute or two, and rebuild automatically on every push.
+**Use the hosted version** above, or run your own:
 
-**Option B — just open the file:**
-Download `index.html` and open it directly in Chrome (or any modern browser). No server, no build step, no install.
+**Option A — GitHub Pages (your own fork).** Pushing to the `v3` branch runs the `deploy v3 to pages` GitHub Action, which builds the app, runs the full test suite, and publishes `v3/index.html` at the root of your Pages site. Enable Pages with **Settings → Pages → Source → GitHub Actions**.
 
-You'll need four things from your Octopus dashboard at [octopus.energy/dashboard/developer](https://octopus.energy/dashboard/developer/):
-- Your API key
-- Your account number (format `A-AAAA1111`)
-- Your electricity meter's MPAN (13 digits)
-- Your meter's serial number
+**Option B — open the built file.** `v3/index.html` is a single self-contained file. Download it and open it directly in any modern browser (`file://`), or serve it from any static host — no server or build step needed to *run* it.
 
-The app's input screen links to that dashboard page and explains where to find each one.
+You only need one thing from your Octopus dashboard at [octopus.energy/dashboard/developer](https://octopus.energy/dashboard/developer/): your **API key**. The connect screen links there.
 
-## Known limitations
+### Offline replay
 
-- **CORS is unverified.** This tool calls Octopus's API directly from your browser. Whether Octopus's API sends the right CORS headers to permit that from an arbitrary page hasn't been confirmed against the live API at the time of writing. If it doesn't, the app will fail clearly on the very first request with a message explaining that's likely what happened — it won't hang or fail silently. If this turns out to be a real blocker, the fix would be routing requests through a small serverless proxy, which is a different piece of infrastructure than what's here today. Contributions/reports on this welcome.
-- **Standing-charge and unit-rate history depends on Octopus's product codes staying the same.** Flexible Octopus's product code has been stable since November 2022, and Agile Octopus's since October 2024; the app discovers the current live product dynamically rather than hardcoding either, but if Octopus retires a product mid-comparison-window without the older one's rate history remaining queryable, some readings may show as "unmatched" in the results — this is flagged in the output rather than silently miscalculated.
-- **Gaps in your smart-meter data reduce accuracy.** Missing half-hour readings contribute zero consumption for that slot rather than an estimate, so a billing period with reading gaps will show as understated. The gap report tells you exactly which dates are affected.
-- **This is not financial advice and not affiliated with Octopus Energy.** It's a calculator built from Octopus's own public API. Always check your actual bills and Octopus's own tariff comparison tools before making a switching decision.
+Already have a downloaded diagnostics file? On the connect screen choose **"Replay a saved diagnostics file offline"** to re-render the full results from that file — no API key and no network calls. (Replay covers import-meter diagnostics today.)
+
+## Development
+
+The app source is in [`app-v3/`](app-v3/) — a self-contained Vite + TypeScript project that builds to one unminified, CSP-compatible `v3/index.html` via `vite-plugin-singlefile`. The committed `v3/index.html` is generated output.
+
+```bash
+npm --prefix app-v3 ci      # install (once)
+npm --prefix app-v3 run dev # local dev server with HMR
+npm run build:v3            # build + verify the single-file output → v3/index.html
+npm run check               # typecheck + lint + format + unit + build + staleness + e2e
+```
+
+Architecture is layered so the calculation engine has no DOM or network dependency: `domain/` (pure rates/cost/periods/headline/drilldown), `api/` (injected Octopus client), `flows/` (return typed models, no DOM), `diagnostics/`, `ui/` (the only DOM layer).
 
 ## Testing
 
-The calculation logic (gap detection, rate-window matching, period costing) is covered by a small Node test suite in `/tests`, run against the actual app code (extracted live from `index.html`, not a hand-maintained copy, so the tests can't silently drift out of sync with the real app).
-
+```bash
+npm run test:v3    # Vitest unit + jsdom DOM tests
+npm run test:e2e   # Playwright e2e against the BUILT v3/index.html (asserts zero CSP violations)
 ```
-npm test
-```
 
-This regenerates the test module from `index.html` and runs five suites: core calculation logic (including region detection against a real account response shape, and the defensive guard against implausible date ranges), a mocked end-to-end pipeline run, orchestration regression tests covering both the original billing-period-date-clamping bug and a since-fixed bug where billing history older than a fixed lookback window was incorrectly clamped, a realistic-case sanity check that all rendered totals match hand-calculated expected values to the penny, and the "remember my details" localStorage save/load/clear behaviour.
+Unit tests cover the pure domain (rate matching, costing, gap detection, headline scoping, drill-down Σ-invariants), the flows against a mocked Octopus API, and a backward-compatibility fixture asserting a diagnostics file still replays to identical totals. The e2e suite boots the real built file under the production CSP.
 
-## Contributing
+## Known limitations
 
-It's one HTML file. Open a PR. If you're changing the calculation logic, please add or update a test in `/tests` covering the change — that's how the bugs mentioned above got caught before anyone saw a wrong number.
+- **Rate history depends on Octopus's product codes.** The app discovers live products dynamically rather than hardcoding them, but if Octopus retires a product mid-window without the older one's rate history remaining queryable, some slots show as "unmatched" — flagged in the output, never silently miscalculated.
+- **Gaps reduce accuracy.** A missing half-hour reading contributes zero for that slot rather than an estimate, so a period with gaps reads understated. The gap report tells you exactly which dates are affected.
+- **Not financial advice and not affiliated with Octopus Energy.** It's a calculator built from Octopus's own public API. Always check your real bills and Octopus's own tariff tools before switching.
 
 ## Copyright and license
 

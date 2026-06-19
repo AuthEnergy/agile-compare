@@ -1,0 +1,9 @@
+node_modules
+test-results
+playwright-report
+.vite
+tests/fixtures
+
+# The CSP meta line must stay byte-for-byte (verify-single-file gate); Prettier
+# would reflow the long attribute. Hand-kept readable instead.
+index.html

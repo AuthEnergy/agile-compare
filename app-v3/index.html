@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  Octopus Tariff Check (v3)
+  Copyright (c) 2026 Auth Energy Ltd
+  Licensed under the PolyForm Noncommercial License 1.0.0 — see LICENSE for details.
+  Free for noncommercial use; commercial use requires permission from Auth Energy Ltd.
+  Not affiliated with, or endorsed by, Octopus Energy. "Octopus Energy" and related
+  marks are trademarks of their respective owners.
+  https://github.com/AuthEnergy/agile-compare
+-->
+<!--
+  Defence-in-depth backstop, NOT a sandbox. This single-file app loads no external
+  scripts/styles/images/fonts and only talks to Octopus's API, so the policy below
+  denies everything by default and re-opens only the channels the app uses: inline
+  script/style, same-origin + data: images, and fetch to Octopus. The build is a
+  single UNMINIFIED inline file, so "read the one file and verify it does nothing
+  sneaky" still holds. Kept byte-for-byte identical to v2 (a compatibility gate;
+  see tools/verify-single-file.mjs). LIMIT: 'unsafe-inline' means an inline-injected
+  script could run, and a meta-tag CSP can't set frame-ancestors or block nav-based
+  exfiltration — closing those needs a real response header + hashes (tracked follow-up).
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://api.octopus.energy; frame-src 'none'; child-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Octopus Tariff Check | auth.energy</title>
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

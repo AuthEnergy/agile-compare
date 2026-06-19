@@ -122,22 +122,25 @@ function button(label, opts = {}) {
 }
 function callout(title, body, tone = "info", iconName = "info") {
   const t = SEMANTIC[tone];
+  const bodyEl = typeof body === "string" ? el("div", { class: "callout-body", text: body }) : el("div", { class: "callout-body" }, [body]);
   return el("div", { class: "callout", style: `border-color:${t.fg};background:${t.bg}` }, [
     el("span", { class: "callout-icon", style: `color:${t.fg}` }, [icon(ICONS[iconName], 17)]),
     el("div", {}, [
       el("div", { class: "callout-title", style: `color:${t.fg}`, text: title }),
-      el("div", { class: "callout-body", text: body })
+      bodyEl
     ])
   ]);
 }
 const RESULT_FG = {
   saving: "var(--status-saving)",
   risk: "var(--status-risk)",
+  info: "var(--status-info)",
   neutral: "var(--text-strong)"
 };
 const RESULT_BG = {
   saving: "var(--status-saving-bg)",
   risk: "var(--status-risk-bg)",
+  info: "var(--status-info-bg)",
   neutral: "var(--surface-sunken)"
 };
 function costCalc(o) {
@@ -438,11 +441,11 @@ function rateAtSorted(sortedWindows, instant) {
   return t < to ? w.value : null;
 }
 const GENERIC_FLEX_LOADS = [
-  "Washing",
+  "Clothes Washing",
+  "Tumble Drying",
   "Dishwashing",
   "EV or device charging",
-  "Immersion / hot water",
-  "Battery storage"
+  "Immersion / hot water"
 ];
 const GENERIC_LOADS_PHRASE = "flexible loads such as the dishwasher, washing machine, immersion, battery, EV or heat pump";
 function joinList(items) {
@@ -453,7 +456,13 @@ function computeSignals(run, headline) {
   const { readings, agileUnitSorted, agileAvailable } = run.detail;
   const agileCheaper = headline.verdict ? headline.verdict.alternativeLabel === "Agile" && headline.verdict.alternativeCheaper : null;
   if (!agileAvailable || agileUnitSorted.length === 0) {
-    return { agileAvailable: false, agileCheaper, cheapShare: 0, expensiveShare: 0, ratedKwh: 0 };
+    return {
+      agileAvailable: false,
+      agileCheaper,
+      cheapShare: 0,
+      expensiveShare: 0,
+      ratedKwh: 0
+    };
   }
   const scope = summaryScopePeriods(run).map((p) => [p.start.getTime(), p.end.getTime()]);
   const inScope = (t) => scope.some(([s, e]) => t >= s && t < e);
@@ -476,7 +485,13 @@ function computeSignals(run, headline) {
     cheapShare = cheapKwh / ratedKwh;
     expensiveShare = peakKwh / ratedKwh;
   }
-  return { agileAvailable: true, agileCheaper, cheapShare, expensiveShare, ratedKwh };
+  return {
+    agileAvailable: true,
+    agileCheaper,
+    cheapShare,
+    expensiveShare,
+    ratedKwh
+  };
 }
 function nextSteps(run, headline, opts = {}) {
   const signals = computeSignals(run, headline);
@@ -2047,10 +2062,9 @@ function fmtDate(d) {
 function fmtDateShort(d) {
   return `${d.getUTCDate()} ${(MONTHS$1[d.getUTCMonth()] ?? "").slice(0, 3)} ${d.getUTCFullYear()}`;
 }
-function fmtSlotTime(d) {
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
+function fmtSlotTime(start, end) {
+  const fmt = (d) => `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+  return `${fmt(start)}–${fmt(end)}`;
 }
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTHS = [
@@ -2068,22 +2082,37 @@ const MONTHS = [
   "December"
 ];
 const mondayIndex = (d) => (d.getUTCDay() + 6) % 7;
-const dayCost = (d) => d.agileTotalPence ?? d.flexTotalPence ?? 0;
 const FALLBACK_TAG = {
   name: "alert",
   fg: "var(--status-caution)",
   bg: "var(--amber-tint)"
 };
 const TAG_ICON = {
-  complete: { name: "check", fg: "var(--status-saving)", bg: "var(--green-tint)" },
-  preSwitch: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
-  mixed: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
-  partial: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
+  complete: {
+    name: "check",
+    fg: "var(--status-saving)",
+    bg: "var(--green-tint)"
+  },
+  preSwitch: {
+    name: "clock",
+    fg: "var(--status-caution)",
+    bg: "var(--amber-tint)"
+  },
+  mixed: {
+    name: "clock",
+    fg: "var(--status-caution)",
+    bg: "var(--amber-tint)"
+  },
+  partial: {
+    name: "clock",
+    fg: "var(--status-caution)",
+    bg: "var(--amber-tint)"
+  },
   incomplete: FALLBACK_TAG,
   mismatch: { name: "alert", fg: "var(--status-risk)", bg: "var(--red-tint)" }
 };
-function slotRow(s) {
-  let rowBg = "var(--surface-card)";
+function slotRow(s, maxAbsRateDelta) {
+  let rowBg;
   let flagText = "";
   let flagFg = "var(--text-muted)";
   if (s.flags.missingReading) {
@@ -2101,24 +2130,34 @@ function slotRow(s) {
   } else if (s.flags.outOfPeriod) {
     rowBg = "var(--surface-sunken)";
     flagText = "Outside the billing window — shown, not priced.";
+  } else if (s.flexRate !== null && s.agileRate !== null) {
+    const delta = s.flexRate - s.agileRate;
+    const intensity = Math.round(Math.abs(delta) / maxAbsRateDelta * 40) + 8;
+    const color = delta >= 0 ? "var(--status-saving)" : "var(--status-risk)";
+    rowBg = `color-mix(in srgb, ${color} ${intensity}%, transparent)`;
+  } else {
+    rowBg = "var(--surface-card)";
   }
   const kwhText = s.flags.missingReading ? "missing" : s.kwh === null ? "—" : s.kwh.toFixed(2);
-  const agileText = s.flags.agileUnmatched ? "unmatched" : s.agileRate === null ? "—" : fmtPence(s.agileRate);
-  const costText = s.agileCostPence === null ? "n/a" : fmtMoney(s.agileCostPence);
+  const flexText = s.flags.outOfPeriod ? "—" : s.flags.missingReading ? "n/a" : s.flags.flexUnmatched || s.flexCostPence === null || s.flexRate === null ? "unmatched" : `${fmtMoney(s.flexCostPence)} (${fmtPence(s.flexRate)})`;
+  const agileText = s.flags.outOfPeriod ? "—" : s.flags.missingReading ? "n/a" : s.flags.agileUnmatched ? "unmatched" : s.agileCostPence === null || s.agileRate === null ? "n/a" : `${fmtMoney(s.agileCostPence)} (${fmtPence(s.agileRate)})`;
   const row = el("div", { class: "slot-row", style: `background:${rowBg}` }, [
-    el("span", { text: fmtSlotTime(s.intervalStart) }),
+    el("span", { text: fmtSlotTime(s.intervalStart, s.intervalEnd) }),
     el("span", {
       class: "tnum",
       style: s.flags.missingReading ? "color:var(--status-risk)" : "",
       text: kwhText
     }),
-    el("span", { class: "tnum muted", text: s.flexRate === null ? "—" : fmtPence(s.flexRate) }),
+    el("span", {
+      class: "tnum",
+      style: s.flags.flexUnmatched ? "color:var(--status-caution)" : "",
+      text: flexText
+    }),
     el("span", {
       class: "tnum",
       style: s.flags.agileUnmatched ? "color:var(--status-caution)" : "",
       text: agileText
-    }),
-    el("span", { class: "tnum", style: "font-weight:500", text: costText })
+    })
   ]);
   if (!flagText) return [row];
   return [
@@ -2126,16 +2165,32 @@ function slotRow(s) {
     el("div", { class: "slot-flag", style: `background:${rowBg};color:${flagFg}` }, [flagText])
   ];
 }
-function slotGrid(dayMid, run, period) {
-  const slots = buildSlotCalculations(dayMid, period, run.detail);
+function slotGrid(day, run, period) {
+  const slots = buildSlotCalculations(day.date, period, run.detail);
+  const rateDeltas = slots.filter((s) => s.flexRate !== null && s.agileRate !== null && !s.flags.outOfPeriod).map((s) => (s.flexRate ?? 0) - (s.agileRate ?? 0));
+  const maxAbsRateDelta = Math.max(1, ...rateDeltas.map(Math.abs));
   const head = el("div", { class: "slot-grid-head" }, [
     el("span", { text: "Slot" }),
     el("span", { class: "tnum", text: "kWh" }),
-    el("span", { class: "tnum", text: "Flex" }),
-    el("span", { class: "tnum", text: "Agile" }),
-    el("span", { class: "tnum", text: "Cost" })
+    el("span", { class: "tnum", text: "Yours (Unit £)" }),
+    el("span", { class: "tnum", text: "Agile Cost (Unit £)" })
   ]);
-  const scroll = el("div", { class: "slot-scroll" }, slots.flatMap(slotRow));
+  const standingRow = el("div", { class: "slot-row", style: "background:var(--surface-sunken)" }, [
+    el("span", { text: "Standing charge" }),
+    el("span", { class: "tnum muted", text: "—" }),
+    el("span", {
+      class: "tnum muted",
+      text: fmtMoney(day.standingPence.flex)
+    }),
+    el("span", {
+      class: "tnum muted",
+      text: day.standingPence.agile === null ? "n/a" : fmtMoney(day.standingPence.agile)
+    })
+  ]);
+  const scroll = el("div", { class: "slot-scroll" }, [
+    standingRow,
+    ...slots.flatMap((s) => slotRow(s, maxAbsRateDelta))
+  ]);
   return el("div", { style: "border-top:1px solid var(--border-soft)" }, [head, scroll]);
 }
 function dayDetailHead(day) {
@@ -2151,7 +2206,7 @@ function dayDetailHead(day) {
     el("span", {
       class: "mono",
       style: "font-size:var(--text-data-sm);color:var(--text-muted)",
-      text: `Flex ${fmtMoney(day.flexTotalPence)}`
+      text: `Yours ${fmtMoney(day.flexTotalPence)}`
     }),
     el("span", {
       class: "mono",
@@ -2161,7 +2216,8 @@ function dayDetailHead(day) {
   ]);
 }
 function dayCalendar(days, run, period) {
-  const maxCost = Math.max(1, ...days.map(dayCost));
+  const agileDeltas = days.filter((d) => d.agileTotalPence !== null).map((d) => d.flexTotalPence - (d.agileTotalPence ?? 0));
+  const maxAbsDelta = Math.max(1, ...agileDeltas.map(Math.abs));
   const detail = el("div", { class: "cal-detail" });
   const gridCache = /* @__PURE__ */ new Map();
   let selected = null;
@@ -2171,7 +2227,7 @@ function dayCalendar(days, run, period) {
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day.date, run, period);
+      grid = slotGrid(day, run, period);
       gridCache.set(day.date.getTime(), grid);
     }
     clear(detail);
@@ -2196,21 +2252,32 @@ function dayCalendar(days, run, period) {
       cells.push(el("span", { class: "cal-cell cal-cell-empty" }));
     }
     for (const d of monthDays) {
-      const cost = dayCost(d);
-      const intensity = Math.round(cost / maxCost * 44) + 6;
+      let cellBg;
+      if (d.agileTotalPence === null) {
+        cellBg = "transparent";
+      } else {
+        const delta = d.flexTotalPence - d.agileTotalPence;
+        const intensity = Math.round(Math.abs(delta) / maxAbsDelta * 40) + 8;
+        const color = delta >= 0 ? "var(--status-saving)" : "var(--status-risk)";
+        cellBg = `color-mix(in srgb, ${color} ${intensity}%, transparent)`;
+      }
+      const agileLabel = d.agileTotalPence === null ? "—" : fmtMoney(d.agileTotalPence);
       const flagged = d.flags.hasUnmatched || d.flags.partial;
       const cell = el(
         "button",
         {
           class: "cal-cell",
           type: "button",
-          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · ${fmtMoney(cost)}`,
-          style: `background:color-mix(in srgb, var(--grid-blue) ${intensity}%, transparent)`
+          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · Yours ${fmtMoney(d.flexTotalPence)} · Agile ${agileLabel}`,
+          style: `background:${cellBg}`
         },
         [
           el("span", { class: "cal-day", text: String(d.date.getUTCDate()) }),
           flagged ? el("span", { class: "cal-flag" }) : null,
-          el("span", { class: "cal-cost mono", text: fmtMoney(cost) })
+          el("span", {
+            class: "cal-cost mono",
+            text: `${fmtMoney(d.flexTotalPence)} / ${agileLabel}`
+          })
         ]
       );
       cell.addEventListener("click", () => showDay(d, cell));
@@ -2229,7 +2296,7 @@ function dayCalendar(days, run, period) {
   return el("div", { class: "drill" }, [
     el("div", {
       class: "drill-hint",
-      text: "Daily cost — darker is pricier. Tap a day for its 48 half-hours."
+      text: "Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours."
     }),
     ...grids,
     detail
@@ -2272,7 +2339,7 @@ function renderPeriodRow(vm, run) {
           el("span", {
             class: "mono",
             style: "font-size:var(--text-caption);color:var(--text-muted)",
-            text: `Flex ${vm.flexText}`
+            text: `Yours ${vm.flexText}`
           }),
           el("span", {
             class: "mono",
@@ -2654,7 +2721,7 @@ function computeResultsViewModel(run, headline) {
       prefix: "£",
       period: altCheaper ? `lower on ${comp.altLabel}` : `higher on ${comp.altLabel}`,
       caption: notice ? "Over earlier usage" : "On these periods",
-      tone: altCheaper ? "saving" : "risk",
+      tone: altCheaper ? "saving" : "info",
       sign: altCheaper ? "−" : "+"
     };
   }
@@ -2745,7 +2812,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
       })
     ])
   );
-  const diffTone = vm.difference?.tone === "saving" ? "saving" : vm.difference?.tone === "risk" ? "risk" : "neutral";
+  const diffTone = vm.difference?.tone === "saving" ? "saving" : vm.difference?.tone === "info" ? "info" : "neutral";
   const calc = costCalc({
     inputs: vm.agile ? [
       { label: vm.paid.label, prefix: vm.paid.prefix, amount: vm.paid.amount },
@@ -2757,7 +2824,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
       amount: vm.difference.amount,
       // Keep "Paid − Agile = result" arithmetically true: the gap is negative
       // when Agile is the dearer side (risk), positive when it saves.
-      sign: diffTone === "risk" ? "−" : "",
+      sign: "",
       tone: diffTone,
       ...vm.difference.period ? { descriptor: vm.difference.period } : {}
     } : null,
@@ -2914,7 +2981,9 @@ function renderResults(host, run, headline, replayMeta, cb) {
             variant: "secondary",
             iconLeft: "lock",
             onClick: cb.onDiagnostics
-          })
+          }),
+          button("Edit tariff", { variant: "secondary", onClick: cb.onEditTariff }),
+          cb.onResetTariff ? button("Reset to API rates", { variant: "ghost", onClick: cb.onResetTariff }) : null
         ]),
         button("See how timing saves more", {
           variant: "primary",
@@ -2937,6 +3006,143 @@ function renderResultsEmpty(host, cb) {
       button("Start over", { variant: "secondary", onClick: cb.onReset })
     ])
   );
+}
+function openTariffOverrideModal(prefillUnit, prefillStanding, onApply) {
+  const backdrop = el("div", { class: "modal-backdrop" });
+  const close = () => backdrop.remove();
+  backdrop.addEventListener("click", (ev) => {
+    if (ev.target === backdrop) close();
+  });
+  const unitInput = el("input", {
+    class: "input",
+    type: "number",
+    placeholder: "e.g. 24.50",
+    value: prefillUnit !== null ? String(prefillUnit) : ""
+  });
+  unitInput.setAttribute("min", "0");
+  unitInput.setAttribute("step", "0.01");
+  const standingInput = el("input", {
+    class: "input",
+    type: "number",
+    placeholder: "e.g. 53.27",
+    value: prefillStanding !== null ? String(prefillStanding) : ""
+  });
+  standingInput.setAttribute("min", "0");
+  standingInput.setAttribute("step", "0.01");
+  const errorMsg = el("span", {
+    class: "field-hint",
+    style: "color:var(--status-risk);display:none",
+    text: "Please enter valid rates (both must be numbers greater than zero)."
+  });
+  const modal = el("div", { class: "modal" }, [
+    el("div", { class: "modal-head" }, [
+      el("div", { style: "display:flex;flex-direction:column;gap:4px" }, [
+        el("div", { class: "row-title", text: "Edit your tariff rates" }),
+        el("div", {
+          class: "row-sub",
+          text: "Enter the unit rate and standing charge from your bill or tariff agreement. These replace the API-fetched rates for every period and slot."
+        })
+      ]),
+      el(
+        "button",
+        {
+          class: "btn btn-ghost",
+          type: "button",
+          ariaLabel: "Close",
+          onClick: close
+        },
+        [icon(ICONS.x, 18)]
+      )
+    ]),
+    el("div", { class: "modal-body" }, [
+      callout(
+        "Flat rate across all periods",
+        'The same unit rate applies to every half-hour slot. Your tariff side is relabelled "User tariff" and the Agile comparison is unchanged.',
+        "info",
+        "info"
+      ),
+      el("div", { class: "field" }, [
+        el("label", { class: "field-label", text: "Unit rate (p/kWh)" }),
+        el("div", { class: "field-hint", text: "Pence per kilowatt-hour, e.g. 24.50" }),
+        unitInput
+      ]),
+      el("div", { class: "field" }, [
+        el("label", { class: "field-label", text: "Standing charge (p/day)" }),
+        el("div", { class: "field-hint", text: "Pence per day, e.g. 53.27" }),
+        standingInput
+      ]),
+      errorMsg
+    ]),
+    el("div", { class: "modal-foot" }, [
+      button("Cancel", { variant: "secondary", onClick: close }),
+      button("Apply", {
+        variant: "primary",
+        onClick: () => {
+          const unit = parseFloat(unitInput.value);
+          const standing = parseFloat(standingInput.value);
+          if (isNaN(unit) || isNaN(standing) || unit <= 0 || standing <= 0) {
+            errorMsg.style.display = "";
+            return;
+          }
+          close();
+          onApply(unit, standing);
+        }
+      })
+    ])
+  ]);
+  backdrop.append(modal);
+  document.body.append(backdrop);
+  unitInput.focus();
+}
+function applyUserTariff(run, unitRatePence, standingChargePence) {
+  const { context } = run;
+  const flatUnit = {
+    validFrom: context.periodFrom,
+    validTo: context.periodTo,
+    value: unitRatePence
+  };
+  const flatStanding = {
+    validFrom: context.periodFrom,
+    validTo: context.periodTo,
+    value: standingChargePence
+  };
+  const flexUnitSorted = [flatUnit];
+  const flexStanding = [flatStanding];
+  const periods = run.periods.map((p) => {
+    const newFlex = calculateCost(
+      run.detail.readings,
+      p.start,
+      p.end,
+      flexUnitSorted,
+      flexStanding
+    );
+    const confident = newFlex.unmatchedReadings === 0 && newFlex.unmatchedStandingDays === 0 && (p.agile === null || p.agile.unmatchedReadings === 0 && p.agile.unmatchedStandingDays === 0);
+    return {
+      ...p,
+      flex: newFlex,
+      confident,
+      // classifyPeriod compares actualTariffCode to currentAgreement.tariff_code
+      // to detect "pre-switch" periods. Without this, every period looks like it
+      // predates the override and becomes non-expandable + triggers the notice path.
+      actualTariffCode: "User tariff",
+      tariffCodes: ["User tariff"]
+    };
+  });
+  const detail = { ...run.detail, flexUnitSorted, flexStanding };
+  return {
+    periods,
+    detail,
+    context: {
+      ...context,
+      // classifyTariffCode falls through to { kind: 'other', label: code } for
+      // unknown codes, so 'User tariff' renders as "User tariff" throughout.
+      currentAgreement: {
+        tariff_code: "User tariff",
+        valid_from: context.periodFrom.toISOString(),
+        valid_to: context.periodTo.toISOString()
+      }
+    }
+  };
 }
 const DAY_MS$2 = 24 * 60 * 60 * 1e3;
 const pence = (p) => (p / 100).toFixed(2);
@@ -2970,7 +3176,7 @@ function exportSlotTable(day, run) {
   const rows = day.readings.map((r) => {
     const rate = rateAtSorted(run.detail.agileWindows, r.start);
     return el("div", { class: "slot-row", style: "grid-template-columns:60px repeat(3,1fr)" }, [
-      el("span", { text: fmtSlotTime(r.start) }),
+      el("span", { text: fmtSlotTime(r.start, new Date(r.start.getTime() + 30 * 60 * 1e3)) }),
       el("span", { class: "tnum", text: r.kwh.toFixed(2) }),
       el("span", { class: "tnum muted", text: rate === null ? "unmatched" : fmtPence(rate) }),
       el("span", {
@@ -3105,7 +3311,10 @@ const TONE_ICON = { support: "clock", info: "info", neutral: "info" };
 function renderTiming(host, guidance, cb) {
   host.append(
     el("div", { style: "display:flex;flex-direction:column;gap:7px;max-width:680px" }, [
-      el("h1", { style: "font-size:var(--text-h1)", text: "Save more by moving flexible use" }),
+      el("h1", {
+        style: "font-size:var(--text-h1)",
+        text: "Save more by moving flexible use"
+      }),
       el("p", {
         class: "lead",
         text: "On a half-hourly tariff, when you use power changes the cost. About timing, not using less."
@@ -3113,7 +3322,22 @@ function renderTiming(host, guidance, cb) {
     ])
   );
   for (const p of guidance.prompts) {
-    host.append(callout(p.title, p.body, p.tone, TONE_ICON[p.tone]));
+    let body = p.body;
+    if (p.id === "principle") {
+      body = el("span", {}, [
+        p.body + " ",
+        el("strong", { text: "Avoid 4pm–7pm on weekdays" }),
+        " — typically the highest prices. Download the ",
+        el("a", {
+          href: "https://www.octopriceuk.app/",
+          target: "_blank",
+          rel: "noopener noreferrer",
+          text: "Octoprice app"
+        }),
+        " or similar to stay informed on live rates."
+      ]);
+    }
+    host.append(callout(p.title, body, p.tone, TONE_ICON[p.tone]));
   }
   host.append(
     el("div", { class: "card", style: "display:flex;flex-direction:column;gap:14px" }, [
@@ -3163,14 +3387,23 @@ function renderTiming(host, guidance, cb) {
     )
   );
   host.append(
-    el("div", { style: "display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap" }, [
-      button("Back to comparison", { variant: "secondary", onClick: cb.onBack }),
-      button("Download or send diagnostics", {
-        variant: "secondary",
-        iconLeft: "lock",
-        onClick: cb.onDiagnostics
-      })
-    ])
+    el(
+      "div",
+      {
+        style: "display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap"
+      },
+      [
+        button("Back to comparison", {
+          variant: "secondary",
+          onClick: cb.onBack
+        }),
+        button("Download or send diagnostics", {
+          variant: "secondary",
+          iconLeft: "lock",
+          onClick: cb.onDiagnostics
+        })
+      ]
+    )
   );
 }
 const VERSION_LABEL = APP_VERSION.match(/v\d[\w.-]*/)?.[0] ?? "";
@@ -3468,6 +3701,8 @@ class App {
   actions;
   screenRenderers = /* @__PURE__ */ new Map();
   currentRun = null;
+  originalRun = null;
+  userTariffOverride = null;
   currentExport = null;
   replayMeta = null;
   liveClient = null;
@@ -3520,10 +3755,12 @@ class App {
   }
   // Load a ComparisonRun (live or replayed/sample) and show the results screen.
   showResults(run, replayMeta = null) {
+    this.originalRun = run;
     this.currentRun = run;
     this.currentExport = null;
     this.currentMeter = null;
     this.replayMeta = replayMeta;
+    this.userTariffOverride = null;
     this.setState({ screen: "results", statusMessage: null, error: null });
   }
   showExportResults(run, replayMeta = null) {
@@ -3679,17 +3916,39 @@ class App {
   reset() {
     this.runSeq++;
     this.currentRun = null;
+    this.originalRun = null;
     this.currentExport = null;
     this.currentMeter = null;
     this.failureDiag = null;
     this.replayMeta = null;
+    this.userTariffOverride = null;
     this.setState({ screen: "connect", statusMessage: null, error: null });
+  }
+  openTariffOverrideModal() {
+    const base = this.originalRun ?? this.currentRun;
+    if (!base) return;
+    openTariffOverrideModal(
+      this.userTariffOverride?.unitRate ?? null,
+      this.userTariffOverride?.standingCharge ?? null,
+      (unitRate, standingCharge) => {
+        this.userTariffOverride = { unitRate, standingCharge };
+        this.currentRun = applyUserTariff(base, unitRate, standingCharge);
+        this.setState({ screen: "results" });
+      }
+    );
+  }
+  resetTariff() {
+    this.userTariffOverride = null;
+    this.currentRun = this.originalRun;
+    this.setState({ screen: "results" });
   }
   resultsCallbacks() {
     return {
       onTiming: () => this.setState({ screen: "timing" }),
       onReset: () => this.reset(),
-      onDiagnostics: () => this.openDiagnostics()
+      onDiagnostics: () => this.openDiagnostics(),
+      onEditTariff: () => this.openTariffOverrideModal(),
+      onResetTariff: this.userTariffOverride ? () => this.resetTariff() : null
     };
   }
   renderResultsScreen(host) {
@@ -5431,7 +5690,7 @@ button {
 .slot-grid-head,
 .slot-row {
   display: grid;
-  grid-template-columns: 60px repeat(4, 1fr);
+  grid-template-columns: auto repeat(3, 1fr);
   gap: 8px;
   padding: 7px 14px;
   align-items: center;
@@ -5443,12 +5702,16 @@ button {
   letter-spacing: 0.04em;
   color: var(--text-muted);
   font-weight: 600;
+  white-space: nowrap;
 }
 .slot-row {
   border-top: 1px solid var(--border-soft);
   background: var(--surface-card);
   font-family: var(--font-mono);
   font-size: var(--text-data-sm);
+}
+.slot-row > span:first-child {
+  white-space: nowrap;
 }
 .slot-scroll {
   max-height: 320px;
@@ -5611,7 +5874,7 @@ button {
 @media (max-width: 640px) {
   .slot-grid-head,
   .slot-row {
-    grid-template-columns: 40px repeat(4, 1fr);
+    grid-template-columns: auto repeat(3, 1fr);
     gap: 5px;
     padding: 7px 9px;
   }

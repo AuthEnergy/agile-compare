@@ -23,6 +23,8 @@ export interface ResultsCallbacks {
   onTiming: () => void;
   onReset: () => void;
   onDiagnostics: () => void;
+  onEditTariff: () => void;
+  onResetTariff: (() => void) | null; // non-null only when a user tariff is active
 }
 
 // Paint the import comparison from a ComparisonRun + Headline (live or replayed).
@@ -73,8 +75,8 @@ export function renderResults(
   const diffTone =
     vm.difference?.tone === 'saving'
       ? 'saving'
-      : vm.difference?.tone === 'risk'
-        ? 'risk'
+      : vm.difference?.tone === 'info'
+        ? 'info'
         : 'neutral';
   const calc = costCalc({
     inputs: vm.agile
@@ -90,7 +92,7 @@ export function renderResults(
           amount: vm.difference.amount,
           // Keep "Paid − Agile = result" arithmetically true: the gap is negative
           // when Agile is the dearer side (risk), positive when it saves.
-          sign: diffTone === 'risk' ? '−' : '',
+          sign: '',
           tone: diffTone,
           ...(vm.difference.period ? { descriptor: vm.difference.period } : {}),
         }
@@ -291,6 +293,10 @@ export function renderResults(
             iconLeft: 'lock',
             onClick: cb.onDiagnostics,
           }),
+          button('Edit tariff', { variant: 'secondary', onClick: cb.onEditTariff }),
+          cb.onResetTariff
+            ? button('Reset to API rates', { variant: 'ghost', onClick: cb.onResetTariff })
+            : null,
         ]),
         button('See how timing saves more', {
           variant: 'primary',

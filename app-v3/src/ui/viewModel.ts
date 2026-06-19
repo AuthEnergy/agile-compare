@@ -33,7 +33,7 @@ export interface FigureVM {
   prefix: string;
   period?: string;
   caption?: string;
-  tone: 'neutral' | 'saving' | 'caution' | 'risk';
+  tone: 'neutral' | 'saving' | 'caution' | 'risk' | 'info';
   sign?: string;
 }
 
@@ -218,7 +218,7 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
       prefix: '£',
       period: altCheaper ? `lower on ${comp.altLabel}` : `higher on ${comp.altLabel}`,
       caption: notice ? 'Over earlier usage' : 'On these periods',
-      tone: altCheaper ? 'saving' : 'risk',
+      tone: altCheaper ? 'saving' : 'info',
       sign: altCheaper ? '−' : '+',
     };
   }

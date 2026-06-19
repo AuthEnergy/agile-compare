@@ -56,7 +56,7 @@ function exportSlotTable(day: ExportDay, run: ExportRun): HTMLElement {
   const rows = day.readings.map((r) => {
     const rate = rateAtSorted(run.detail.agileWindows, r.start);
     return el('div', { class: 'slot-row', style: 'grid-template-columns:60px repeat(3,1fr)' }, [
-      el('span', { text: fmtSlotTime(r.start) }),
+      el('span', { text: fmtSlotTime(r.start, new Date(r.start.getTime() + 30 * 60 * 1000)) }),
       el('span', { class: 'tnum', text: r.kwh.toFixed(2) }),
       el('span', { class: 'tnum muted', text: rate === null ? 'unmatched' : fmtPence(rate) }),
       el('span', {

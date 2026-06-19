@@ -45,7 +45,13 @@ function predateRun(): ComparisonRun {
 
 describe('renderResults — all data predates the current tariff', () => {
   let host: HTMLElement;
-  const cb = { onTiming: () => {}, onReset: () => {}, onDiagnostics: () => {} };
+  const cb = {
+    onTiming: () => {},
+    onReset: () => {},
+    onDiagnostics: () => {},
+    onEditTariff: () => {},
+    onResetTariff: null,
+  };
 
   beforeEach(() => {
     document.body.innerHTML = '';

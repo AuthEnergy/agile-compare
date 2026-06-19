@@ -40,10 +40,10 @@ export function fmtDateShort(d: Date): string {
 }
 
 // "14:30" — the UTC half-hour slot start.
-export function fmtSlotTime(d: Date): string {
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+export function fmtSlotTime(start: Date, end: Date): string {
+  const fmt = (d: Date) =>
+    `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+  return `${fmt(start)}–${fmt(end)}`;
 }
 
 export function fmtSignedMoney(pence: number): string {

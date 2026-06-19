@@ -19,7 +19,10 @@ export function renderTiming(
 ): void {
   host.append(
     el('div', { style: 'display:flex;flex-direction:column;gap:7px;max-width:680px' }, [
-      el('h1', { style: 'font-size:var(--text-h1)', text: 'Save more by moving flexible use' }),
+      el('h1', {
+        style: 'font-size:var(--text-h1)',
+        text: 'Save more by moving flexible use',
+      }),
       el('p', {
         class: 'lead',
         text: 'On a half-hourly tariff, when you use power changes the cost. About timing, not using less.',
@@ -28,7 +31,22 @@ export function renderTiming(
   );
 
   for (const p of guidance.prompts) {
-    host.append(callout(p.title, p.body, p.tone, TONE_ICON[p.tone]));
+    let body: string | HTMLElement = p.body;
+    if (p.id === 'principle') {
+      body = el('span', {}, [
+        p.body + ' ',
+        el('strong', { text: 'Avoid 4pm–7pm on weekdays' }),
+        ' — typically the highest prices. Download the ',
+        el('a', {
+          href: 'https://www.octopriceuk.app/',
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          text: 'Octoprice app',
+        }),
+        ' or similar to stay informed on live rates.',
+      ]);
+    }
+    host.append(callout(p.title, body, p.tone, TONE_ICON[p.tone]));
   }
 
   // generic flexible-loads list (never inferred appliances)
@@ -84,13 +102,22 @@ export function renderTiming(
   );
 
   host.append(
-    el('div', { style: 'display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap' }, [
-      button('Back to comparison', { variant: 'secondary', onClick: cb.onBack }),
-      button('Download or send diagnostics', {
-        variant: 'secondary',
-        iconLeft: 'lock',
-        onClick: cb.onDiagnostics,
-      }),
-    ]),
+    el(
+      'div',
+      {
+        style: 'display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap',
+      },
+      [
+        button('Back to comparison', {
+          variant: 'secondary',
+          onClick: cb.onBack,
+        }),
+        button('Download or send diagnostics', {
+          variant: 'secondary',
+          iconLeft: 'lock',
+          onClick: cb.onDiagnostics,
+        }),
+      ],
+    ),
   );
 }

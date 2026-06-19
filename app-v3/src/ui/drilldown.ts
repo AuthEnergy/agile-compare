@@ -26,8 +26,6 @@ const MONTHS = [
 // Monday-first column index (0 = Mon … 6 = Sun) for a UTC date.
 const mondayIndex = (d: Date): number => (d.getUTCDay() + 6) % 7;
 
-const dayCost = (d: DayComparison): number => d.agileTotalPence ?? d.flexTotalPence ?? 0;
-
 interface TagIcon {
   name: keyof typeof ICONS;
   fg: string;
@@ -39,18 +37,34 @@ const FALLBACK_TAG: TagIcon = {
   bg: 'var(--amber-tint)',
 };
 const TAG_ICON: Record<string, TagIcon> = {
-  complete: { name: 'check', fg: 'var(--status-saving)', bg: 'var(--green-tint)' },
-  preSwitch: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
-  mixed: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
-  partial: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
+  complete: {
+    name: 'check',
+    fg: 'var(--status-saving)',
+    bg: 'var(--green-tint)',
+  },
+  preSwitch: {
+    name: 'clock',
+    fg: 'var(--status-caution)',
+    bg: 'var(--amber-tint)',
+  },
+  mixed: {
+    name: 'clock',
+    fg: 'var(--status-caution)',
+    bg: 'var(--amber-tint)',
+  },
+  partial: {
+    name: 'clock',
+    fg: 'var(--status-caution)',
+    bg: 'var(--amber-tint)',
+  },
   incomplete: FALLBACK_TAG,
   mismatch: { name: 'alert', fg: 'var(--status-risk)', bg: 'var(--red-tint)' },
 };
 
 // One slot row + its optional flag note. Out-of-period slots are shown, never
 // priced; missing slots read as a gap, not zero.
-function slotRow(s: SlotCalculation): HTMLElement[] {
-  let rowBg = 'var(--surface-card)';
+function slotRow(s: SlotCalculation, maxAbsRateDelta: number): HTMLElement[] {
+  let rowBg: string;
   let flagText = '';
   let flagFg = 'var(--text-muted)';
   if (s.flags.missingReading) {
@@ -68,30 +82,52 @@ function slotRow(s: SlotCalculation): HTMLElement[] {
   } else if (s.flags.outOfPeriod) {
     rowBg = 'var(--surface-sunken)';
     flagText = 'Outside the billing window — shown, not priced.';
+  } else if (s.flexRate !== null && s.agileRate !== null) {
+    const delta = s.flexRate - s.agileRate; // positive → Agile cheaper (green)
+    const intensity = Math.round((Math.abs(delta) / maxAbsRateDelta) * 40) + 8;
+    const color = delta >= 0 ? 'var(--status-saving)' : 'var(--status-risk)';
+    rowBg = `color-mix(in srgb, ${color} ${intensity}%, transparent)`;
+  } else {
+    rowBg = 'var(--surface-card)';
   }
 
   const kwhText = s.flags.missingReading ? 'missing' : s.kwh === null ? '—' : s.kwh.toFixed(2);
-  const agileText = s.flags.agileUnmatched
-    ? 'unmatched'
-    : s.agileRate === null
-      ? '—'
-      : fmtPence(s.agileRate);
-  const costText = s.agileCostPence === null ? 'n/a' : fmtMoney(s.agileCostPence);
+
+  const flexText = s.flags.outOfPeriod
+    ? '—'
+    : s.flags.missingReading
+      ? 'n/a'
+      : s.flags.flexUnmatched || s.flexCostPence === null || s.flexRate === null
+        ? 'unmatched'
+        : `${fmtMoney(s.flexCostPence)} (${fmtPence(s.flexRate)})`;
+
+  const agileText = s.flags.outOfPeriod
+    ? '—'
+    : s.flags.missingReading
+      ? 'n/a'
+      : s.flags.agileUnmatched
+        ? 'unmatched'
+        : s.agileCostPence === null || s.agileRate === null
+          ? 'n/a'
+          : `${fmtMoney(s.agileCostPence)} (${fmtPence(s.agileRate)})`;
 
   const row = el('div', { class: 'slot-row', style: `background:${rowBg}` }, [
-    el('span', { text: fmtSlotTime(s.intervalStart) }),
+    el('span', { text: fmtSlotTime(s.intervalStart, s.intervalEnd) }),
     el('span', {
       class: 'tnum',
       style: s.flags.missingReading ? 'color:var(--status-risk)' : '',
       text: kwhText,
     }),
-    el('span', { class: 'tnum muted', text: s.flexRate === null ? '—' : fmtPence(s.flexRate) }),
+    el('span', {
+      class: 'tnum',
+      style: s.flags.flexUnmatched ? 'color:var(--status-caution)' : '',
+      text: flexText,
+    }),
     el('span', {
       class: 'tnum',
       style: s.flags.agileUnmatched ? 'color:var(--status-caution)' : '',
       text: agileText,
     }),
-    el('span', { class: 'tnum', style: 'font-weight:500', text: costText }),
   ]);
   if (!flagText) return [row];
   return [
@@ -101,19 +137,37 @@ function slotRow(s: SlotCalculation): HTMLElement[] {
 }
 
 function slotGrid(
-  dayMid: Date,
+  day: DayComparison,
   run: ComparisonRun,
   period: { start: Date; end: Date },
 ): HTMLElement {
-  const slots = buildSlotCalculations(dayMid, period, run.detail);
+  const slots = buildSlotCalculations(day.date, period, run.detail);
+  const rateDeltas = slots
+    .filter((s) => s.flexRate !== null && s.agileRate !== null && !s.flags.outOfPeriod)
+    .map((s) => (s.flexRate ?? 0) - (s.agileRate ?? 0));
+  const maxAbsRateDelta = Math.max(1, ...rateDeltas.map(Math.abs));
   const head = el('div', { class: 'slot-grid-head' }, [
     el('span', { text: 'Slot' }),
     el('span', { class: 'tnum', text: 'kWh' }),
-    el('span', { class: 'tnum', text: 'Flex' }),
-    el('span', { class: 'tnum', text: 'Agile' }),
-    el('span', { class: 'tnum', text: 'Cost' }),
+    el('span', { class: 'tnum', text: 'Yours (Unit £)' }),
+    el('span', { class: 'tnum', text: 'Agile Cost (Unit £)' }),
   ]);
-  const scroll = el('div', { class: 'slot-scroll' }, slots.flatMap(slotRow));
+  const standingRow = el('div', { class: 'slot-row', style: 'background:var(--surface-sunken)' }, [
+    el('span', { text: 'Standing charge' }),
+    el('span', { class: 'tnum muted', text: '—' }),
+    el('span', {
+      class: 'tnum muted',
+      text: fmtMoney(day.standingPence.flex),
+    }),
+    el('span', {
+      class: 'tnum muted',
+      text: day.standingPence.agile === null ? 'n/a' : fmtMoney(day.standingPence.agile),
+    }),
+  ]);
+  const scroll = el('div', { class: 'slot-scroll' }, [
+    standingRow,
+    ...slots.flatMap((s) => slotRow(s, maxAbsRateDelta)),
+  ]);
   return el('div', { style: 'border-top:1px solid var(--border-soft)' }, [head, scroll]);
 }
 
@@ -136,7 +190,7 @@ function dayDetailHead(day: DayComparison): HTMLElement {
     el('span', {
       class: 'mono',
       style: 'font-size:var(--text-data-sm);color:var(--text-muted)',
-      text: `Flex ${fmtMoney(day.flexTotalPence)}`,
+      text: `Yours ${fmtMoney(day.flexTotalPence)}`,
     }),
     el('span', {
       class: 'mono',
@@ -146,15 +200,19 @@ function dayDetailHead(day: DayComparison): HTMLElement {
   ]);
 }
 
-// A month calendar of daily cost: each cell is heat-tinted by cost (darker =
-// pricier) so the whole month reads at a glance. Tapping a day reveals its 48
-// half-hour slots in a detail panel below (built once per day, then cached).
+// A month calendar: each cell is tinted green (Agile cheaper) or red (Agile
+// pricier) relative to Flex, intensity proportional to the gap. Tapping a day
+// reveals its 48 half-hour slots in a detail panel below (built once, cached).
 function dayCalendar(
   days: DayComparison[],
   run: ComparisonRun,
   period: { start: Date; end: Date },
 ): HTMLElement {
-  const maxCost = Math.max(1, ...days.map(dayCost));
+  // delta = Flex − Agile: positive → Agile cheaper (green), negative → Agile pricier (red)
+  const agileDeltas = days
+    .filter((d) => d.agileTotalPence !== null)
+    .map((d) => d.flexTotalPence - (d.agileTotalPence ?? 0));
+  const maxAbsDelta = Math.max(1, ...agileDeltas.map(Math.abs));
 
   const detail = el('div', { class: 'cal-detail' });
   const gridCache = new Map<number, HTMLElement>();
@@ -165,7 +223,7 @@ function dayCalendar(
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day.date, run, period);
+      grid = slotGrid(day, run, period);
       gridCache.set(day.date.getTime(), grid);
     }
     clear(detail);
@@ -193,23 +251,32 @@ function dayCalendar(
       cells.push(el('span', { class: 'cal-cell cal-cell-empty' }));
     }
     for (const d of monthDays) {
-      const cost = dayCost(d);
-      // 6%…50% tint of the theme's accent — keeps the day number readable while
-      // still showing the cost gradient across the month, in light and dark.
-      const intensity = Math.round((cost / maxCost) * 44) + 6;
+      let cellBg: string;
+      if (d.agileTotalPence === null) {
+        cellBg = 'transparent';
+      } else {
+        const delta = d.flexTotalPence - d.agileTotalPence;
+        const intensity = Math.round((Math.abs(delta) / maxAbsDelta) * 40) + 8;
+        const color = delta >= 0 ? 'var(--status-saving)' : 'var(--status-risk)';
+        cellBg = `color-mix(in srgb, ${color} ${intensity}%, transparent)`;
+      }
+      const agileLabel = d.agileTotalPence === null ? '—' : fmtMoney(d.agileTotalPence);
       const flagged = d.flags.hasUnmatched || d.flags.partial;
       const cell = el(
         'button',
         {
           class: 'cal-cell',
           type: 'button',
-          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · ${fmtMoney(cost)}`,
-          style: `background:color-mix(in srgb, var(--grid-blue) ${intensity}%, transparent)`,
+          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · Yours ${fmtMoney(d.flexTotalPence)} · Agile ${agileLabel}`,
+          style: `background:${cellBg}`,
         },
         [
           el('span', { class: 'cal-day', text: String(d.date.getUTCDate()) }),
           flagged ? el('span', { class: 'cal-flag' }) : null,
-          el('span', { class: 'cal-cost mono', text: fmtMoney(cost) }),
+          el('span', {
+            class: 'cal-cost mono',
+            text: `${fmtMoney(d.flexTotalPence)} / ${agileLabel}`,
+          }),
         ],
       );
       cell.addEventListener('click', () => showDay(d, cell));
@@ -229,7 +296,7 @@ function dayCalendar(
   return el('div', { class: 'drill' }, [
     el('div', {
       class: 'drill-hint',
-      text: 'Daily cost — darker is pricier. Tap a day for its 48 half-hours.',
+      text: 'Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours.',
     }),
     ...grids,
     detail,
@@ -276,7 +343,7 @@ export function renderPeriodRow(vm: PeriodRowVM, run: ComparisonRun): HTMLElemen
           el('span', {
             class: 'mono',
             style: 'font-size:var(--text-caption);color:var(--text-muted)',
-            text: `Flex ${vm.flexText}`,
+            text: `Yours ${vm.flexText}`,
           }),
           el('span', {
             class: 'mono',

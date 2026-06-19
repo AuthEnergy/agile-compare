@@ -31,11 +31,11 @@ export interface TimingGuidance {
 }
 
 const GENERIC_FLEX_LOADS = [
-  'Washing',
+  'Clothes Washing',
+  'Tumble Drying',
   'Dishwashing',
   'EV or device charging',
   'Immersion / hot water',
-  'Battery storage',
 ];
 const GENERIC_LOADS_PHRASE =
   'flexible loads such as the dishwasher, washing machine, immersion, battery, EV or heat pump';
@@ -53,7 +53,13 @@ export function computeSignals(run: ComparisonRun, headline: Headline): NextStep
     ? headline.verdict.alternativeLabel === 'Agile' && headline.verdict.alternativeCheaper
     : null;
   if (!agileAvailable || agileUnitSorted.length === 0) {
-    return { agileAvailable: false, agileCheaper, cheapShare: 0, expensiveShare: 0, ratedKwh: 0 };
+    return {
+      agileAvailable: false,
+      agileCheaper,
+      cheapShare: 0,
+      expensiveShare: 0,
+      ratedKwh: 0,
+    };
   }
   // Scope to the SAME periods the headline trusts. Pre-switch / clamped /
   // mismatched / otherwise-excluded months are not in the headline, so they must
@@ -80,7 +86,13 @@ export function computeSignals(run: ComparisonRun, headline: Headline): NextStep
     cheapShare = cheapKwh / ratedKwh;
     expensiveShare = peakKwh / ratedKwh;
   }
-  return { agileAvailable: true, agileCheaper, cheapShare, expensiveShare, ratedKwh };
+  return {
+    agileAvailable: true,
+    agileCheaper,
+    cheapShare,
+    expensiveShare,
+    ratedKwh,
+  };
 }
 
 export function nextSteps(

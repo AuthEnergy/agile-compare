@@ -15,6 +15,8 @@ import type { PiiIdentifiers } from '../domain/redact';
 import type { AnyDiagnostics, DiagnosticsBundle, FailureDiagnostics } from '../types/diagnostics';
 import type { ComparisonRun, ExportRun, ProgressFn } from '../types/result';
 import { renderResults, renderResultsEmpty } from './results';
+import { openTariffOverrideModal } from './tariffOverrideModal';
+import { applyUserTariff } from '../flows/applyUserTariff';
 import { renderExportResults } from './exportResults';
 import { renderTiming } from './timing';
 import { renderFooter } from './footer';
@@ -86,6 +88,8 @@ export class App {
   private actions: UiActions;
   private screenRenderers = new Map<Screen, (host: HTMLElement) => void>();
   private currentRun: ComparisonRun | null = null;
+  private originalRun: ComparisonRun | null = null;
+  private userTariffOverride: { unitRate: number; standingCharge: number } | null = null;
   private currentExport: ExportRun | null = null;
   private replayMeta: string | null = null;
   private liveClient: OctopusClient | null = null;
@@ -142,10 +146,12 @@ export class App {
 
   // Load a ComparisonRun (live or replayed/sample) and show the results screen.
   showResults(run: ComparisonRun, replayMeta: string | null = null): void {
+    this.originalRun = run;
     this.currentRun = run;
     this.currentExport = null;
     this.currentMeter = null;
     this.replayMeta = replayMeta;
+    this.userTariffOverride = null;
     this.setState({ screen: 'results', statusMessage: null, error: null });
   }
 
@@ -320,11 +326,33 @@ export class App {
   private reset(): void {
     this.runSeq++; // invalidate any in-flight run
     this.currentRun = null;
+    this.originalRun = null;
     this.currentExport = null;
     this.currentMeter = null;
     this.failureDiag = null;
     this.replayMeta = null;
+    this.userTariffOverride = null;
     this.setState({ screen: 'connect', statusMessage: null, error: null });
+  }
+
+  private openTariffOverrideModal(): void {
+    const base = this.originalRun ?? this.currentRun;
+    if (!base) return;
+    openTariffOverrideModal(
+      this.userTariffOverride?.unitRate ?? null,
+      this.userTariffOverride?.standingCharge ?? null,
+      (unitRate, standingCharge) => {
+        this.userTariffOverride = { unitRate, standingCharge };
+        this.currentRun = applyUserTariff(base, unitRate, standingCharge);
+        this.setState({ screen: 'results' });
+      },
+    );
+  }
+
+  private resetTariff(): void {
+    this.userTariffOverride = null;
+    this.currentRun = this.originalRun;
+    this.setState({ screen: 'results' });
   }
 
   private resultsCallbacks() {
@@ -332,6 +360,8 @@ export class App {
       onTiming: () => this.setState({ screen: 'timing' }),
       onReset: () => this.reset(),
       onDiagnostics: () => this.openDiagnostics(),
+      onEditTariff: () => this.openTariffOverrideModal(),
+      onResetTariff: this.userTariffOverride ? () => this.resetTariff() : null,
     };
   }
 

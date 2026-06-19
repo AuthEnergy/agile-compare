@@ -830,7 +830,7 @@ button {
 .slot-grid-head,
 .slot-row {
   display: grid;
-  grid-template-columns: 60px repeat(4, 1fr);
+  grid-template-columns: auto repeat(3, 1fr);
   gap: 8px;
   padding: 7px 14px;
   align-items: center;
@@ -842,12 +842,16 @@ button {
   letter-spacing: 0.04em;
   color: var(--text-muted);
   font-weight: 600;
+  white-space: nowrap;
 }
 .slot-row {
   border-top: 1px solid var(--border-soft);
   background: var(--surface-card);
   font-family: var(--font-mono);
   font-size: var(--text-data-sm);
+}
+.slot-row > span:first-child {
+  white-space: nowrap;
 }
 .slot-scroll {
   max-height: 320px;
@@ -1010,7 +1014,7 @@ button {
 @media (max-width: 640px) {
   .slot-grid-head,
   .slot-row {
-    grid-template-columns: 40px repeat(4, 1fr);
+    grid-template-columns: auto repeat(3, 1fr);
     gap: 5px;
     padding: 7px 9px;
   }

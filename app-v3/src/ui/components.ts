@@ -47,25 +47,30 @@ export function button(label: string, opts: ButtonOpts = {}): HTMLElement {
 
 export function callout(
   title: string,
-  body: string,
+  body: string | HTMLElement,
   tone: Tone = 'info',
   iconName: IconName = 'info',
 ): HTMLElement {
   const t = SEMANTIC[tone];
+  const bodyEl =
+    typeof body === 'string'
+      ? el('div', { class: 'callout-body', text: body })
+      : el('div', { class: 'callout-body' }, [body]);
   return el('div', { class: 'callout', style: `border-color:${t.fg};background:${t.bg}` }, [
     el('span', { class: 'callout-icon', style: `color:${t.fg}` }, [icon(ICONS[iconName], 17)]),
     el('div', {}, [
       el('div', { class: 'callout-title', style: `color:${t.fg}`, text: title }),
-      el('div', { class: 'callout-body', text: body }),
+      bodyEl,
     ]),
   ]);
 }
 
-const FIGURE_TONE: Record<'neutral' | 'saving' | 'caution' | 'risk', string> = {
+const FIGURE_TONE: Record<'neutral' | 'saving' | 'caution' | 'risk' | 'info', string> = {
   neutral: 'var(--text-strong)',
   saving: 'var(--status-saving)',
   caution: 'var(--status-caution)',
   risk: 'var(--status-risk)',
+  info: 'var(--status-info)',
 };
 
 export interface FigureOpts {
@@ -74,7 +79,7 @@ export interface FigureOpts {
   prefix?: string;
   period?: string;
   caption?: string;
-  tone?: 'neutral' | 'saving' | 'caution' | 'risk';
+  tone?: 'neutral' | 'saving' | 'caution' | 'risk' | 'info';
   sign?: string; // optional leading sign, e.g. "−"
 }
 
@@ -109,7 +114,7 @@ export interface CalcResult {
   prefix?: string;
   sign?: string; // arithmetic sign so "A − B = result" stays true (e.g. "−")
   descriptor?: string; // e.g. "lower on Agile"
-  tone?: 'saving' | 'risk' | 'neutral';
+  tone?: 'saving' | 'risk' | 'info' | 'neutral';
   op?: string; // defaults to "="
 }
 
@@ -119,14 +124,16 @@ export interface CalcOpts {
   foot?: string; // muted context line, e.g. "1,345 kWh · on these periods"
 }
 
-const RESULT_FG: Record<'saving' | 'risk' | 'neutral', string> = {
+const RESULT_FG: Record<'saving' | 'risk' | 'info' | 'neutral', string> = {
   saving: 'var(--status-saving)',
   risk: 'var(--status-risk)',
+  info: 'var(--status-info)',
   neutral: 'var(--text-strong)',
 };
-const RESULT_BG: Record<'saving' | 'risk' | 'neutral', string> = {
+const RESULT_BG: Record<'saving' | 'risk' | 'info' | 'neutral', string> = {
   saving: 'var(--status-saving-bg)',
   risk: 'var(--status-risk-bg)',
+  info: 'var(--status-info-bg)',
   neutral: 'var(--surface-sunken)',
 };
 

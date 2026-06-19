@@ -1,0 +1,19 @@
+README.md
+  s_9c6c25af327be4::t_f6e91697e132db 31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "2142e707b5c4dd5d42aa83d4322f6561f8f06ac8",
+  "prompts": {},
+  "sessions": {
+    "s_9c6c25af327be4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ee15f-ffc6-7f60-a153-baebbdc62630",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

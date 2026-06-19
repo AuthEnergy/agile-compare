@@ -1,4 +1,5 @@
 import { buildDayComparisons, buildSlotCalculations } from '../domain/drilldown';
+import type { HeadlineColumns } from '../domain/headline';
 import type { DayComparison, SlotCalculation } from '../types/drilldown';
 import type { ComparisonRun } from '../types/result';
 import { badge, type Tone } from './components';
@@ -22,6 +23,9 @@ const MONTHS = [
   'November',
   'December',
 ];
+
+const withYours = (columns: HeadlineColumns, label: string, column: 'flex' | 'agile'): string =>
+  columns.yoursColumn === column ? `${label} · yours` : label;
 
 // Monday-first column index (0 = Mon … 6 = Sun) for a UTC date.
 const mondayIndex = (d: Date): number => (d.getUTCDay() + 6) % 7;
@@ -140,6 +144,7 @@ function slotGrid(
   day: DayComparison,
   run: ComparisonRun,
   period: { start: Date; end: Date },
+  columns: HeadlineColumns,
 ): HTMLElement {
   const slots = buildSlotCalculations(day.date, period, run.detail);
   const rateDeltas = slots
@@ -149,8 +154,14 @@ function slotGrid(
   const head = el('div', { class: 'slot-grid-head' }, [
     el('span', { text: 'Slot' }),
     el('span', { class: 'tnum', text: 'kWh' }),
-    el('span', { class: 'tnum', text: 'Yours (Unit £)' }),
-    el('span', { class: 'tnum', text: 'Agile Cost (Unit £)' }),
+    el('span', {
+      class: 'tnum',
+      text: `${withYours(columns, columns.flexLabel, 'flex')} (Unit £)`,
+    }),
+    el('span', {
+      class: 'tnum',
+      text: `${withYours(columns, columns.agileLabel, 'agile')} (Unit £)`,
+    }),
   ]);
   const standingRow = el('div', { class: 'slot-row', style: 'background:var(--surface-sunken)' }, [
     el('span', { text: 'Standing charge' }),
@@ -173,7 +184,7 @@ function slotGrid(
 
 // The header shown above a selected day's slot grid in the calendar detail panel.
 // Mirrors the period row's dual readout: kWh, then Flex £ and Agile £.
-function dayDetailHead(day: DayComparison): HTMLElement {
+function dayDetailHead(day: DayComparison, columns: HeadlineColumns): HTMLElement {
   const agileText = day.agileTotalPence === null ? 'n/a' : fmtMoney(day.agileTotalPence);
   return el('div', { class: 'cal-detail-head' }, [
     el('span', { class: 'day-date', text: fmtDate(day.date) }),
@@ -190,12 +201,12 @@ function dayDetailHead(day: DayComparison): HTMLElement {
     el('span', {
       class: 'mono',
       style: 'font-size:var(--text-data-sm);color:var(--text-muted)',
-      text: `Yours ${fmtMoney(day.flexTotalPence)}`,
+      text: `${withYours(columns, columns.flexLabel, 'flex')} ${fmtMoney(day.flexTotalPence)}`,
     }),
     el('span', {
       class: 'mono',
       style: 'font-size:var(--text-data-sm);color:var(--text-strong)',
-      text: `Agile ${agileText}`,
+      text: `${withYours(columns, columns.agileLabel, 'agile')} ${agileText}`,
     }),
   ]);
 }
@@ -207,6 +218,7 @@ function dayCalendar(
   days: DayComparison[],
   run: ComparisonRun,
   period: { start: Date; end: Date },
+  columns: HeadlineColumns,
 ): HTMLElement {
   // delta = Flex − Agile: positive → Agile cheaper (green), negative → Agile pricier (red)
   const agileDeltas = days
@@ -223,11 +235,11 @@ function dayCalendar(
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day, run, period);
+      grid = slotGrid(day, run, period, columns);
       gridCache.set(day.date.getTime(), grid);
     }
     clear(detail);
-    detail.append(dayDetailHead(day), grid);
+    detail.append(dayDetailHead(day, columns), grid);
   };
 
   // Group by calendar month (a period is usually one month, but handle spans).
@@ -267,7 +279,7 @@ function dayCalendar(
         {
           class: 'cal-cell',
           type: 'button',
-          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · Yours ${fmtMoney(d.flexTotalPence)} · Agile ${agileLabel}`,
+          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · ${withYours(columns, columns.flexLabel, 'flex')} ${fmtMoney(d.flexTotalPence)} · ${withYours(columns, columns.agileLabel, 'agile')} ${agileLabel}`,
           style: `background:${cellBg}`,
         },
         [
@@ -306,7 +318,11 @@ function dayCalendar(
 // A period row that lazily reveals its day totals, each of which lazily reveals
 // 48 slots. Child DOM is built on first expand and cached — never ~19k rows at
 // once. Returns the whole card element.
-export function renderPeriodRow(vm: PeriodRowVM, run: ComparisonRun): HTMLElement {
+export function renderPeriodRow(
+  vm: PeriodRowVM,
+  run: ComparisonRun,
+  columns: HeadlineColumns,
+): HTMLElement {
   const ti = TAG_ICON[vm.status] ?? FALLBACK_TAG;
   const tag = el('span', { class: 'row-tag', style: `background:${ti.bg};color:${ti.fg}` }, [
     icon(ICONS[ti.name], 15, 2.2),
@@ -338,12 +354,12 @@ export function renderPeriodRow(vm: PeriodRowVM, run: ComparisonRun): HTMLElemen
           el('span', {
             class: 'mono',
             style: 'font-size:var(--text-data-sm);color:var(--text-strong)',
-            text: `Agile ${vm.agileText}`,
+            text: `${withYours(columns, columns.agileLabel, 'agile')} ${vm.agileText}`,
           }),
           el('span', {
             class: 'mono',
             style: 'font-size:var(--text-caption);color:var(--text-muted)',
-            text: `Yours ${vm.flexText}`,
+            text: `${withYours(columns, columns.flexLabel, 'flex')} ${vm.flexText}`,
           }),
           el('span', {
             class: 'mono',
@@ -374,7 +390,7 @@ export function renderPeriodRow(vm: PeriodRowVM, run: ComparisonRun): HTMLElemen
     head.classList.toggle('is-selected', open);
     if (open && !dayList) {
       const days = buildDayComparisons(vm.period, run.detail);
-      dayList = dayCalendar(days, run, vm.period);
+      dayList = dayCalendar(days, run, vm.period, columns);
       card.append(dayList);
     } else if (dayList) {
       dayList.style.display = open ? '' : 'none';

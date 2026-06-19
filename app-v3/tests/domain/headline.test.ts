@@ -16,6 +16,10 @@ const cost = (kwh: number, total: number): CostResult => ({
   unmatchedStandingDays: 0,
 });
 
+const FLEXIBLE = 'E-1R-VAR-22-11-01-A';
+const AGILE = 'E-1R-AGILE-24-10-01-A';
+const FIXED = 'E-1R-FIX-12M-23-A';
+
 function mkPeriod(p: {
   start: string;
   end: string;
@@ -93,6 +97,26 @@ function mkRun(
   };
 }
 
+function mkCurrentTariffRun(tariffCode: string, tariffOverride = false): ComparisonRun {
+  const run = mkRun([
+    mkPeriod({
+      start: '2025-04-01',
+      end: '2025-05-01',
+      actual: 5000,
+      tariffCodes: [tariffCode],
+    }),
+  ]);
+  const currentAgreement = {
+    tariff_code: tariffCode,
+    valid_from: '2025-01-01T00:00:00.000Z',
+    valid_to: null,
+  };
+  run.context.currentAgreement = currentAgreement;
+  run.context.agreements = [currentAgreement];
+  if (tariffOverride) run.context.tariffOverride = true;
+  return run;
+}
+
 const sv = (
   start: string,
   end: string,
@@ -114,6 +138,29 @@ const sv = (
 });
 
 describe('computeHeadline', () => {
+  it('labels the fixed drill-down columns for flexible, agile, override and other tariffs', () => {
+    expect(computeHeadline(mkCurrentTariffRun(FLEXIBLE)).columns).toEqual({
+      flexLabel: 'Flexible',
+      agileLabel: 'Agile',
+      yoursColumn: 'flex',
+    });
+    expect(computeHeadline(mkCurrentTariffRun(AGILE)).columns).toEqual({
+      flexLabel: 'Flexible',
+      agileLabel: 'Agile',
+      yoursColumn: 'agile',
+    });
+    expect(computeHeadline(mkCurrentTariffRun('User tariff', true)).columns).toEqual({
+      flexLabel: 'User tariff',
+      agileLabel: 'Agile',
+      yoursColumn: 'flex',
+    });
+    expect(computeHeadline(mkCurrentTariffRun(FIXED)).columns).toEqual({
+      flexLabel: 'Flexible',
+      agileLabel: 'Agile',
+      yoursColumn: null,
+    });
+  });
+
   it('sums the complete current-tariff subset and labels "N of M"', () => {
     const h = computeHeadline(
       mkRun([

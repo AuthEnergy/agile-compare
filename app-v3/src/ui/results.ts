@@ -231,7 +231,7 @@ export function renderResults(
           el('span', { class: 'row-sub', text: 'Open a complete period for the maths.' }),
         ],
       ),
-      ...vm.periods.map((p) => renderPeriodRow(p, run)),
+      ...vm.periods.map((p) => renderPeriodRow(p, run, headline.columns)),
     ]),
   );
 

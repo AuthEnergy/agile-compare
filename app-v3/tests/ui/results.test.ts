@@ -192,3 +192,51 @@ describe('renderResults — all data predates the current tariff', () => {
     expect(text).not.toContain('No data on your current tariff yet');
   });
 });
+
+describe('renderResults — drill-down tariff labels', () => {
+  const cb = {
+    onTiming: () => {},
+    onReset: () => {},
+    onDiagnostics: () => {},
+    onEditTariff: () => {},
+    onResetTariff: null,
+  };
+
+  it('marks the Agile column as yours for an Agile user', () => {
+    document.body.innerHTML = '';
+    const host = document.createElement('div');
+    document.body.append(host);
+    const agileTariff = 'E-1R-AGILE-24-10-01-A';
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: 5000,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.context.currentAgreement = {
+      tariff_code: agileTariff,
+      valid_from: '2025-01-01T00:00:00.000Z',
+      valid_to: null,
+    };
+    run.context.agreements = [run.context.currentAgreement];
+    run.periods.forEach((p) => {
+      p.tariffCodes = [agileTariff];
+      p.actualTariffCode = agileTariff;
+    });
+
+    renderResults(host, run, computeHeadline(run), null, cb);
+    expect(host.textContent).toContain('Agile · yours');
+    expect(host.textContent).not.toContain('Flexible · yours');
+
+    host.querySelector<HTMLElement>('.row')?.click();
+    host.querySelector<HTMLElement>('.cal-cell:not(.cal-cell-empty)')?.click();
+    expect(host.textContent).toContain('Agile · yours (Unit £)');
+    expect(host.textContent).toContain('Flexible (Unit £)');
+  });
+});

@@ -35,6 +35,8 @@ export function applyUserTariff(
       flexStanding,
     );
     const confident =
+      !p.wasClamped &&
+      !p.suspectActual &&
       newFlex.unmatchedReadings === 0 &&
       newFlex.unmatchedStandingDays === 0 &&
       (p.agile === null ||
@@ -65,6 +67,7 @@ export function applyUserTariff(
         valid_from: context.periodFrom.toISOString(),
         valid_to: context.periodTo.toISOString(),
       },
+      tariffOverride: true,
     },
   };
 }

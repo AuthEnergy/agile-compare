@@ -62,6 +62,7 @@ export interface RunContext {
   postcodeArea: string | null;
   currentAgreement: Agreement | null;
   agreements: Agreement[];
+  tariffOverride?: boolean;
   periodFrom: Date;
   periodTo: Date;
   agileAvailable: boolean;

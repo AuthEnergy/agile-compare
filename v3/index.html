@@ -5794,6 +5794,10 @@ function initAnalytics() {
     capture_pageview: false,
     capture_pageleave: false,
     disable_session_recording: true,
+    // Prevents posthog-js loading a remote config script from eu-assets.i.posthog.com,
+    // which would violate the app's strict script-src CSP. We don't use feature flags
+    // so this has no functional cost.
+    advanced_disable_flags: true,
     // No cookies, no localStorage writes — PostHog uses a fresh random distinct_id
     // per session so individual sessions cannot be correlated across visits.
     persistence: "memory"

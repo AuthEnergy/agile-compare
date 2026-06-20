@@ -25,7 +25,7 @@ const MONTHS = [
 ];
 
 const withYours = (columns: HeadlineColumns, label: string, column: 'flex' | 'agile'): string =>
-  columns.yoursColumn === column ? `${label} · yours` : label;
+  columns.yoursColumn === column ? `${label}` : label;
 
 // Monday-first column index (0 = Mon … 6 = Sun) for a UTC date.
 const mondayIndex = (d: Date): number => (d.getUTCDay() + 6) % 7;

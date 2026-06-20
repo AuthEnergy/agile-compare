@@ -2090,7 +2090,7 @@ const MONTHS = [
   "November",
   "December"
 ];
-const withYours = (columns, label, column) => columns.yoursColumn === column ? `${label} · yours` : label;
+const withYours = (columns, label, column) => columns.yoursColumn === column ? `${label}` : label;
 const mondayIndex = (d) => (d.getUTCDay() + 6) % 7;
 const FALLBACK_TAG = {
   name: "alert",

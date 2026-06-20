@@ -9890,7 +9890,7 @@ class App {
     });
     const analyticsSwitch = switchRow({
       label: "Share anonymous results with Auth Energy",
-      description: "Sends postcode area, % difference between tariffs, total kWh, and period length when a comparison completes. No API key, MPAN, full postcode, or £ amounts.",
+      description: "Sends postcode area (first half), % savings, total kWh and dates compared. No personal data, consumption data, tariff data, API key, MPAN, address, full postcode, or £ amounts are shared.",
       checked: this.state.analyticsConsent,
       onChange: (checked) => {
         saveAnalyticsConsent(checked);
@@ -9974,8 +9974,8 @@ class App {
         [
           card,
           callout(
-            "Your key never leaves this device",
-            "It is used once to read your data straight from Octopus. Remembering it is optional and stays in this browser only.",
+            "Your data never leaves your device",
+            "Keys are used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only.",
             "support",
             "lock"
           ),

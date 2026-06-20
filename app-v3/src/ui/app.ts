@@ -650,22 +650,35 @@ export class App {
   }
 
   private renderHeader(): HTMLElement {
-    const brand = el(
-      'button',
-      {
-        class: 'brand',
-        type: 'button',
-        ariaLabel: 'Home',
-        onClick: () => this.reset(),
-      },
-      [
-        el('span', { style: 'color:var(--ink);line-height:0' }, [logo(LOGO_PATHS, 26)]),
-        el('span', { style: 'display:flex;flex-direction:column;line-height:1.1' }, [
+    const brand = el('div', { class: 'brand' }, [
+      el(
+        'a',
+        {
+          href: 'https://auth.energy',
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          ariaLabel: 'Auth Energy',
+          style: 'color:var(--ink);line-height:0;display:flex',
+        },
+        [logo(LOGO_PATHS, 26)],
+      ),
+      el(
+        'a',
+        {
+          href: '',
+          ariaLabel: 'Home',
+          style: 'display:flex;flex-direction:column;line-height:1.1',
+          onClick: (ev) => {
+            ev.preventDefault();
+            this.reset();
+          },
+        },
+        [
           el('span', { class: 'brand-name', text: 'Octopus Tariff Check' }),
           el('span', { class: 'brand-by', text: 'by auth.energy' }),
-        ]),
-      ],
-    );
+        ],
+      ),
+    ]);
     const onDevice = el('span', { class: 'chip' }, [
       el('span', { style: 'color:var(--status-support);line-height:0' }, [
         icon(ICONS.lock, 13, 2.4),

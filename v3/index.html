@@ -32,7 +32,7 @@
   if (props.style) node.setAttribute("style", props.style);
   if (props.title !== void 0) node.title = props.title;
   if (props.type) node.setAttribute("type", props.type);
-  if (props.href) node.setAttribute("href", props.href);
+  if (props.href !== void 0) node.setAttribute("href", props.href);
   if (props.target) node.setAttribute("target", props.target);
   if (props.rel) node.setAttribute("rel", props.rel);
   if (props.placeholder !== void 0) node.setAttribute("placeholder", props.placeholder);
@@ -9777,22 +9777,35 @@ class App {
     }
   }
   renderHeader() {
-    const brand = el$1(
-      "button",
-      {
-        class: "brand",
-        type: "button",
-        ariaLabel: "Home",
-        onClick: () => this.reset()
-      },
-      [
-        el$1("span", { style: "color:var(--ink);line-height:0" }, [logo(LOGO_PATHS, 26)]),
-        el$1("span", { style: "display:flex;flex-direction:column;line-height:1.1" }, [
+    const brand = el$1("div", { class: "brand" }, [
+      el$1(
+        "a",
+        {
+          href: "https://auth.energy",
+          target: "_blank",
+          rel: "noopener noreferrer",
+          ariaLabel: "Auth Energy",
+          style: "color:var(--ink);line-height:0;display:flex"
+        },
+        [logo(LOGO_PATHS, 26)]
+      ),
+      el$1(
+        "a",
+        {
+          href: "",
+          ariaLabel: "Home",
+          style: "display:flex;flex-direction:column;line-height:1.1",
+          onClick: (ev) => {
+            ev.preventDefault();
+            this.reset();
+          }
+        },
+        [
           el$1("span", { class: "brand-name", text: "Octopus Tariff Check" }),
           el$1("span", { class: "brand-by", text: "by auth.energy" })
-        ])
-      ]
-    );
+        ]
+      )
+    ]);
     const onDevice = el$1("span", { class: "chip" }, [
       el$1("span", { style: "color:var(--status-support);line-height:0" }, [
         icon(ICONS.lock, 13, 2.4)
@@ -10727,11 +10740,10 @@ button {
   display: flex;
   align-items: center;
   gap: 9px;
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left; /* a <button> defaults to centre — keep the wordmark left-aligned */
+}
+.brand a {
+  text-decoration: none;
+  color: inherit;
 }
 .brand-name {
   font-size: 15px;

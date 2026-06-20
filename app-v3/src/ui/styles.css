@@ -223,11 +223,10 @@ button {
   display: flex;
   align-items: center;
   gap: 9px;
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0;
-  text-align: left; /* a <button> defaults to centre — keep the wordmark left-aligned */
+}
+.brand a {
+  text-decoration: none;
+  color: inherit;
 }
 .brand-name {
   font-size: 15px;

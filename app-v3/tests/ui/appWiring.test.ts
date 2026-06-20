@@ -119,7 +119,7 @@ describe('App live-journey wiring', () => {
     app.mount();
 
     const p = app.runLive('sk_test_key'); // run #1 starts → fetch screen
-    (root.querySelector('.brand') as HTMLButtonElement | null)?.click(); // Home → reset, bumps runSeq
+    (root.querySelector('.brand [aria-label="Home"]') as HTMLElement | null)?.click(); // Home → reset, bumps runSeq
     await p; // the stale run must bail, NOT navigate to the meter picker
 
     expect(root.textContent).not.toContain('Which meter?');

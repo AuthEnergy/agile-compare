@@ -35,7 +35,7 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   if (props.style) node.setAttribute('style', props.style);
   if (props.title !== undefined) node.title = props.title;
   if (props.type) node.setAttribute('type', props.type);
-  if (props.href) node.setAttribute('href', props.href);
+  if (props.href !== undefined) node.setAttribute('href', props.href);
   if (props.target) node.setAttribute('target', props.target);
   if (props.rel) node.setAttribute('rel', props.rel);
   if (props.placeholder !== undefined) node.setAttribute('placeholder', props.placeholder);

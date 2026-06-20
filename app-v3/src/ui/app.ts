@@ -714,12 +714,15 @@ export class App {
       },
       [
         el('h1', { style: 'font-size:var(--text-h1);line-height:1.15;text-wrap:balance' }, [
-          'See what a smarter tariff ',
-          el('em', { style: 'font-style:normal;color:var(--grid-blue)', text: 'would have cost' }),
+          'See what a dynamic tariff ',
+          el('em', {
+            style: 'font-style:normal;color:var(--grid-blue)',
+            text: 'would have cost you',
+          }),
         ]),
         el('p', {
           class: 'lead',
-          text: 'Priced on your own half-hourly usage, not an average home.',
+          text: 'Past performance is not a guarantee of future savings.',
         }),
       ],
     );
@@ -863,7 +866,7 @@ export class App {
           card,
           callout(
             'Your data never leaves your device',
-            'Keys are used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only.',
+            'API Key is used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only.',
             'support',
             'lock',
           ),

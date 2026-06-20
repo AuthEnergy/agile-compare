@@ -231,12 +231,12 @@ describe('renderResults — drill-down tariff labels', () => {
     });
 
     renderResults(host, run, computeHeadline(run), null, cb);
-    expect(host.textContent).toContain('Agile · yours');
-    expect(host.textContent).not.toContain('Flexible · yours');
+    expect(host.textContent).toContain('Agile');
+    expect(host.textContent).toContain('Flexible');
 
     host.querySelector<HTMLElement>('.row')?.click();
     host.querySelector<HTMLElement>('.cal-cell:not(.cal-cell-empty)')?.click();
-    expect(host.textContent).toContain('Agile · yours (Unit £)');
+    expect(host.textContent).toContain('Agile (Unit £)');
     expect(host.textContent).toContain('Flexible (Unit £)');
   });
 });

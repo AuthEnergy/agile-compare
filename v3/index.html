@@ -382,6 +382,13 @@ function computeHeadline(run) {
   const previousTariffOnly = allPeriodsPredateCurrentTariff(periods, currentTariff) ? buildPreviousTariffNotice(periods, currentTariff, context.currentAgreement) : null;
   const onAgile = currentTariff ? classifyTariffCode(currentTariff).kind === "agile" : false;
   const currentTariffLabel = currentTariff ? classifyTariffCode(currentTariff).label : "your tariff";
+  const onFlexible = currentTariff ? classifyTariffCode(currentTariff).kind === "flexible" : false;
+  const flexIsYours = context.tariffOverride === true || onFlexible;
+  const columns = {
+    flexLabel: flexIsYours ? currentTariffLabel : "Flexible",
+    agileLabel: "Agile",
+    yoursColumn: onAgile ? "agile" : flexIsYours ? "flex" : null
+  };
   const compareFlexible = onAgile && previousTariffOnly === null;
   const altTotal = compareFlexible ? summaryFlex : summaryAgile;
   const altLabel = compareFlexible ? "Flexible" : "Agile";
@@ -416,6 +423,7 @@ function computeHeadline(run) {
     previousTariffOnly,
     currentTariffLabel,
     comparison: { altLabel, altTotal, currentCalc, onAgile },
+    columns,
     wholeWindow: { totalKwh, totalFlex, totalAgile, billedKwhTotal, anyMismatchAllPeriods }
   };
 }
@@ -1763,6 +1771,7 @@ function buildImportDiagnostics(run, opts) {
     },
     region: context.regionLetter,
     currentTariffCode: currentTariffCode ?? "unknown",
+    tariffOverride: context.tariffOverride ?? false,
     postcodeArea: context.postcodeArea || "not available",
     agreements: (context.agreements || []).map((a) => ({
       tariffCode: a.tariff_code,
@@ -2081,6 +2090,7 @@ const MONTHS = [
   "November",
   "December"
 ];
+const withYours = (columns, label, column) => columns.yoursColumn === column ? `${label}` : label;
 const mondayIndex = (d) => (d.getUTCDay() + 6) % 7;
 const FALLBACK_TAG = {
   name: "alert",
@@ -2165,15 +2175,21 @@ function slotRow(s, maxAbsRateDelta) {
     el("div", { class: "slot-flag", style: `background:${rowBg};color:${flagFg}` }, [flagText])
   ];
 }
-function slotGrid(day, run, period) {
+function slotGrid(day, run, period, columns) {
   const slots = buildSlotCalculations(day.date, period, run.detail);
   const rateDeltas = slots.filter((s) => s.flexRate !== null && s.agileRate !== null && !s.flags.outOfPeriod).map((s) => (s.flexRate ?? 0) - (s.agileRate ?? 0));
   const maxAbsRateDelta = Math.max(1, ...rateDeltas.map(Math.abs));
   const head = el("div", { class: "slot-grid-head" }, [
     el("span", { text: "Slot" }),
     el("span", { class: "tnum", text: "kWh" }),
-    el("span", { class: "tnum", text: "Yours (Unit £)" }),
-    el("span", { class: "tnum", text: "Agile Cost (Unit £)" })
+    el("span", {
+      class: "tnum",
+      text: `${withYours(columns, columns.flexLabel, "flex")} (Unit £)`
+    }),
+    el("span", {
+      class: "tnum",
+      text: `${withYours(columns, columns.agileLabel, "agile")} (Unit £)`
+    })
   ]);
   const standingRow = el("div", { class: "slot-row", style: "background:var(--surface-sunken)" }, [
     el("span", { text: "Standing charge" }),
@@ -2193,7 +2209,7 @@ function slotGrid(day, run, period) {
   ]);
   return el("div", { style: "border-top:1px solid var(--border-soft)" }, [head, scroll]);
 }
-function dayDetailHead(day) {
+function dayDetailHead(day, columns) {
   const agileText = day.agileTotalPence === null ? "n/a" : fmtMoney(day.agileTotalPence);
   return el("div", { class: "cal-detail-head" }, [
     el("span", { class: "day-date", text: fmtDate(day.date) }),
@@ -2206,16 +2222,16 @@ function dayDetailHead(day) {
     el("span", {
       class: "mono",
       style: "font-size:var(--text-data-sm);color:var(--text-muted)",
-      text: `Yours ${fmtMoney(day.flexTotalPence)}`
+      text: `${withYours(columns, columns.flexLabel, "flex")} ${fmtMoney(day.flexTotalPence)}`
     }),
     el("span", {
       class: "mono",
       style: "font-size:var(--text-data-sm);color:var(--text-strong)",
-      text: `Agile ${agileText}`
+      text: `${withYours(columns, columns.agileLabel, "agile")} ${agileText}`
     })
   ]);
 }
-function dayCalendar(days, run, period) {
+function dayCalendar(days, run, period, columns) {
   const agileDeltas = days.filter((d) => d.agileTotalPence !== null).map((d) => d.flexTotalPence - (d.agileTotalPence ?? 0));
   const maxAbsDelta = Math.max(1, ...agileDeltas.map(Math.abs));
   const detail = el("div", { class: "cal-detail" });
@@ -2227,11 +2243,11 @@ function dayCalendar(days, run, period) {
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day, run, period);
+      grid = slotGrid(day, run, period, columns);
       gridCache.set(day.date.getTime(), grid);
     }
     clear(detail);
-    detail.append(dayDetailHead(day), grid);
+    detail.append(dayDetailHead(day, columns), grid);
   };
   const months = /* @__PURE__ */ new Map();
   for (const d of days) {
@@ -2268,7 +2284,7 @@ function dayCalendar(days, run, period) {
         {
           class: "cal-cell",
           type: "button",
-          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · Yours ${fmtMoney(d.flexTotalPence)} · Agile ${agileLabel}`,
+          title: `${fmtDate(d.date)} · ${fmtKwh(d.kwh, 1)} · ${withYours(columns, columns.flexLabel, "flex")} ${fmtMoney(d.flexTotalPence)} · ${withYours(columns, columns.agileLabel, "agile")} ${agileLabel}`,
           style: `background:${cellBg}`
         },
         [
@@ -2302,7 +2318,7 @@ function dayCalendar(days, run, period) {
     detail
   ]);
 }
-function renderPeriodRow(vm, run) {
+function renderPeriodRow(vm, run, columns) {
   const ti = TAG_ICON[vm.status] ?? FALLBACK_TAG;
   const tag = el("span", { class: "row-tag", style: `background:${ti.bg};color:${ti.fg}` }, [
     icon(ICONS[ti.name], 15, 2.2)
@@ -2334,12 +2350,12 @@ function renderPeriodRow(vm, run) {
           el("span", {
             class: "mono",
             style: "font-size:var(--text-data-sm);color:var(--text-strong)",
-            text: `Agile ${vm.agileText}`
+            text: `${withYours(columns, columns.agileLabel, "agile")} ${vm.agileText}`
           }),
           el("span", {
             class: "mono",
             style: "font-size:var(--text-caption);color:var(--text-muted)",
-            text: `Yours ${vm.flexText}`
+            text: `${withYours(columns, columns.flexLabel, "flex")} ${vm.flexText}`
           }),
           el("span", {
             class: "mono",
@@ -2367,7 +2383,7 @@ function renderPeriodRow(vm, run) {
     head.classList.toggle("is-selected", open);
     if (open && !dayList) {
       const days = buildDayComparisons(vm.period, run.detail);
-      dayList = dayCalendar(days, run, vm.period);
+      dayList = dayCalendar(days, run, vm.period, columns);
       card.append(dayList);
     } else if (dayList) {
       dayList.style.display = open ? "" : "none";
@@ -2934,7 +2950,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
           el("span", { class: "row-sub", text: "Open a complete period for the maths." })
         ]
       ),
-      ...vm.periods.map((p) => renderPeriodRow(p, run))
+      ...vm.periods.map((p) => renderPeriodRow(p, run, headline.columns))
     ])
   );
   const showBilledRows = headline.scopedBilledKwh > 0;
@@ -3116,7 +3132,7 @@ function applyUserTariff(run, unitRatePence, standingChargePence) {
       flexUnitSorted,
       flexStanding
     );
-    const confident = newFlex.unmatchedReadings === 0 && newFlex.unmatchedStandingDays === 0 && (p.agile === null || p.agile.unmatchedReadings === 0 && p.agile.unmatchedStandingDays === 0);
+    const confident = !p.wasClamped && !p.suspectActual && newFlex.unmatchedReadings === 0 && newFlex.unmatchedStandingDays === 0 && (p.agile === null || p.agile.unmatchedReadings === 0 && p.agile.unmatchedStandingDays === 0);
     return {
       ...p,
       flex: newFlex,
@@ -3140,7 +3156,8 @@ function applyUserTariff(run, unitRatePence, standingChargePence) {
         tariff_code: "User tariff",
         valid_from: context.periodFrom.toISOString(),
         valid_to: context.periodTo.toISOString()
-      }
+      },
+      tariffOverride: true
     }
   };
 }
@@ -4512,7 +4529,13 @@ function reconstruct(d, readingsObj, rateWindowsObj, cw) {
       valid_to: strOrNull(o["validTo"])
     };
   });
-  const currentAgreement = agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const tariffOverride = d["tariffOverride"] === true;
+  const derivedCurrentAgreement = agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const currentAgreement = tariffOverride ? {
+    tariff_code: "User tariff",
+    valid_from: asStr(cw["from"]),
+    valid_to: asStr(cw["to"])
+  } : derivedCurrentAgreement;
   const currentTariffCode = currentAgreement?.tariff_code ?? null;
   const billingPeriodsRaw = asArr(d["billingPeriods"]).map(
     (p) => isObj(p) ? p : {}
@@ -4655,6 +4678,7 @@ function reconstruct(d, readingsObj, rateWindowsObj, cw) {
     postcodeArea: strOrNull(d["postcodeArea"]),
     currentAgreement,
     agreements,
+    tariffOverride,
     periodFrom: new Date(asStr(cw["from"])),
     periodTo: new Date(asStr(cw["to"])),
     agileAvailable,

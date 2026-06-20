@@ -82,6 +82,7 @@ export interface ImportDiagnostics {
   comparisonWindow: { from: string; to: string };
   region: string;
   currentTariffCode: string;
+  tariffOverride?: boolean;
   postcodeArea: string;
   agreements: DiagAgreement[];
   readings: {

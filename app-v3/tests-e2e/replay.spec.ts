@@ -31,7 +31,7 @@ test('replay a diagnostics file → results → month/day/slot drill-down (CSP c
 
   // Month → day: a complete period expands to the month calendar (lazy).
   await page.locator('.row', { hasText: 'January 2025' }).click();
-  await expect(page.getByText(/Daily cost/)).toBeVisible();
+  await expect(page.getByText(/Tap a day for its 48 half-hours/)).toBeVisible();
 
   // Day → 48 slots: tapping a calendar day reveals its half-hour grid (lazy).
   await page.locator('.cal-cell:not(.cal-cell-empty)').first().click();

@@ -69,4 +69,38 @@ describe('diagnostics round-trip (capture -> serialise -> replay)', () => {
     expect(h2.summaryActual).toBe(h1.summaryActual);
     expect(h2.consistentCount).toBe(h1.consistentCount);
   });
+
+  it('preserves a user tariff override through replay', () => {
+    const run = makeRun(
+      [
+        {
+          start: '2025-01-01',
+          end: '2025-02-01',
+          tariff: 'current',
+          actual: 5000,
+          flexEnergy: 4200,
+          flexStanding: 800,
+          agileEnergy: 3600,
+          agileStanding: 800,
+        },
+      ],
+      { tariffOverride: true },
+    );
+
+    const d1 = buildImportDiagnostics(run, { generatedAt: GEN });
+    expect(d1.tariffOverride).toBe(true);
+    const replayed = replayDiagnostics(JSON.stringify(d1));
+    expect(replayed.ok).toBe(true);
+    if (!replayed.ok || replayed.kind !== 'import') throw new Error('expected import replay');
+
+    expect(replayed.run.context.tariffOverride).toBe(true);
+    expect(replayed.run.context.currentAgreement?.tariff_code).toBe('User tariff');
+    expect(replayed.run.periods[0]?.tariffCodes).toEqual(['User tariff']);
+    expect(replayed.run.periods[0]?.actualTariffCode).toBe('User tariff');
+    expect(computeHeadline(replayed.run).columns).toEqual({
+      flexLabel: 'User tariff',
+      agileLabel: 'Agile',
+      yoursColumn: 'flex',
+    });
+  });
 });

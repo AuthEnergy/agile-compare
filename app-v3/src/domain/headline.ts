@@ -10,6 +10,12 @@ export interface HeadlineVerdict {
   differencePence: number;
 }
 
+export interface HeadlineColumns {
+  flexLabel: string;
+  agileLabel: 'Agile';
+  yoursColumn: 'flex' | 'agile' | null;
+}
+
 // Set when EVERY priced period predates the move to the user's current tariff, so
 // there is no current-tariff data to summarise. The figures are still honest over
 // the earlier usage — this just lets the UI say so plainly instead of "0 of N".
@@ -51,6 +57,9 @@ export interface Headline {
     currentCalc: number | null; // your own tariff's calculated total (Flexible or Agile)
     onAgile: boolean;
   };
+  // The drill-down's fixed calculation columns: the first is the stored `flex`
+  // calculation slot, which becomes the entered user tariff after an override.
+  columns: HeadlineColumns;
   // Whole-window figures + whole-window mismatch, for the email summary.
   wholeWindow: {
     totalKwh: number;
@@ -225,6 +234,13 @@ export function computeHeadline(run: ComparisonRun): Headline {
   const currentTariffLabel = currentTariff
     ? classifyTariffCode(currentTariff).label
     : 'your tariff';
+  const onFlexible = currentTariff ? classifyTariffCode(currentTariff).kind === 'flexible' : false;
+  const flexIsYours = context.tariffOverride === true || onFlexible;
+  const columns: HeadlineColumns = {
+    flexLabel: flexIsYours ? currentTariffLabel : 'Flexible',
+    agileLabel: 'Agile',
+    yoursColumn: onAgile ? 'agile' : flexIsYours ? 'flex' : null,
+  };
   const compareFlexible = onAgile && previousTariffOnly === null;
   const altTotal = compareFlexible ? summaryFlex : summaryAgile;
   const altLabel = compareFlexible ? 'Flexible' : 'Agile';
@@ -263,6 +279,7 @@ export function computeHeadline(run: ComparisonRun): Headline {
     previousTariffOnly,
     currentTariffLabel,
     comparison: { altLabel, altTotal, currentCalc, onAgile },
+    columns,
     wholeWindow: { totalKwh, totalFlex, totalAgile, billedKwhTotal, anyMismatchAllPeriods },
   };
 }

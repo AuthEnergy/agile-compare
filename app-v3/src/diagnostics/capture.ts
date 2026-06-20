@@ -152,6 +152,7 @@ export function buildImportDiagnostics(
     },
     region: context.regionLetter,
     currentTariffCode: currentTariffCode ?? 'unknown',
+    tariffOverride: context.tariffOverride ?? false,
     postcodeArea: context.postcodeArea || 'not available',
     agreements: (context.agreements || []).map((a) => ({
       tariffCode: a.tariff_code,

@@ -77,11 +77,27 @@ function mkPeriod(spec: PeriodSpec): PeriodComparison {
   };
 }
 
-export function makeRun(specs: PeriodSpec[]): ComparisonRun {
+export function makeRun(
+  specs: PeriodSpec[],
+  opts: { tariffOverride?: boolean } = {},
+): ComparisonRun {
   const periods = specs.map(mkPeriod);
   const agreements = [
     { tariff_code: CURRENT_TARIFF, valid_from: '2024-01-01T00:00:00.000Z', valid_to: null },
   ];
+  const currentAgreement = opts.tariffOverride
+    ? {
+        tariff_code: 'User tariff',
+        valid_from: '2024-12-01T00:00:00.000Z',
+        valid_to: '2025-03-01T00:00:00.000Z',
+      }
+    : (agreements[0] ?? null);
+  if (opts.tariffOverride) {
+    periods.forEach((p) => {
+      p.tariffCodes = ['User tariff'];
+      p.actualTariffCode = 'User tariff';
+    });
+  }
   return {
     periods,
     detail: {
@@ -107,8 +123,9 @@ export function makeRun(specs: PeriodSpec[]): ComparisonRun {
     context: {
       regionLetter: 'A',
       postcodeArea: 'AB',
-      currentAgreement: agreements[0] ?? null,
+      currentAgreement,
       agreements,
+      tariffOverride: opts.tariffOverride ?? false,
       periodFrom: new Date('2024-12-01T00:00:00Z'),
       periodTo: new Date('2025-03-01T00:00:00Z'),
       agileAvailable: true,

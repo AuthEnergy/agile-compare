@@ -354,12 +354,20 @@ export function renderPeriodRow(
           el('span', {
             class: 'mono',
             style: 'font-size:var(--text-data-sm);color:var(--text-strong)',
-            text: `${withYours(columns, columns.agileLabel, 'agile')} ${vm.agileText}`,
+            text:
+              `${withYours(columns, columns.agileLabel, 'agile')} ${vm.agileText}` +
+              (vm.agileAvgPence !== null
+                ? ` (${vm.agileAvgPence.toFixed(1)}p/kWh)`
+                : ''),
           }),
           el('span', {
             class: 'mono',
             style: 'font-size:var(--text-caption);color:var(--text-muted)',
-            text: `${withYours(columns, columns.flexLabel, 'flex')} ${vm.flexText}`,
+            text:
+              `${withYours(columns, columns.flexLabel, 'flex')} ${vm.flexText}` +
+              (vm.flexAvgPence !== null
+                ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)`
+                : ''),
           }),
           el('span', {
             class: 'mono',

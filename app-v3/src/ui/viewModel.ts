@@ -23,6 +23,8 @@ export interface PeriodRowVM {
   kwhText: string;
   flexText: string; // this month on Flexible (£)
   agileText: string; // this month on Agile (£), or 'n/a'
+  flexAvgPence: number | null; // effective unit rate p/kWh for the yours/flex side
+  agileAvgPence: number | null; // avg Agile unit rate p/kWh (energy only, excl. standing)
   status: PeriodStatus;
   expandable: boolean;
 }
@@ -149,6 +151,9 @@ function classifyPeriod(
     kwhText: excluded ? 'excl.' : fmtKwh(p.flex.kwh, 0),
     flexText: fmtMoney(p.flex.totalPence),
     agileText: p.agile ? fmtMoney(p.agile.totalPence) : 'n/a',
+    flexAvgPence: p.flex.kwh > 0 ? p.flex.energyCostPence / p.flex.kwh : null,
+    agileAvgPence:
+      p.agile && p.agile.kwh > 0 ? p.agile.energyCostPence / p.agile.kwh : null,
     // Any period on the current tariff is drillable to day/slot maths — including a
     // mismatch, whose total is suppressed from the headline but still worth opening.
     expandable:

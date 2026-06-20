@@ -23,7 +23,7 @@
   script could run, and a meta-tag CSP can't set frame-ancestors or block nav-based
   exfiltration — closing those needs a real response header + hashes (tracked follow-up).
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://api.octopus.energy; frame-src 'none'; child-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; connect-src https://api.octopus.energy https://eu.i.posthog.com; frame-src 'none'; child-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Octopus Tariff Check | auth.energy</title>
 </head>
 <body>

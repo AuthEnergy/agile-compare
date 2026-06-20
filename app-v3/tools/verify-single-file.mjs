@@ -13,7 +13,7 @@ const builtPath = join(here, '..', '..', 'v3', 'index.html');
 const CANONICAL_CSP =
   `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
   `script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; ` +
-  `connect-src https://api.octopus.energy; frame-src 'none'; child-src 'none'; ` +
+  `connect-src https://api.octopus.energy https://eu.i.posthog.com; frame-src 'none'; child-src 'none'; ` +
   `font-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">`;
 
 // Known exported/domain identifiers that must survive an UNMINIFIED build. Grows
@@ -47,10 +47,12 @@ if (/(?:src|href)\s*=\s*["'][^"']*\/assets\//i.test(html)) {
 }
 
 // 3) Unminified: many short lines, no absurdly long single line.
+// Threshold is 5 000 (not 2 000) to accommodate bundled dependencies (e.g. posthog-js)
+// that have long object-literal defaults; real minifiers produce lines of 50 000+.
 const lines = html.split('\n');
 const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
 if (lines.length < 20) errors.push(`only ${lines.length} lines — looks minified/single-line`);
-if (longest > 2000) errors.push(`longest line is ${longest} chars — looks minified`);
+if (longest > 5000) errors.push(`longest line is ${longest} chars — looks minified`);
 
 // 4) Required domain identifiers survived.
 for (const id of REQUIRED_IDENTIFIERS) {

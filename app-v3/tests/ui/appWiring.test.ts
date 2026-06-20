@@ -3,7 +3,11 @@ import { describe, it, expect, vi } from 'vitest';
 // Mock the network-touching modules so this exercises only the App's live-journey
 // WIRING (connect → discover → meter picker → fetch → results). The flows
 // themselves are covered by their own fetch-mocked unit tests.
-vi.mock('../../src/api/account', () => ({ obtainKrakenToken: vi.fn(async () => 'tok') }));
+vi.mock('../../src/api/account', () => ({
+  obtainKrakenToken: vi.fn(async () => 'tok'),
+  getPostcodeAreaForMpan: vi.fn(() => null),
+  getAgreementsForMpan: vi.fn(() => []),
+}));
 vi.mock('../../src/api/client', () => ({
   createClient: vi.fn(() => ({})),
   OctopusApiError: class extends Error {},

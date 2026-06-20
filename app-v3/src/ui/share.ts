@@ -6,7 +6,7 @@ import { LOGO_PATHS } from './icons';
 
 // --- structured claims (pure, testable) -------------------------------------
 
-interface ShareClaims {
+export interface ShareClaims {
   period: string;
   // Flexible vs Agile on the user's own usage (both as estimates).
   estimate: { cheaper: string; dearer: string; pct: number } | null;
@@ -16,7 +16,7 @@ interface ShareClaims {
 
 // Returns null when there's nothing trustworthy + comparative to share (and never
 // in the all-pre-switch case — that's old usage, not a current-tariff result).
-function computeShareClaims(run: ComparisonRun, headline: Headline): ShareClaims | null {
+export function computeShareClaims(run: ComparisonRun, headline: Headline): ShareClaims | null {
   if (!headline.trustworthy || headline.previousTariffOnly !== null) return null;
   const comp = headline.comparison;
   if (comp.altTotal === null) return null;

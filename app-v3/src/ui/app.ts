@@ -2,10 +2,17 @@ import { badge, button, callout, inputField, switchRow } from './components';
 import { clear, el, icon, logo } from './dom';
 import { ICONS, LOGO_PATHS } from './icons';
 import { clearApiKey, loadSavedApiKey, saveApiKey } from '../storage/credentials';
+import { loadAnalyticsConsent, saveAnalyticsConsent } from '../storage/analyticsConsent';
+import {
+  initAnalytics,
+  trackComparisonSuccess,
+  trackComparisonFailure,
+  type ComparisonFailureProps,
+} from '../analytics/posthog';
 import { computeHeadline } from '../domain/headline';
 import { nextSteps } from '../journey/nextSteps';
 import { getAgreementsForMpan, getPostcodeAreaForMpan, obtainKrakenToken } from '../api/account';
-import { createClient, type OctopusClient } from '../api/client';
+import { createClient, OctopusApiError, type OctopusClient } from '../api/client';
 import { discoverMeters, type MeterChoice } from '../api/meters';
 import { runComparison, type RunInput } from '../flows/runComparison';
 import { runExportComparison } from '../flows/runExportComparison';
@@ -15,6 +22,7 @@ import type { PiiIdentifiers } from '../domain/redact';
 import type { AnyDiagnostics, DiagnosticsBundle, FailureDiagnostics } from '../types/diagnostics';
 import type { ComparisonRun, ExportRun, ProgressFn } from '../types/result';
 import { renderResults, renderResultsEmpty } from './results';
+import { computeShareClaims } from './share';
 import { openTariffOverrideModal } from './tariffOverrideModal';
 import { applyUserTariff } from '../flows/applyUserTariff';
 import { renderExportResults } from './exportResults';
@@ -46,6 +54,7 @@ export interface UiState {
   fetchPct: number;
   fetchMessage: string;
   exportConsent: boolean;
+  analyticsConsent: boolean;
 }
 
 export interface UiActions {
@@ -77,6 +86,20 @@ function initialTheme(): 'light' | 'dark' {
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) return err.message;
   return 'Something went wrong. Check your API key and try again.';
+}
+
+function classifyError(err: unknown): Omit<ComparisonFailureProps, 'stage'> {
+  if (err instanceof OctopusApiError) {
+    return { errorType: 'OctopusApiError', httpStatus: err.status, corsLikely: err.corsLikely };
+  }
+  if (err instanceof Error) {
+    return {
+      errorType: err.name || err.constructor?.name || 'Error',
+      httpStatus: null,
+      corsLikely: false,
+    };
+  }
+  return { errorType: 'Error', httpStatus: null, corsLikely: false };
 }
 
 // The app shell: owns UI state, paints the header / step progress / current
@@ -122,6 +145,8 @@ export class App {
     this.actions = actions;
     // Restore an opt-in saved key so "remember" is a true contract, not a label.
     const savedKey = loadSavedApiKey();
+    const analyticsConsent = loadAnalyticsConsent();
+    if (analyticsConsent) initAnalytics();
     this.state = {
       screen: 'connect',
       theme: initialTheme(),
@@ -132,6 +157,7 @@ export class App {
       fetchPct: 0,
       fetchMessage: '',
       exportConsent: false,
+      analyticsConsent,
     };
     this.screenRenderers.set('connect', (h) => this.renderConnect(h));
     this.screenRenderers.set('meter', (h) => this.renderMeterScreen(h));
@@ -189,6 +215,7 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err);
+      trackComparisonFailure({ ...classifyError(err), stage: 'auth' });
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -225,6 +252,7 @@ export class App {
         const run = await runComparison(client, input, onProgress);
         if (myRun !== this.runSeq) return;
         this.showResults(run);
+        this.trackSuccess(run, meter);
       }
       // Record the live meter AFTER show* (which clears it) so diagnostics can
       // redaction-scrub these real identifiers from the bundle.
@@ -232,8 +260,27 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err, meter);
+      trackComparisonFailure({ ...classifyError(err), stage: 'fetch' });
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
+  }
+
+  private trackSuccess(run: ComparisonRun, meter: MeterChoice): void {
+    if (!this.state.analyticsConsent) return;
+    const headline = computeHeadline(run);
+    const claims = computeShareClaims(run, headline);
+    const outwardCode = getPostcodeAreaForMpan(meter.accountData, meter.mpan);
+    const periodMs = run.context.periodTo.getTime() - run.context.periodFrom.getTime();
+    const periodDays = periodMs / (24 * 60 * 60 * 1000);
+    let pctSaved: number | null = null;
+    if (claims?.actual) {
+      const altIsAgile = claims.actual.altLabel === 'Agile';
+      const agileIsCheaper = altIsAgile ? claims.actual.cheaper : !claims.actual.cheaper;
+      pctSaved = agileIsCheaper ? claims.actual.pct : -claims.actual.pct;
+    } else if (claims?.estimate) {
+      pctSaved = claims.estimate.cheaper === 'Agile' ? claims.estimate.pct : -claims.estimate.pct;
+    }
+    trackComparisonSuccess({ outwardCode, pctSaved, kwhTotal: headline.summaryKwh, periodDays });
   }
 
   // Build a failure diagnostic (v2 parity) the user can download/send from the
@@ -721,6 +768,17 @@ export class App {
         this.setState({ remember: checked });
       },
     });
+    const analyticsSwitch = switchRow({
+      label: 'Share anonymous results with Auth Energy',
+      description:
+        'Sends postcode area, % difference between tariffs, total kWh, and period length when a comparison completes. No API key, MPAN, full postcode, or £ amounts.',
+      checked: this.state.analyticsConsent,
+      onChange: (checked) => {
+        saveAnalyticsConsent(checked);
+        if (checked) initAnalytics();
+        this.setState({ analyticsConsent: checked });
+      },
+    });
 
     const card = el(
       'div',
@@ -736,6 +794,7 @@ export class App {
         apiInput,
         findKey,
         remember,
+        analyticsSwitch,
         connectBtn,
         el('div', { style: 'display:flex;justify-content:center' }, [
           button('Use a sample household', {
@@ -765,7 +824,7 @@ export class App {
       'div',
       { style: 'display:flex;flex-wrap:wrap;gap:7px;justify-content:center' },
       [
-        ...['No backend', 'No telemetry', 'Opt-in key storage'].map((g) =>
+        ...['No backend', 'Opt-in analytics', 'Opt-in key storage'].map((g) =>
           el('span', { class: 'chip' }, [
             el('span', { style: 'color:var(--status-support);line-height:0' }, [
               icon(ICONS.check, 12, 2.6),

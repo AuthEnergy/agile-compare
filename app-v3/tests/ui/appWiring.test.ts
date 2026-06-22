@@ -156,6 +156,15 @@ describe('App live-journey wiring', () => {
     expect(vi.mocked(trackComparisonFailure)).not.toHaveBeenCalled();
   });
 
+  it('describes analytics as percentage difference rather than savings', () => {
+    const root = document.createElement('div');
+    const app = new App(root, noActions);
+    app.mount();
+
+    expect(root.textContent).toContain('percentage difference');
+    expect(root.textContent).not.toContain('% savings');
+  });
+
   it('does not send failure analytics after the user unticks sharing', async () => {
     vi.mocked(discoverMeters).mockRejectedValue(new Error('No accounts found for this API key.'));
 

@@ -808,7 +808,7 @@ export class App {
     const analyticsSwitch = switchRow({
       label: 'Share anonymous results with Auth Energy',
       description:
-        'Sends postcode area (first half), % savings, total kWh and dates compared. No personal data, consumption data, tariff data, API key, MPAN, address, full postcode, or £ amounts are shared.',
+        'Default-on anonymous metrics: postcode area, percentage difference, total kWh and period length. No personal data, consumption data, tariff data, API key, MPAN, address, full postcode, dates, or £ amounts are shared.',
       checked: this.state.analyticsConsent,
       onChange: (checked) => {
         saveAnalyticsConsent(checked);

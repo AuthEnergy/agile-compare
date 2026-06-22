@@ -1,4 +1,5 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   _resetForTest,
   POSTHOG_CAPTURE_URL,
@@ -141,5 +142,12 @@ describe('PostHog direct capture', () => {
       [],
     );
     expect(document.cookie.toLowerCase()).not.toContain('posthog');
+  });
+
+  it('keeps the capture origin in the source CSP', () => {
+    const html = readFileSync('index.html', 'utf8');
+    const origin = new URL(POSTHOG_CAPTURE_URL).origin;
+
+    expect(html).toContain(`connect-src https://api.octopus.energy ${origin};`);
   });
 });

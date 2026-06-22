@@ -8,7 +8,10 @@ Guidance for AI coding agents working in this repo. Read this before making chan
 A browser-only **Octopus Energy tariff-confidence tool** for UK households. It reads
 the user's own half-hourly Octopus data **in their browser** and shows what smarter
 tariffs *would have cost* on their real usage — with confidence and caveats. There is
-**no backend and no telemetry**; the only network call is to `api.octopus.energy`.
+**no backend**; energy data is fetched only from `api.octopus.energy`. v3 also has
+default-on, narrow PostHog event sharing for comparison/failure metrics; it sends
+no API key, account number, MPAN, meter serial, full postcode, bill amounts, raw
+consumption, or tariff data, and can be unticked before running a comparison.
 
 Two apps live here:
 
@@ -20,13 +23,14 @@ Two apps live here:
 
 ## THE constraint that dominates everything
 
-The USP is *"one inspectable file that runs in your browser and talks only to Octopus."*
+The USP is *"one inspectable file that runs in your browser and sends only the
+documented Octopus API requests plus narrow optional PostHog events."*
 v3 **must** build to **one self-contained, UNMINIFIED `v3/index.html`** that boots under the
-strict CSP (kept byte-for-byte from v2):
+strict CSP:
 
 ```
 default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
-img-src 'self' data:; connect-src https://api.octopus.energy;
+img-src 'self' data:; connect-src https://api.octopus.energy https://eu.i.posthog.com;
 frame/child/font/media/object-src 'none'; base-uri 'none'; form-action 'none'
 ```
 
@@ -55,6 +59,7 @@ app-v3/src/
   journey/nextSteps.ts Stage-2 "move your timing" prompts (pure, read-only over a run)
   diagnostics/         capture, failure, replay, bundle, submit (anonymised, DOM-free + injectable)
   storage/credentials  opt-in API-key storage (localStorage)
+  storage/analyticsConsent  default-on sharing preference (localStorage)
   ui/                  the ONLY DOM layer (app shell + screens + drill-down view + diagnostics modal)
   main.ts              composition root
 app-v3/tests/          Vitest unit + jsdom
@@ -100,7 +105,8 @@ the regenerated `v3/index.html` in the same change.
 - `redactPII` is the belt-and-braces pass over any downloaded/shared bundle. Diagnostics **omit the
   account number by default**; export **raw half-hour slots only with explicit consent** (they reveal a
   generation pattern); postcode is reduced to outward area.
-- `localStorage` holds **only** the opt-in API key + the theme — nothing else.
+- `localStorage` holds **only** the opt-in API key, the theme, and the analytics sharing
+  preference — nothing else.
 
 ## Voice & design (consumer-confidence)
 

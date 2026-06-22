@@ -3,9 +3,23 @@ import {
   classifyTariffCode,
   findCurrentAgreement,
   makeTariffAtDateFn,
+  productCodeFromTariffCode,
   tariffCodesInRange,
 } from '../../src/domain/tariff';
 import type { Agreement } from '../../src/types/domain';
+
+describe('productCodeFromTariffCode', () => {
+  it('extracts product code from standard tariff codes', () => {
+    expect(productCodeFromTariffCode('E-1R-GO-VAR-22-10-14-G')).toBe('GO-VAR-22-10-14');
+    expect(productCodeFromTariffCode('E-1R-AGILE-24-10-01-A')).toBe('AGILE-24-10-01');
+    expect(productCodeFromTariffCode('E-1R-VAR-22-11-01-G')).toBe('VAR-22-11-01');
+    expect(productCodeFromTariffCode('E-2R-GO-VAR-22-10-14-G')).toBe('GO-VAR-22-10-14');
+  });
+  it('returns null for unrecognised formats', () => {
+    expect(productCodeFromTariffCode('')).toBeNull();
+    expect(productCodeFromTariffCode('not-a-tariff-code')).toBeNull();
+  });
+});
 
 describe('classifyTariffCode', () => {
   it('classifies export before agile/var', () => {

@@ -5,14 +5,24 @@ import {
   obtainKrakenToken,
 } from '../api/account';
 import { fetchConsumptionMerged } from '../api/consumption';
-import { fetchMergedRateWindows, findProductsByDisplayNameOverlapping } from '../api/products';
+import {
+  fetchCurrentTariffRates,
+  fetchMergedRateWindows,
+  findProductsByDisplayNameOverlapping,
+  type CurrentTariffRates,
+} from '../api/products';
 import { fetchStatementsForMpan } from '../api/statements';
 import { OctopusApiError, type OctopusClient } from '../api/client';
 import { calculateCost } from '../domain/cost';
 import { detectGaps, estimateMissingKwh } from '../domain/gaps';
 import { splitLongPeriods } from '../domain/periods';
 import { billedKwhMismatch, summariseStatementTransactions } from '../domain/statements';
-import { findCurrentAgreement, makeTariffAtDateFn, tariffCodesInRange } from '../domain/tariff';
+import {
+  classifyTariffCode,
+  findCurrentAgreement,
+  makeTariffAtDateFn,
+  tariffCodesInRange,
+} from '../domain/tariff';
 import type { StatementCharge, StatementCredit } from '../types/api';
 import type { RateWindow, RawPeriod } from '../types/domain';
 import type { AccountData, RawConsumptionRow } from '../types/octopus';
@@ -235,7 +245,7 @@ export async function runComparison(
   }
   onProgress(`Found ${split.length} billing period(s).`, 'ok', 50);
 
-  // --- Flexible rates ---
+  // --- Flexible rates (always fetched — used for pre-switch periods and as fallback) ---
   onProgress('Discovering Flexible Octopus product version(s)…', 'active', 55);
   const flexProducts = await findProductsByDisplayNameOverlapping(
     client,
@@ -269,6 +279,46 @@ export async function runComparison(
     throw new Error(`Could not find Flexible Octopus rates for region ${regionLetter}.`);
   }
   onProgress(`Flexible Octopus: ${flexUnitRates.length} unit rate window(s).`, 'ok', 60);
+
+  // --- Actual current-tariff rates (non-Flexible, non-Agile users) ---
+  // Flexible users: the flex column IS already their tariff (fetched above via product search).
+  // Agile users: compare against Flexible by design — skip.
+  // All others (Go, Fixed, Tracker, Cosy, FLUX…): try to fetch their actual rates;
+  // fall back to Flexible proxy and record a note if unavailable.
+  const currentTariffKind = classifyTariffCode(currentAgreement?.tariff_code).kind;
+  const onFlexible = currentTariffKind === 'flexible';
+  const onAgile = currentTariffKind === 'agile';
+  let currentTariffRates: CurrentTariffRates | null = null;
+  let flexNote: string | null = null;
+  if (!onFlexible && !onAgile && currentAgreement) {
+    onProgress('Fetching your current tariff rates…', 'active', 62);
+    try {
+      currentTariffRates = await fetchCurrentTariffRates(
+        client,
+        currentAgreement.tariff_code,
+        periodFrom,
+        periodTo,
+      );
+      if (currentTariffRates) {
+        const label = currentTariffRates.isToU ? 'time-of-use' : 'flat-rate';
+        onProgress(
+          `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
+          'ok',
+          64,
+        );
+      } else {
+        flexNote =
+          'Your current tariff rates are not available via the Octopus API — ' +
+          'Flexible Octopus is used as the comparison baseline for these periods.';
+        onProgress('Current tariff rates unavailable — using Flexible as proxy.', 'ok', 64);
+      }
+    } catch {
+      flexNote =
+        'Could not fetch your current tariff rates — ' +
+        'Flexible Octopus is used as the comparison baseline for these periods.';
+      onProgress('Current tariff rate fetch failed — using Flexible as proxy.', 'ok', 64);
+    }
+  }
 
   // --- Agile rates (optional) ---
   onProgress('Discovering Agile Octopus product version(s)…', 'active', 65);
@@ -336,9 +386,32 @@ export async function runComparison(
     ? [...agileUnitRates].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime())
     : [];
   const tariffAt = makeTariffAtDateFn(agreements);
+  const currentTariffCode = currentAgreement?.tariff_code ?? null;
+  const currentStandingSorted = currentTariffRates
+    ? [...currentTariffRates.standingWindows].sort(
+        (a, b) => a.validFrom.getTime() - b.validFrom.getTime(),
+      )
+    : null;
 
   const periods: PeriodComparison[] = split.map((sp): PeriodComparison => {
-    const flex = calculateCost(readings, sp.start, sp.end, flexUnitSorted, flexStanding, true);
+    // Use the user's actual tariff rates for on-current periods (Go, Fixed, Tracker…);
+    // fall back to Flexible for pre-switch or mixed periods where we have no current rates.
+    const mid = new Date((sp.start.getTime() + sp.end.getTime()) / 2);
+    const midTariff = tariffAt(mid);
+    const cr = currentTariffRates;
+    const useCurrentRates =
+      cr !== null && currentStandingSorted !== null && midTariff === currentTariffCode;
+    const periodFlexUnit = useCurrentRates && cr ? cr.unitWindows : flexUnitSorted;
+    const periodFlexStanding =
+      useCurrentRates && currentStandingSorted ? currentStandingSorted : flexStanding;
+    const flex = calculateCost(
+      readings,
+      sp.start,
+      sp.end,
+      periodFlexUnit,
+      periodFlexStanding,
+      true,
+    );
     const agile = agileAvailable
       ? calculateCost(readings, sp.start, sp.end, agileUnitSorted, agileStanding, true)
       : null;
@@ -351,7 +424,6 @@ export async function runComparison(
       const implied = (sp.actualChargePence - standingApprox) / flex.kwh;
       if (implied > 150 || implied < -20) suspectActual = true;
     }
-    const mid = new Date((sp.start.getTime() + sp.end.getTime()) / 2);
     const credits =
       !sp.isSplit && Array.isArray(sp['credits']) ? (sp['credits'] as StatementCredit[]) : [];
     return {
@@ -382,13 +454,20 @@ export async function runComparison(
   });
   onProgress('Done.', 'ok', 100);
 
+  // For the drill-down detail: use the user's actual tariff rates when available.
+  // Pre-switch drill-downs get Go/Fixed/etc rates rather than Flexible — minor label
+  // mismatch ("Flexible") but pre-switch drill-down is secondary and not in headline.
+  const detailFlexUnit = currentTariffRates?.unitWindows ?? flexUnitSorted;
+  const detailFlexStanding = currentStandingSorted ?? flexStanding;
+  const effectiveFlexProductCode = currentTariffRates?.productCode ?? flexProductCode;
+
   return {
     periods,
     detail: {
       readings,
-      flexUnitSorted,
+      flexUnitSorted: detailFlexUnit,
       agileUnitSorted,
-      flexStanding,
+      flexStanding: detailFlexStanding,
       agileStanding,
       agileAvailable,
       duplicateIntervals: merged.duplicateIntervals,
@@ -407,10 +486,11 @@ export async function runComparison(
       latestStatementEnd,
       readingsBeyondStatements,
       agileSkipReason,
+      flexNote,
       gapInfo,
       products: {
-        flexProductCode,
-        flexTariffCode: flexProductCode,
+        flexProductCode: effectiveFlexProductCode,
+        flexTariffCode: effectiveFlexProductCode,
         agileProductCode,
         agileTariffCode: agileProductCode,
       },

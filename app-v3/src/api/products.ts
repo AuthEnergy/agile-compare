@@ -1,6 +1,76 @@
 import type { RateWindow } from '../types/domain';
 import type { DiscoveredProduct, ProductRow, RawRateRow } from '../types/octopus';
 import type { OctopusClient, Params } from './client';
+import { productCodeFromTariffCode } from '../domain/tariff';
+import { buildGoRateWindows } from '../domain/rates';
+
+export interface CurrentTariffRates {
+  // Unit rate windows, sorted ascending and ready for calculateCost. For ToU tariffs
+  // (night-unit-rates returned results) these are the pre-merged day+night windows;
+  // for flat-rate tariffs these are just the standard-unit-rates windows sorted.
+  unitWindows: RateWindow[];
+  standingWindows: RateWindow[];
+  productCode: string;
+  isToU: boolean; // true when night-unit-rates were merged in
+}
+
+// Fetch actual rate windows for any Octopus tariff the user is currently on, using
+// the tariff code from their agreement (no product-name search needed). Tries
+// night-unit-rates automatically — if the endpoint returns data the tariff is ToU
+// (Go, Intelligent Go, Cosy…) and the windows are merged accordingly. Returns null
+// if the product code can't be parsed or standard-unit-rates returns nothing (tariff
+// not in API — caller should fall back to Flexible and warn the user).
+export async function fetchCurrentTariffRates(
+  client: OctopusClient,
+  tariffCode: string,
+  periodFrom: Date,
+  periodTo: Date,
+): Promise<CurrentTariffRates | null> {
+  const productCode = productCodeFromTariffCode(tariffCode);
+  if (!productCode) return null;
+
+  let dayWindows: RateWindow[];
+  let standingWindows: RateWindow[];
+  try {
+    [dayWindows, standingWindows] = await Promise.all([
+      fetchRateWindows(
+        client,
+        productCode,
+        tariffCode,
+        'standard-unit-rates',
+        periodFrom,
+        periodTo,
+      ),
+      fetchRateWindows(client, productCode, tariffCode, 'standing-charges', periodFrom, periodTo),
+    ]);
+  } catch {
+    return null;
+  }
+  if (dayWindows.length === 0) return null;
+
+  // Probe for off-peak rates (Go, Intelligent Go, Cosy, FLUX import…); silently
+  // skip if the endpoint doesn't exist or returns nothing.
+  let nightWindows: RateWindow[] = [];
+  try {
+    nightWindows = await fetchRateWindows(
+      client,
+      productCode,
+      tariffCode,
+      'night-unit-rates',
+      periodFrom,
+      periodTo,
+    );
+  } catch {
+    /* flat-rate tariff — no night-unit-rates endpoint */
+  }
+
+  const isToU = nightWindows.length > 0;
+  const unitWindows = isToU
+    ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo)
+    : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
+
+  return { unitWindows, standingWindows, productCode, isToU };
+}
 
 export interface MergedRateWindows {
   windows: RateWindow[];

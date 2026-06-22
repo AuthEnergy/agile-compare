@@ -174,6 +174,9 @@ export function renderResults(
         };
     host.append(callout(note.title, note.body, 'caution', 'info'));
   }
+  if (run.context.flexNote) {
+    host.append(callout('Comparison baseline', run.context.flexNote, 'caution', 'info'));
+  }
 
   // confidence
   const level = vm.confidenceLevel;

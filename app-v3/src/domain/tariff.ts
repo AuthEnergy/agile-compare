@@ -61,6 +61,13 @@ export function findCurrentAgreement(
   return active ?? list[list.length - 1] ?? null;
 }
 
+// Extract the product code from a tariff code.
+// e.g. "E-1R-GO-VAR-22-10-14-G" → "GO-VAR-22-10-14"
+export function productCodeFromTariffCode(code: string): string | null {
+  const m = /^E-\d+R-(.+)-[A-P]$/i.exec(code);
+  return m?.[1] ?? null;
+}
+
 // Distinct tariff codes in force at any instant during [start, end). >1 code
 // means the period straddles an agreement change (mixed-tariff), which callers
 // keep out of the current-tariff headline rather than mis-attributing by midpoint.

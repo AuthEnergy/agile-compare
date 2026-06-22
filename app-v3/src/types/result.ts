@@ -82,6 +82,9 @@ export interface RunContext {
   // Why the Agile comparison was dropped (status only, no response body), for
   // diagnostics — null when Agile is available.
   agileSkipReason?: string | null;
+  // Set when the user's actual tariff rates could not be fetched and Flexible is
+  // used as the flex column proxy instead. Shown as a caveat in the results.
+  flexNote?: string | null;
   gapInfo: { gaps: DateRange[]; duplicates: Date[]; earliest: Date | null; latest: Date | null };
   products: {
     flexProductCode: string;

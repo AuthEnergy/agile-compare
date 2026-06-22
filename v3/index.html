@@ -5863,6 +5863,10 @@ function findCurrentAgreement(agreements, at2) {
   });
   return active2 ?? list[list.length - 1] ?? null;
 }
+function productCodeFromTariffCode(code) {
+  const m2 = /^E-\d+R-(.+)-[A-P]$/i.exec(code);
+  return m2?.[1] ?? null;
+}
 function tariffCodesInRange(agreements, start, end) {
   const sorted = [...agreements ?? []].sort(
     (a2, b2) => new Date(a2.valid_from).getTime() - new Date(b2.valid_from).getTime()
@@ -6021,6 +6025,32 @@ function computeHeadline(run) {
     columns,
     wholeWindow: { totalKwh, totalFlex, totalAgile, billedKwhTotal, anyMismatchAllPeriods }
   };
+}
+function buildGoRateWindows(dayRates, nightRates, from, to2) {
+  const sortedDay = [...dayRates].sort((a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime());
+  const sortedNight = [...nightRates].filter((n2) => {
+    const nTo = n2.validTo ? n2.validTo.getTime() : Infinity;
+    return n2.validFrom.getTime() < to2.getTime() && nTo > from.getTime();
+  }).sort((a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime());
+  const dayAt = (t2) => rateAtSorted(sortedDay, t2);
+  const result = [];
+  let cursor = from;
+  for (const night of sortedNight) {
+    const nStart = night.validFrom > cursor ? night.validFrom : cursor;
+    const nEnd = night.validTo && night.validTo < to2 ? night.validTo : to2;
+    if (nEnd <= cursor) continue;
+    if (nStart > cursor) {
+      const rate = dayAt(cursor);
+      if (rate !== null) result.push({ validFrom: cursor, validTo: nStart, value: rate });
+    }
+    result.push({ validFrom: nStart, validTo: nEnd, value: night.value });
+    cursor = nEnd;
+  }
+  if (cursor < to2) {
+    const rate = dayAt(cursor);
+    if (rate !== null) result.push({ validFrom: cursor, validTo: to2, value: rate });
+  }
+  return result;
 }
 function rateAtSorted(sortedWindows, instant) {
   const t2 = instant.getTime();
@@ -6426,6 +6456,43 @@ async function fetchConsumptionMerged(client, mpan, serials, periodFrom, periodT
   }
   const merged = [...byInterval.values()].sort((a2, b2) => a2.start.getTime() - b2.start.getTime());
   return { readings: merged, duplicateIntervals };
+}
+async function fetchCurrentTariffRates(client, tariffCode, periodFrom, periodTo) {
+  const productCode = productCodeFromTariffCode(tariffCode);
+  if (!productCode) return null;
+  let dayWindows;
+  let standingWindows;
+  try {
+    [dayWindows, standingWindows] = await Promise.all([
+      fetchRateWindows(
+        client,
+        productCode,
+        tariffCode,
+        "standard-unit-rates",
+        periodFrom,
+        periodTo
+      ),
+      fetchRateWindows(client, productCode, tariffCode, "standing-charges", periodFrom, periodTo)
+    ]);
+  } catch {
+    return null;
+  }
+  if (dayWindows.length === 0) return null;
+  let nightWindows = [];
+  try {
+    nightWindows = await fetchRateWindows(
+      client,
+      productCode,
+      tariffCode,
+      "night-unit-rates",
+      periodFrom,
+      periodTo
+    );
+  } catch {
+  }
+  const isToU = nightWindows.length > 0;
+  const unitWindows = isToU ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo) : [...dayWindows].sort((a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime());
+  return { unitWindows, standingWindows, productCode, isToU };
 }
 async function fetchProductTariffCode(client, productCode, regionLetter) {
   const detail = await client.restGet(`/products/${productCode}/`);
@@ -7039,6 +7106,36 @@ async function runComparison(client, input, onProgress = () => {
     throw new Error(`Could not find Flexible Octopus rates for region ${regionLetter}.`);
   }
   onProgress(`Flexible Octopus: ${flexUnitRates.length} unit rate window(s).`, "ok", 60);
+  const currentTariffKind = classifyTariffCode(currentAgreement?.tariff_code).kind;
+  const onFlexible = currentTariffKind === "flexible";
+  const onAgile = currentTariffKind === "agile";
+  let currentTariffRates = null;
+  let flexNote = null;
+  if (!onFlexible && !onAgile && currentAgreement) {
+    onProgress("Fetching your current tariff rates…", "active", 62);
+    try {
+      currentTariffRates = await fetchCurrentTariffRates(
+        client,
+        currentAgreement.tariff_code,
+        periodFrom,
+        periodTo
+      );
+      if (currentTariffRates) {
+        const label = currentTariffRates.isToU ? "time-of-use" : "flat-rate";
+        onProgress(
+          `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
+          "ok",
+          64
+        );
+      } else {
+        flexNote = "Your current tariff rates are not available via the Octopus API — Flexible Octopus is used as the comparison baseline for these periods.";
+        onProgress("Current tariff rates unavailable — using Flexible as proxy.", "ok", 64);
+      }
+    } catch {
+      flexNote = "Could not fetch your current tariff rates — Flexible Octopus is used as the comparison baseline for these periods.";
+      onProgress("Current tariff rate fetch failed — using Flexible as proxy.", "ok", 64);
+    }
+  }
   onProgress("Discovering Agile Octopus product version(s)…", "active", 65);
   const agileProducts = await findProductsByDisplayNameOverlapping(
     client,
@@ -7095,8 +7192,25 @@ async function runComparison(client, input, onProgress = () => {
   );
   const agileUnitSorted = agileAvailable ? [...agileUnitRates].sort((a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime()) : [];
   const tariffAt = makeTariffAtDateFn(agreements);
+  const currentTariffCode = currentAgreement?.tariff_code ?? null;
+  const currentStandingSorted = currentTariffRates ? [...currentTariffRates.standingWindows].sort(
+    (a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime()
+  ) : null;
   const periods = split.map((sp) => {
-    const flex = calculateCost(readings, sp.start, sp.end, flexUnitSorted, flexStanding, true);
+    const mid = new Date((sp.start.getTime() + sp.end.getTime()) / 2);
+    const midTariff = tariffAt(mid);
+    const cr2 = currentTariffRates;
+    const useCurrentRates = cr2 !== null && currentStandingSorted !== null && midTariff === currentTariffCode;
+    const periodFlexUnit = useCurrentRates && cr2 ? cr2.unitWindows : flexUnitSorted;
+    const periodFlexStanding = useCurrentRates && currentStandingSorted ? currentStandingSorted : flexStanding;
+    const flex = calculateCost(
+      readings,
+      sp.start,
+      sp.end,
+      periodFlexUnit,
+      periodFlexStanding,
+      true
+    );
     const agile = agileAvailable ? calculateCost(readings, sp.start, sp.end, agileUnitSorted, agileStanding, true) : null;
     const wasClamped = sp.start.getTime() !== sp.displayStart.getTime() || sp.end.getTime() !== sp.displayEnd.getTime();
     let suspectActual = false;
@@ -7105,7 +7219,6 @@ async function runComparison(client, input, onProgress = () => {
       const implied = (sp.actualChargePence - standingApprox) / flex.kwh;
       if (implied > 150 || implied < -20) suspectActual = true;
     }
-    const mid = new Date((sp.start.getTime() + sp.end.getTime()) / 2);
     const credits = !sp.isSplit && Array.isArray(sp["credits"]) ? sp["credits"] : [];
     return {
       displayStart: sp.displayStart,
@@ -7129,13 +7242,16 @@ async function runComparison(client, input, onProgress = () => {
     };
   });
   onProgress("Done.", "ok", 100);
+  const detailFlexUnit = currentTariffRates?.unitWindows ?? flexUnitSorted;
+  const detailFlexStanding = currentStandingSorted ?? flexStanding;
+  const effectiveFlexProductCode = currentTariffRates?.productCode ?? flexProductCode;
   return {
     periods,
     detail: {
       readings,
-      flexUnitSorted,
+      flexUnitSorted: detailFlexUnit,
       agileUnitSorted,
-      flexStanding,
+      flexStanding: detailFlexStanding,
       agileStanding,
       agileAvailable,
       duplicateIntervals: merged.duplicateIntervals
@@ -7154,10 +7270,11 @@ async function runComparison(client, input, onProgress = () => {
       latestStatementEnd,
       readingsBeyondStatements,
       agileSkipReason,
+      flexNote,
       gapInfo,
       products: {
-        flexProductCode,
-        flexTariffCode: flexProductCode,
+        flexProductCode: effectiveFlexProductCode,
+        flexTariffCode: effectiveFlexProductCode,
         agileProductCode,
         agileTariffCode: agileProductCode
       }
@@ -8586,6 +8703,9 @@ function renderResults(host, run, headline, replayMeta, cb) {
       body: "No statement covering this period came back from the API, so every figure here is on Octopus’s published rates — what Agile and Flexible would have cost — not what you actually paid."
     };
     host.append(callout(note.title, note.body, "caution", "info"));
+  }
+  if (run.context.flexNote) {
+    host.append(callout("Comparison baseline", run.context.flexNote, "caution", "info"));
   }
   const level = vm.confidenceLevel;
   const confidenceLabel = level === "high" ? "High confidence" : level === "medium" ? "Medium confidence" : "Low confidence";

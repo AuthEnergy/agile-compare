@@ -1,0 +1,22 @@
+app-v3/tests/ui/share.test.ts
+  s_d0846ef0bc0e61::t_3f070caa07d4b1 3,106-115
+app-v3/tests/setup.ts
+  s_d0846ef0bc0e61::t_b1e4061decc91b 5-7
+  s_d0846ef0bc0e61::t_db32388fc7fe00 8-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "3a9c8b672dbbb825dcbc0c4efc4bf32d7fbf9752",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

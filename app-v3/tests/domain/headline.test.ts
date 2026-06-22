@@ -80,6 +80,11 @@ function mkRun(
       postcodeArea: 'AB',
       currentAgreement: agreements[0] ?? null,
       agreements,
+      flexColumnSource: {
+        kind: 'flexible-current',
+        label: 'Flexible',
+        tariffCode: agreements[0]?.tariff_code ?? null,
+      },
       periodFrom: new Date('2025-01-01'),
       periodTo: new Date('2025-12-31'),
       agileAvailable,
@@ -113,7 +118,26 @@ function mkCurrentTariffRun(tariffCode: string, tariffOverride = false): Compari
   };
   run.context.currentAgreement = currentAgreement;
   run.context.agreements = [currentAgreement];
-  if (tariffOverride) run.context.tariffOverride = true;
+  if (tariffOverride) {
+    run.context.tariffOverride = true;
+    run.context.flexColumnSource = { kind: 'user-override', label: 'User tariff' };
+  } else if (tariffCode === FLEXIBLE) {
+    run.context.flexColumnSource = {
+      kind: 'flexible-current',
+      label: 'Flexible',
+      tariffCode,
+    };
+  } else if (tariffCode === AGILE) {
+    run.context.flexColumnSource = { kind: 'flexible-alternative', label: 'Flexible' };
+  } else {
+    run.context.flexColumnSource = {
+      kind: 'flexible-proxy',
+      label: 'Flexible proxy',
+      actualTariffLabel: 'Fixed',
+      actualTariffCode: tariffCode,
+      reason: 'Current tariff rates are not available via the Octopus API.',
+    };
+  }
   return run;
 }
 
@@ -156,7 +180,7 @@ describe('computeHeadline', () => {
       yoursColumn: 'flex',
     });
     expect(computeHeadline(mkCurrentTariffRun(FIXED)).columns).toEqual({
-      flexLabel: 'Flexible',
+      flexLabel: 'Flexible proxy (calc.)',
       agileLabel: 'Agile',
       yoursColumn: null,
     });

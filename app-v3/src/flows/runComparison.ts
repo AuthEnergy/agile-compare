@@ -28,6 +28,7 @@ import type { RateWindow, RawPeriod } from '../types/domain';
 import type { AccountData, RawConsumptionRow } from '../types/octopus';
 import type {
   ComparisonRun,
+  FlexColumnSource,
   PeriodComparison,
   ProgressFn,
   StatementValidationEntry,
@@ -319,6 +320,34 @@ export async function runComparison(
       onProgress('Current tariff rate fetch failed — using Flexible as proxy.', 'ok', 64);
     }
   }
+  const currentTariffCode = currentAgreement?.tariff_code ?? null;
+  const currentTariffLabel = currentTariffCode
+    ? classifyTariffCode(currentTariffCode).label
+    : 'your tariff';
+  const flexColumnSource: FlexColumnSource = onFlexible
+    ? {
+        kind: 'flexible-current',
+        label: currentTariffLabel,
+        tariffCode: currentTariffCode,
+      }
+    : onAgile
+      ? { kind: 'flexible-alternative', label: 'Flexible' }
+      : currentTariffRates && currentTariffCode
+        ? {
+            kind: 'current-tariff-rates',
+            label: currentTariffLabel,
+            tariffCode: currentTariffCode,
+            rateShape: currentTariffRates.isToU ? 'time-of-use' : 'flat',
+          }
+        : currentTariffCode
+          ? {
+              kind: 'flexible-proxy',
+              label: 'Flexible proxy',
+              actualTariffLabel: currentTariffLabel,
+              actualTariffCode: currentTariffCode,
+              reason: flexNote ?? 'Current tariff rates are not available via the Octopus API.',
+            }
+          : { kind: 'flexible-alternative', label: 'Flexible' };
 
   // --- Agile rates (optional) ---
   onProgress('Discovering Agile Octopus product version(s)…', 'active', 65);
@@ -386,7 +415,6 @@ export async function runComparison(
     ? [...agileUnitRates].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime())
     : [];
   const tariffAt = makeTariffAtDateFn(agreements);
-  const currentTariffCode = currentAgreement?.tariff_code ?? null;
   const currentStandingSorted = currentTariffRates
     ? [...currentTariffRates.standingWindows].sort(
         (a, b) => a.validFrom.getTime() - b.validFrom.getTime(),
@@ -477,6 +505,7 @@ export async function runComparison(
       postcodeArea,
       currentAgreement,
       agreements,
+      flexColumnSource,
       periodFrom,
       periodTo,
       agileAvailable,

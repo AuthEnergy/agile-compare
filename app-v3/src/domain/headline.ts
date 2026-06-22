@@ -1,5 +1,6 @@
 import type { Agreement } from '../types/domain';
 import type { ComparisonRun, PeriodComparison, StatementValidationEntry } from '../types/result';
+import { flexColumnLabel } from './flexSource';
 import { classifyTariffCode } from './tariff';
 
 export interface HeadlineVerdict {
@@ -255,10 +256,13 @@ export function computeHeadline(run: ComparisonRun): Headline {
   const currentTariffLabel = currentTariff
     ? classifyTariffCode(currentTariff).label
     : 'your tariff';
-  const onFlexible = currentTariff ? classifyTariffCode(currentTariff).kind === 'flexible' : false;
-  const flexIsYours = context.tariffOverride === true || onFlexible;
+  const flexSource = context.flexColumnSource;
+  const flexIsYours =
+    flexSource.kind === 'flexible-current' ||
+    flexSource.kind === 'current-tariff-rates' ||
+    flexSource.kind === 'user-override';
   const columns: HeadlineColumns = {
-    flexLabel: flexIsYours ? currentTariffLabel : 'Flexible',
+    flexLabel: flexColumnLabel(flexSource),
     agileLabel: 'Agile',
     yoursColumn: onAgile ? 'agile' : flexIsYours ? 'flex' : null,
   };

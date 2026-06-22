@@ -1,12 +1,13 @@
 import { REPLAY_CAPS } from '../config';
 import { calculateCost } from '../domain/cost';
 import { splitLongPeriods } from '../domain/periods';
-import { findCurrentAgreement } from '../domain/tariff';
+import { classifyTariffCode, findCurrentAgreement } from '../domain/tariff';
 import type { Agreement, CostResult, MissingEstimate, RateWindow, Reading } from '../types/domain';
 import type {
   ComparisonRun,
   ExportRun,
   ExportTariffValue,
+  FlexColumnSource,
   PeriodComparison,
   RunContext,
   RunDetail,
@@ -74,6 +75,74 @@ const toWindows = (arr: unknown): RateWindow[] =>
       value: asNum(o['p']),
     };
   });
+
+function parseFlexColumnSource(
+  value: unknown,
+  tariffOverride: boolean,
+  currentAgreement: Agreement | null,
+): FlexColumnSource {
+  const o = isObj(value) ? value : null;
+  const kind = asStr(o?.['kind']);
+  if (kind === 'flexible-current') {
+    return {
+      kind,
+      label: asStr(o?.['label'], 'Flexible'),
+      tariffCode: strOrNull(o?.['tariffCode']),
+    };
+  }
+  if (kind === 'flexible-alternative') {
+    return { kind, label: 'Flexible' };
+  }
+  if (kind === 'current-tariff-rates') {
+    const tariffCode = asStr(o?.['tariffCode'], currentAgreement?.tariff_code ?? 'unknown');
+    const shape = asStr(o?.['rateShape']);
+    return {
+      kind,
+      label: asStr(o?.['label'], classifyTariffCode(tariffCode).label),
+      tariffCode,
+      rateShape: shape === 'time-of-use' ? 'time-of-use' : 'flat',
+    };
+  }
+  if (kind === 'flexible-proxy') {
+    const actualTariffCode = asStr(
+      o?.['actualTariffCode'],
+      currentAgreement?.tariff_code ?? 'unknown',
+    );
+    return {
+      kind,
+      label: 'Flexible proxy',
+      actualTariffLabel: asStr(
+        o?.['actualTariffLabel'],
+        classifyTariffCode(actualTariffCode).label,
+      ),
+      actualTariffCode,
+      reason: asStr(o?.['reason'], 'Legacy diagnostics did not record tariff baseline provenance.'),
+    };
+  }
+  if (kind === 'user-override' || tariffOverride) {
+    return { kind: 'user-override', label: 'User tariff' };
+  }
+
+  const currentTariffCode = currentAgreement?.tariff_code ?? null;
+  const cls = classifyTariffCode(currentTariffCode);
+  if (cls.kind === 'flexible') {
+    return {
+      kind: 'flexible-current',
+      label: cls.label,
+      tariffCode: currentTariffCode,
+    };
+  }
+  if (cls.kind === 'agile') {
+    return { kind: 'flexible-alternative', label: 'Flexible' };
+  }
+  return {
+    kind: 'flexible-proxy',
+    label: 'Flexible proxy',
+    actualTariffLabel: cls.label,
+    actualTariffCode: currentTariffCode ?? 'unknown',
+    reason: 'Legacy diagnostics did not record tariff baseline provenance.',
+  };
+}
 
 const fail = (reason: ReplayErrorReason, message: string): ReplayFailure => ({
   ok: false,
@@ -451,6 +520,11 @@ function reconstruct(
     currentAgreement,
     agreements,
     tariffOverride,
+    flexColumnSource: parseFlexColumnSource(
+      d['flexColumnSource'],
+      tariffOverride,
+      currentAgreement,
+    ),
     periodFrom: new Date(asStr(cw['from'])),
     periodTo: new Date(asStr(cw['to'])),
     agileAvailable,

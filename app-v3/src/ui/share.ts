@@ -1,4 +1,5 @@
 import type { Headline } from '../domain/headline';
+import { shareFlexLabel } from '../domain/flexSource';
 import type { ComparisonRun } from '../types/result';
 import { el } from './dom';
 import { fmtDate } from './format';
@@ -28,8 +29,8 @@ export function computeShareClaims(run: ComparisonRun, headline: Headline): Shar
     const peak = Math.max(flex, agile);
     if (peak > 0 && flex !== agile) {
       estimate = {
-        cheaper: flex < agile ? 'Flexible' : 'Agile',
-        dearer: flex < agile ? 'Agile' : 'Flexible',
+        cheaper: flex < agile ? shareFlexLabel(run.context.flexColumnSource) : 'Agile',
+        dearer: flex < agile ? 'Agile' : shareFlexLabel(run.context.flexColumnSource),
         pct: (Math.abs(flex - agile) / peak) * 100,
       };
     }

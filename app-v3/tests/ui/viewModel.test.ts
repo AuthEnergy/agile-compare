@@ -317,6 +317,46 @@ describe('computeResultsViewModel', () => {
     expect(vm.scopeTitle).toBe('Complete periods on your current tariff:');
   });
 
+  it('labels a Flexible proxy baseline without presenting the actual tariff as calculated', () => {
+    const TRACKER = 'E-1R-TRACKER-24-10-01-A';
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: null,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.periods.forEach((p) => {
+      p.tariffCodes = [TRACKER];
+      p.actualTariffCode = TRACKER;
+    });
+    run.context.currentAgreement = {
+      tariff_code: TRACKER,
+      valid_from: '2024-01-01T00:00:00.000Z',
+      valid_to: null,
+    };
+    run.context.agreements = [run.context.currentAgreement];
+    run.context.flexColumnSource = {
+      kind: 'flexible-proxy',
+      label: 'Flexible proxy',
+      actualTariffLabel: 'Tracker',
+      actualTariffCode: TRACKER,
+      reason: 'Tracker rates are not modelled.',
+    };
+
+    const vm = computeResultsViewModel(run, computeHeadline(run));
+
+    expect(vm.paid.label).toBe('Flexible proxy (calc.)');
+    expect(vm.paid.period).toBe('Flexible proxy');
+    expect(must(vm.periods[0], 'p0').flexLabel).toBe('Flexible proxy (calc.)');
+    expect(vm.paid.label).not.toContain('Tracker');
+  });
+
   it('compares an Agile user against Flexible — never captions "you paid" as Flexible', () => {
     const run = makeRun([
       {

@@ -7,6 +7,7 @@
 // bundle. Numeric fields are stored as fixed-precision STRINGS exactly as v2
 // did (e.g. pence via `.toFixed(0)`, kWh via `.toFixed(2)`), or the literal
 // "n/a" / "skipped" sentinels — replay parses them back.
+import type { FlexColumnSource } from './result';
 
 export interface DiagAgreement {
   tariffCode: string;
@@ -83,6 +84,7 @@ export interface ImportDiagnostics {
   region: string;
   currentTariffCode: string;
   tariffOverride?: boolean;
+  flexColumnSource?: FlexColumnSource;
   postcodeArea: string;
   agreements: DiagAgreement[];
   readings: {

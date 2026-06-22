@@ -62,12 +62,31 @@ export interface RunDetail {
   duplicateIntervals: Set<number>;
 }
 
+export type FlexColumnSource =
+  | { kind: 'flexible-current'; label: string; tariffCode: string | null }
+  | { kind: 'flexible-alternative'; label: 'Flexible' }
+  | {
+      kind: 'current-tariff-rates';
+      label: string;
+      tariffCode: string;
+      rateShape: 'flat' | 'time-of-use';
+    }
+  | {
+      kind: 'flexible-proxy';
+      label: 'Flexible proxy';
+      actualTariffLabel: string;
+      actualTariffCode: string;
+      reason: string;
+    }
+  | { kind: 'user-override'; label: 'User tariff' };
+
 export interface RunContext {
   regionLetter: string;
   postcodeArea: string | null;
   currentAgreement: Agreement | null;
   agreements: Agreement[];
   tariffOverride?: boolean;
+  flexColumnSource: FlexColumnSource;
   periodFrom: Date;
   periodTo: Date;
   agileAvailable: boolean;

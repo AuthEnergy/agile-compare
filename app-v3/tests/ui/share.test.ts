@@ -57,6 +57,32 @@ describe('buildShareText', () => {
     expect(text).not.toContain('£');
   });
 
+  it('shares Flexible proxy as the estimate baseline when actual tariff rates are unavailable', () => {
+    const run = onePeriod();
+    const TRACKER = 'E-1R-TRACKER-24-10-01-A';
+    run.periods.forEach((p) => {
+      p.tariffCodes = [TRACKER];
+      p.actualTariffCode = TRACKER;
+    });
+    run.context.currentAgreement = {
+      tariff_code: TRACKER,
+      valid_from: '2024-01-01T00:00:00.000Z',
+      valid_to: null,
+    };
+    run.context.flexColumnSource = {
+      kind: 'flexible-proxy',
+      label: 'Flexible proxy',
+      actualTariffLabel: 'Tracker',
+      actualTariffCode: TRACKER,
+      reason: 'Tracker rates are not modelled.',
+    };
+
+    const text = buildShareText(run, computeHeadline(run));
+
+    expect(text).toContain('Agile worked out 12.0% cheaper than Flexible proxy');
+    expect(text).not.toContain('Tracker worked out');
+  });
+
   it('returns null when the headline is not trustworthy', () => {
     const run = onePeriod();
     run.context.statementsIncomplete = true;

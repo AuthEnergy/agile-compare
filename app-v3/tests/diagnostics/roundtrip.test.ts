@@ -103,4 +103,45 @@ describe('diagnostics round-trip (capture -> serialise -> replay)', () => {
       yoursColumn: 'flex',
     });
   });
+
+  it('preserves Flexible proxy provenance through replay', () => {
+    const TRACKER = 'E-1R-TRACKER-24-10-01-A';
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: null,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.periods.forEach((p) => {
+      p.tariffCodes = [TRACKER];
+      p.actualTariffCode = TRACKER;
+    });
+    run.context.currentAgreement = {
+      tariff_code: TRACKER,
+      valid_from: '2024-01-01T00:00:00.000Z',
+      valid_to: null,
+    };
+    run.context.flexColumnSource = {
+      kind: 'flexible-proxy',
+      label: 'Flexible proxy',
+      actualTariffLabel: 'Tracker',
+      actualTariffCode: TRACKER,
+      reason: 'Tracker rates are not modelled.',
+    };
+
+    const d1 = buildImportDiagnostics(run, { generatedAt: GEN });
+    expect(d1.flexColumnSource).toEqual(run.context.flexColumnSource);
+    const replayed = replayDiagnostics(JSON.stringify(d1));
+    expect(replayed.ok).toBe(true);
+    if (!replayed.ok || replayed.kind !== 'import') throw new Error('expected import replay');
+
+    expect(replayed.run.context.flexColumnSource).toEqual(run.context.flexColumnSource);
+    expect(computeHeadline(replayed.run).columns.flexLabel).toBe('Flexible proxy (calc.)');
+  });
 });

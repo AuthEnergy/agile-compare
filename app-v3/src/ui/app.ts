@@ -508,7 +508,10 @@ export class App {
         [
           el('div', { style: 'text-align:center;display:flex;flex-direction:column;gap:6px' }, [
             el('h1', { style: 'font-size:var(--text-h2)', text: 'Reading your usage' }),
-            el('p', { class: 'row-sub', text: 'All in your browser. Nothing is uploaded.' }),
+            el('p', {
+              class: 'row-sub',
+              text: 'All in your browser. No personal data is uploaded.',
+            }),
           ]),
           el('div', { class: 'steps-track', style: 'height:6px' }, [fill]),
           el('div', { style: 'display:flex;align-items:center;gap:11px;justify-content:center' }, [

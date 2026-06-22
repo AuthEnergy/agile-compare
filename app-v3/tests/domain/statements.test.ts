@@ -43,21 +43,22 @@ describe('summariseStatementTransactions', () => {
     expect(s.credits).toHaveLength(1);
   });
 
-  it('falls back to a consumption-bearing charge when none is titled Electricity', () => {
+  it('returns null billedKwh when no charge is titled Electricity (e.g. gas-only period)', () => {
     const s = summariseStatementTransactions(
       node([
         {
           node: {
             __typename: 'BillCharge',
-            title: 'Energy charge',
+            title: 'Gas',
             amounts: { gross: 7000 },
             consumption: { quantity: 250 },
           },
         },
       ]),
     );
-    expect(s.electricityChargePence).toBe(7000);
-    expect(s.billedKwh).toBe(250);
+    // Gas-only billing cycles on dual-fuel accounts must not pollute billedKwh.
+    expect(s.electricityChargePence).toBeNull();
+    expect(s.billedKwh).toBeNull();
   });
 
   it('marks incomplete when transactions paginate', () => {

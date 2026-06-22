@@ -59,15 +59,15 @@ describe('computeResultsViewModel', () => {
 
     const preSwitch = must(vm.periods[1], 'p1');
     expect(preSwitch.status).toBe('preSwitch');
-    expect(preSwitch.expandable).toBe(false);
+    expect(preSwitch.expandable).toBe(true);
     expect(preSwitch.kwhText).toBe('excl.');
 
     const mixed = must(vm.periods[2], 'p2');
     expect(mixed.status).toBe('mixed');
-    expect(mixed.expandable).toBe(false);
+    expect(mixed.expandable).toBe(true);
   });
 
-  it('keeps a statement-mismatch period drillable even though its total is suppressed', () => {
+  it('tags a <5% kWh gap as mismatchMinor (amber, still included)', () => {
     const run = makeRun([
       {
         start: '2025-01-01',
@@ -85,7 +85,7 @@ describe('computeResultsViewModel', () => {
         displayStart: new Date('2025-01-01'),
         displayEnd: new Date('2025-02-01'),
         billedKwh: 318,
-        observedKwh: 312,
+        observedKwh: 312, // 1.9% gap — minor
         electricityChargePence: 5000,
         creditsPence: 0,
         credits: [],
@@ -93,15 +93,60 @@ describe('computeResultsViewModel', () => {
         transactionsComplete: true,
         wasClamped: false,
         mismatch: true,
+        statementCharges: [],
+      },
+    ];
+    const vm = computeResultsViewModel(run, computeHeadline(run));
+    const row = must(vm.periods[0], 'p0');
+    expect(row.status).toBe('mismatchMinor');
+    expect(row.expandable).toBe(true);
+    expect(row.includedInHeadline).toBe('caution');
+    expect(row.reason).toContain('312 kWh metered');
+    expect(row.reason).toContain('318 kWh billed');
+    expect(row.reason).toContain('1.9%');
+    expect(row.flexText).toBe('£50.00');
+    expect(row.agileText).toBe('£44.00');
+  });
+
+  it('tags a ≥5% kWh gap as mismatch (red, excluded from "vs bill")', () => {
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: 5000,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.context.statementValidation = [
+      {
+        displayStart: new Date('2025-01-01'),
+        displayEnd: new Date('2025-02-01'),
+        billedKwh: 400,
+        observedKwh: 200, // 50% gap — major
+        electricityChargePence: 5000,
+        creditsPence: 0,
+        credits: [],
+        transactionsAvailable: true,
+        transactionsComplete: true,
+        wasClamped: false,
+        mismatch: true,
+        statementCharges: [],
       },
     ];
     const vm = computeResultsViewModel(run, computeHeadline(run));
     const row = must(vm.periods[0], 'p0');
     expect(row.status).toBe('mismatch');
-    expect(row.expandable).toBe(true); // drill into the days/slots even when suppressed
-    // Per-month £ on each tariff (no one cares about kWh alone).
-    expect(row.flexText).toBe('£50.00'); // 4200 + 800
-    expect(row.agileText).toBe('£44.00'); // 3600 + 800
+    expect(row.expandable).toBe(true);
+    expect(row.includedInHeadline).toBe('no');
+    expect(row.reason).toContain('200 kWh metered');
+    expect(row.reason).toContain('400 kWh billed');
+    expect(row.reason).toContain('50.0%');
+    expect(row.flexText).toBe('£50.00');
+    expect(row.agileText).toBe('£44.00');
   });
 
   it('does not present apportioned split actuals as literal paid totals', () => {
@@ -186,6 +231,8 @@ describe('computeResultsViewModel', () => {
     expect(row.status).toBe('preSwitch');
     expect(row.kwhText).not.toBe('excl.');
     expect(row.reason).toContain('before you switched');
+    expect(row.reason).toContain("aren't available from the API");
+    expect(row.includedInHeadline).toBe('caution');
   });
 
   it('never frames the actual OLD-tariff bill as a "Flexible" win (honesty)', () => {

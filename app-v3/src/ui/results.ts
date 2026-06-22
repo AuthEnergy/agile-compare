@@ -267,8 +267,8 @@ export function renderResults(
           : null,
         headline.wholeWindow.anyMismatchAllPeriods
           ? callout(
-              'A period was excluded',
-              'A statement disagreed with the readings for one period, so we dropped its “vs your bill” comparison and left it out of the headline.',
+              'Some periods had a large kWh gap',
+              'One or more periods had a statement and half-hourly reading gap of more than 5%. Those periods are excluded from the headline count and totals. See the period rows below for the exact figures.',
               'caution',
               'alert',
             )

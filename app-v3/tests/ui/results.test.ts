@@ -86,6 +86,7 @@ describe('renderResults — all data predates the current tariff', () => {
         transactionsComplete: true,
         wasClamped: false,
         mismatch: false,
+        statementCharges: [],
       },
     ];
     renderResults(host, run, computeHeadline(run), null, cb);
@@ -164,6 +165,7 @@ describe('renderResults — all data predates the current tariff', () => {
         transactionsComplete: true,
         wasClamped: true,
         mismatch: false,
+        statementCharges: [],
       },
     ];
     renderResults(host, run, computeHeadline(run), null, cb);

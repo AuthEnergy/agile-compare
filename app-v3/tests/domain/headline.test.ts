@@ -135,6 +135,7 @@ const sv = (
   transactionsComplete: true,
   wasClamped: false,
   mismatch,
+  statementCharges: [],
 });
 
 describe('computeHeadline', () => {

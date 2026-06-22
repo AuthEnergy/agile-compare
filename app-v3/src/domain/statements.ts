@@ -31,20 +31,23 @@ export function summariseStatementTransactions(
     n.amounts && typeof n.amounts.gross === 'number' ? n.amounts.gross : 0;
 
   const billCharges = nodes.filter((n) => n.__typename === 'BillCharge');
-  // Prefer charges titled "Electricity"; fall back to any bill-charge carrying a
-  // consumption quantity (single-fuel accounts with a different title).
-  let electricityCharges = billCharges.filter((n) => /electric/i.test(n.title ?? ''));
-  if (electricityCharges.length === 0) {
-    electricityCharges = billCharges.filter(
-      (n) => n.consumption != null && n.consumption.quantity != null,
-    );
-  }
+  // Only accept charges explicitly titled "Electricity" (case-insensitive). No
+  // fallback — on dual-fuel accounts the fallback previously picked up Gas charges
+  // from gas-only billing cycles, producing wildly wrong billedKwh. If a period
+  // has no electricity BillCharge, billedKwh stays null (no mismatch fired).
+  const electricityCharges = billCharges.filter((n) => /electric/i.test(n.title ?? ''));
 
+  // For billedKwh: count only IMPORT charges (positive grossPence = customer pays).
+  // On solar/battery accounts Octopus creates a companion export BillCharge with
+  // negative grossPence (Octopus pays the customer); summing both inflates billedKwh
+  // far above what the import meter recorded. electricityChargePence keeps all charges
+  // so the net cost (import − export revenue) is correct for the "you paid" comparison.
   let electricityChargePence: number | null = null;
   let billedKwh: number | null = null;
   for (const c of electricityCharges) {
-    electricityChargePence = (electricityChargePence ?? 0) + grossOf(c);
-    if (c.consumption && c.consumption.quantity != null) {
+    const gross = grossOf(c);
+    electricityChargePence = (electricityChargePence ?? 0) + gross;
+    if (gross >= 0 && c.consumption && c.consumption.quantity != null) {
       billedKwh = (billedKwh ?? 0) + Number(c.consumption.quantity);
     }
   }

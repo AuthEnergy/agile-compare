@@ -126,7 +126,8 @@
       "transactionsComplete": true,
       "electricityChargePence": "5000",
       "creditsPence": "0",
-      "clamped": false
+      "clamped": false,
+      "charges": []
     },
     {
       "period": "2025-02-01 to 2025-03-01",
@@ -137,7 +138,8 @@
       "transactionsComplete": true,
       "electricityChargePence": "5200",
       "creditsPence": "0",
-      "clamped": false
+      "clamped": false,
+      "charges": []
     }
   ],
   "totals": {

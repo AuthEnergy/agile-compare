@@ -1,7 +1,7 @@
 import { buildDayComparisons, buildSlotCalculations } from '../domain/drilldown';
 import type { HeadlineColumns } from '../domain/headline';
 import type { DayComparison, SlotCalculation } from '../types/drilldown';
-import type { ComparisonRun } from '../types/result';
+import type { ComparisonRun, RunDetail } from '../types/result';
 import { badge, type Tone } from './components';
 import { clear, el, icon } from './dom';
 import { fmtDate, fmtKwh, fmtMoney, fmtPence, fmtSlotTime } from './format';
@@ -30,39 +30,24 @@ const withYours = (columns: HeadlineColumns, label: string, column: 'flex' | 'ag
 // Monday-first column index (0 = Mon … 6 = Sun) for a UTC date.
 const mondayIndex = (d: Date): number => (d.getUTCDay() + 6) % 7;
 
-interface TagIcon {
+export interface TagIcon {
   name: keyof typeof ICONS;
   fg: string;
   bg: string;
 }
-const FALLBACK_TAG: TagIcon = {
+export const FALLBACK_TAG: TagIcon = {
   name: 'alert',
   fg: 'var(--status-caution)',
   bg: 'var(--amber-tint)',
 };
-const TAG_ICON: Record<string, TagIcon> = {
-  complete: {
-    name: 'check',
-    fg: 'var(--status-saving)',
-    bg: 'var(--green-tint)',
-  },
-  preSwitch: {
-    name: 'clock',
-    fg: 'var(--status-caution)',
-    bg: 'var(--amber-tint)',
-  },
-  mixed: {
-    name: 'clock',
-    fg: 'var(--status-caution)',
-    bg: 'var(--amber-tint)',
-  },
-  partial: {
-    name: 'clock',
-    fg: 'var(--status-caution)',
-    bg: 'var(--amber-tint)',
-  },
+export const TAG_ICON: Record<string, TagIcon> = {
+  complete: { name: 'circleCheck', fg: 'var(--status-saving)', bg: 'var(--green-tint)' },
+  mismatchMinor: { name: 'circleCheck', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
+  preSwitch: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
+  mixed: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
+  partial: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
   incomplete: FALLBACK_TAG,
-  mismatch: { name: 'alert', fg: 'var(--status-risk)', bg: 'var(--red-tint)' },
+  mismatch: { name: 'x', fg: 'var(--status-risk)', bg: 'var(--red-tint)' },
 };
 
 // One slot row + its optional flag note. Out-of-period slots are shown, never
@@ -142,11 +127,11 @@ function slotRow(s: SlotCalculation, maxAbsRateDelta: number): HTMLElement[] {
 
 function slotGrid(
   day: DayComparison,
-  run: ComparisonRun,
+  detail: RunDetail,
   period: { start: Date; end: Date },
   columns: HeadlineColumns,
 ): HTMLElement {
-  const slots = buildSlotCalculations(day.date, period, run.detail);
+  const slots = buildSlotCalculations(day.date, period, detail);
   const rateDeltas = slots
     .filter((s) => s.flexRate !== null && s.agileRate !== null && !s.flags.outOfPeriod)
     .map((s) => (s.flexRate ?? 0) - (s.agileRate ?? 0));
@@ -214,11 +199,12 @@ function dayDetailHead(day: DayComparison, columns: HeadlineColumns): HTMLElemen
 // A month calendar: each cell is tinted green (Agile cheaper) or red (Agile
 // pricier) relative to Flex, intensity proportional to the gap. Tapping a day
 // reveals its 48 half-hour slots in a detail panel below (built once, cached).
-function dayCalendar(
+export function dayCalendar(
   days: DayComparison[],
-  run: ComparisonRun,
+  detail: RunDetail,
   period: { start: Date; end: Date },
   columns: HeadlineColumns,
+  hint = 'Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours.',
 ): HTMLElement {
   // delta = Flex − Agile: positive → Agile cheaper (green), negative → Agile pricier (red)
   const agileDeltas = days
@@ -226,7 +212,7 @@ function dayCalendar(
     .map((d) => d.flexTotalPence - (d.agileTotalPence ?? 0));
   const maxAbsDelta = Math.max(1, ...agileDeltas.map(Math.abs));
 
-  const detail = el('div', { class: 'cal-detail' });
+  const calDetail = el('div', { class: 'cal-detail' });
   const gridCache = new Map<number, HTMLElement>();
   let selected: HTMLElement | null = null;
   const showDay = (day: DayComparison, cell: HTMLElement): void => {
@@ -235,11 +221,11 @@ function dayCalendar(
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day, run, period, columns);
+      grid = slotGrid(day, detail, period, columns);
       gridCache.set(day.date.getTime(), grid);
     }
-    clear(detail);
-    detail.append(dayDetailHead(day, columns), grid);
+    clear(calDetail);
+    calDetail.append(dayDetailHead(day, columns), grid);
   };
 
   // Group by calendar month (a period is usually one month, but handle spans).
@@ -308,10 +294,10 @@ function dayCalendar(
   return el('div', { class: 'drill' }, [
     el('div', {
       class: 'drill-hint',
-      text: 'Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours.',
+      text: hint,
     }),
     ...grids,
-    detail,
+    calDetail,
   ]);
 }
 
@@ -343,7 +329,24 @@ export function renderPeriodRow(
           el('span', { class: 'row-title', text: vm.title }),
           badge(vm.tag, vm.tagTone as Tone),
         ]),
-        el('span', { class: 'row-sub', text: vm.reason }),
+        el('span', { class: 'row-sub' }, [
+          el('span', {
+            style: `font-weight:600;margin-right:3px;color:${
+              vm.includedInHeadline === 'yes'
+                ? 'var(--status-saving)'
+                : vm.includedInHeadline === 'caution'
+                  ? 'var(--status-caution)'
+                  : 'var(--status-risk)'
+            }`,
+            text:
+              vm.includedInHeadline === 'yes'
+                ? '✓'
+                : vm.includedInHeadline === 'caution'
+                  ? '⚠'
+                  : '✗',
+          }),
+          vm.reason,
+        ]),
       ]),
       el(
         'div',
@@ -362,14 +365,33 @@ export function renderPeriodRow(
             class: 'mono',
             style: 'font-size:var(--text-caption);color:var(--text-muted)',
             text:
-              `${withYours(columns, columns.flexLabel, 'flex')} ${vm.flexText}` +
+              `${vm.flexLabel} ${vm.flexText}` +
               (vm.flexAvgPence !== null ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)` : ''),
           }),
-          el('span', {
-            class: 'mono',
-            style: 'font-size:var(--text-caption);color:var(--text-muted);opacity:0.65',
-            text: vm.kwhText,
-          }),
+          el(
+            'span',
+            {
+              class: 'mono',
+              style:
+                'font-size:var(--text-caption);color:var(--text-muted);opacity:0.65;display:flex;align-items:center;gap:5px',
+            },
+            [
+              vm.kwhText,
+              el(
+                'span',
+                {
+                  style: `display:inline-flex;align-items:center;gap:2px;color:${
+                    vm.readingCoveragePct >= 95
+                      ? 'var(--text-muted)'
+                      : vm.readingCoveragePct >= 75
+                        ? 'var(--status-caution)'
+                        : 'var(--status-risk)'
+                  }`,
+                },
+                [`${vm.readingCoveragePct}%`, icon(ICONS.activity, 10)],
+              ),
+            ],
+          ),
         ],
       ),
       chevron,
@@ -394,7 +416,7 @@ export function renderPeriodRow(
     head.classList.toggle('is-selected', open);
     if (open && !dayList) {
       const days = buildDayComparisons(vm.period, run.detail);
-      dayList = dayCalendar(days, run, vm.period, columns);
+      dayList = dayCalendar(days, run.detail, vm.period, { ...columns, flexLabel: vm.flexLabel });
       card.append(dayList);
     } else if (dayList) {
       dayList.style.display = open ? '' : 'none';

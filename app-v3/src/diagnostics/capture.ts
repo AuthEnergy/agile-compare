@@ -219,6 +219,14 @@ export function buildImportDiagnostics(
         v.electricityChargePence != null ? v.electricityChargePence.toFixed(0) : 'n/a',
       creditsPence: (v.creditsPence || 0).toFixed(0),
       clamped: v.wasClamped,
+      // Individual BillCharge line items — title, kWh, and sign of grossPence lets
+      // us distinguish import (positive, customer pays) from export (negative,
+      // Octopus pays customer) when both appear as 'Electricity' charges.
+      charges: v.statementCharges.map((c) => ({
+        title: c.title,
+        kwh: c.kwh != null ? c.kwh.toFixed(2) : 'n/a',
+        grossPence: c.grossPence.toFixed(0),
+      })),
     })),
     totals: {
       allPeriods: {

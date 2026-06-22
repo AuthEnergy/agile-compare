@@ -6,7 +6,7 @@ import type {
   RateWindow,
   Reading,
 } from './domain';
-import type { StatementCredit } from './api';
+import type { StatementCharge, StatementCredit } from './api';
 
 // One displayed billing/month period with its costs and confidence. Drill-down
 // `days` (Phase 4) is computed lazily and left undefined until expanded.
@@ -43,6 +43,11 @@ export interface StatementValidationEntry {
   transactionsComplete: boolean;
   wasClamped: boolean;
   mismatch: boolean;
+  // Individual electricity BillCharge line items (title + kWh) from the statement.
+  // Captured so we can detect import-vs-export split accounts where the statement
+  // sums both meters into billedKwh (making it appear inflated vs the import-only
+  // half-hourly readings). Empty for synthetic/unbilled periods.
+  statementCharges: StatementCharge[];
 }
 
 // The raw inputs kept in memory so the drill-down can recompute day/slot detail

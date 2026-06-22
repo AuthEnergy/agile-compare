@@ -12,7 +12,7 @@ export interface HeadlineVerdict {
 
 export interface HeadlineColumns {
   flexLabel: string;
-  agileLabel: 'Agile';
+  agileLabel: string;
   yoursColumn: 'flex' | 'agile' | null;
 }
 
@@ -73,17 +73,38 @@ export interface Headline {
 // The current-tariff AND confident subset, plus whether to scope the summary to
 // it. A period qualifies only if a single code (today's) was in force across the
 // WHOLE period AND it's confident.
+// Whether a statementValidation entry represents a gap too large to trust in the
+// headline. Minor gaps (<5%) are left through; only large discrepancies are blocked.
+function isMajorMismatch(v: StatementValidationEntry): boolean {
+  if (!v.mismatch) return false;
+  if (v.billedKwh == null || v.billedKwh === 0) return true; // flagged but no pct → treat as major
+  return Math.abs(v.billedKwh - v.observedKwh) / Math.abs(v.billedKwh) >= 0.05;
+}
+
+// True when any statementValidation entry overlapping period p is a major mismatch.
+function periodHasMajorMismatch(
+  p: PeriodComparison,
+  statementValidation: readonly StatementValidationEntry[],
+): boolean {
+  return statementValidation.some(
+    (v) => isMajorMismatch(v) && v.displayStart < p.end && v.displayEnd > p.start,
+  );
+}
+
 function consistentSubset(run: ComparisonRun): {
   consistentResults: PeriodComparison[];
   useConsistentOnly: boolean;
 } {
   const { periods, context } = run;
+  const { statementValidation } = context;
   const currentTariff = context.currentAgreement ? context.currentAgreement.tariff_code : null;
+  const isClean = (p: PeriodComparison): boolean =>
+    p.confident && !periodHasMajorMismatch(p, statementValidation);
   const consistentResults = currentTariff
     ? periods.filter(
-        (p) => p.tariffCodes.length === 1 && p.tariffCodes[0] === currentTariff && p.confident,
+        (p) => p.tariffCodes.length === 1 && p.tariffCodes[0] === currentTariff && isClean(p),
       )
-    : periods.filter((p) => p.confident);
+    : periods.filter((p) => isClean(p));
   const useConsistentOnly =
     consistentResults.length > 0 && consistentResults.length < periods.length;
   return { consistentResults, useConsistentOnly };
@@ -194,11 +215,11 @@ export function computeHeadline(run: ComparisonRun): Headline {
   const scopedBilled = billedStatements.filter(validationInScope);
   const scopedBilledKwh = scopedBilled.reduce((s, v) => s + (v.billedKwh ?? 0), 0);
   const scopedObservedKwh = scopedBilled.reduce((s, v) => s + v.observedKwh, 0);
-  const anyMismatch = statementValidation.some((v) => v.mismatch && validationInScope(v));
+  const anyMismatch = statementValidation.some((v) => isMajorMismatch(v) && validationInScope(v));
   const anyTxnIncomplete = statementValidation.some(
     (v) => v.transactionsAvailable && !v.transactionsComplete && validationInScope(v),
   );
-  const anyMismatchAllPeriods = statementValidation.some((v) => v.mismatch);
+  const anyMismatchAllPeriods = statementValidation.some((v) => isMajorMismatch(v));
 
   const allConfident = periods.length > 0 && periods.every((p) => p.confident);
   const trustworthy = (useConsistentOnly || allConfident) && !statementsIncomplete;

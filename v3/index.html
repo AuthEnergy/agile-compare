@@ -6371,7 +6371,26 @@ async function discoverMeters(client, token) {
     acct.number = number;
     all.push(...collectMeters(acct));
   }
-  return all;
+  return sortMeters(all);
+}
+function sortMeters(meters) {
+  const latestMs = (m2) => {
+    let best = 0;
+    for (const prop of m2.accountData.properties ?? []) {
+      for (const em of prop.electricity_meter_points ?? []) {
+        if ((em.mpan ?? "") !== m2.mpan) continue;
+        for (const a2 of em.agreements ?? []) {
+          const t2 = a2.valid_from ? new Date(a2.valid_from).getTime() : 0;
+          if (t2 > best) best = t2;
+        }
+      }
+    }
+    return best;
+  };
+  return [...meters].sort((a2, b2) => {
+    if (a2.isExport !== b2.isExport) return a2.isExport ? 1 : -1;
+    return latestMs(b2) - latestMs(a2);
+  });
 }
 async function fetchConsumption(client, mpan, serial, periodFrom, periodTo) {
   const path = `/electricity-meter-points/${mpan}/meters/${serial}/consumption/`;

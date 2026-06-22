@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { OctopusApiError, type OctopusClient } from '../../src/api/client';
-import { collectMeters, discoverMeters } from '../../src/api/meters';
+import { collectMeters, discoverMeters, sortMeters } from '../../src/api/meters';
 import type { AccountData } from '../../src/types/octopus';
 
 function must<T>(v: T | undefined, msg: string): T {
@@ -77,6 +77,56 @@ describe('collectMeters', () => {
       properties: [{ electricity_meter_points: [{ mpan: '1900000000009', meters: [] }] }],
     };
     expect(collectMeters(data)).toHaveLength(0);
+  });
+});
+
+describe('sortMeters', () => {
+  it('puts import before export, then most-recent agreement first within each group', () => {
+    const meters = collectMeters({
+      number: 'A-FAKE0001',
+      properties: [
+        {
+          electricity_meter_points: [
+            {
+              mpan: '1900000000010',
+              is_export: true,
+              meters: [{ serial_number: 'EXP001' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-OUTGOING-FIX-12M-19-05-13-A',
+                  valid_from: '2023-01-01',
+                  valid_to: null,
+                },
+              ],
+            },
+            {
+              mpan: '1900000000011',
+              is_export: false,
+              meters: [{ serial_number: 'IMP001' }],
+              agreements: [
+                { tariff_code: 'E-1R-VAR-22-11-01-A', valid_from: '2022-01-01', valid_to: null },
+              ],
+            },
+            {
+              mpan: '1900000000012',
+              is_export: false,
+              meters: [{ serial_number: 'IMP002' }],
+              agreements: [
+                { tariff_code: 'E-1R-AGILE-24-10-01-A', valid_from: '2025-01-01', valid_to: null },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    const sorted = sortMeters(meters);
+    // Import before export
+    expect(sorted[0]?.isExport).toBe(false);
+    expect(sorted[1]?.isExport).toBe(false);
+    expect(sorted[2]?.isExport).toBe(true);
+    // Within import: most recent agreement first (2025 > 2022)
+    expect(sorted[0]?.mpan).toBe('1900000000012');
+    expect(sorted[1]?.mpan).toBe('1900000000011');
   });
 });
 

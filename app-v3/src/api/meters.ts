@@ -80,7 +80,7 @@ export function collectMeters(accountData: AccountData): MeterChoice[] {
 }
 
 // Discover every meter for the key: account numbers → account data (skipping any
-// the key can't read, 403) → collected meters.
+// the key can't read, 403) → collected meters, sorted import-first then most-recent-first.
 export async function discoverMeters(client: OctopusClient, token: string): Promise<MeterChoice[]> {
   const numbers = await fetchAccountNumbers(client, token);
   if (numbers.length === 0) throw new Error('No accounts found for this API key.');
@@ -96,5 +96,27 @@ export async function discoverMeters(client: OctopusClient, token: string): Prom
     acct.number = number;
     all.push(...collectMeters(acct));
   }
-  return all;
+  return sortMeters(all);
+}
+
+// Sort import meters before export, then within each group most-recently-activated first
+// (highest agreement validFrom). Stable so ties preserve the original API order.
+export function sortMeters(meters: MeterChoice[]): MeterChoice[] {
+  const latestMs = (m: MeterChoice): number => {
+    let best = 0;
+    for (const prop of m.accountData.properties ?? []) {
+      for (const em of prop.electricity_meter_points ?? []) {
+        if ((em.mpan ?? '') !== m.mpan) continue;
+        for (const a of em.agreements ?? []) {
+          const t = a.valid_from ? new Date(a.valid_from).getTime() : 0;
+          if (t > best) best = t;
+        }
+      }
+    }
+    return best;
+  };
+  return [...meters].sort((a, b) => {
+    if (a.isExport !== b.isExport) return a.isExport ? 1 : -1;
+    return latestMs(b) - latestMs(a);
+  });
 }

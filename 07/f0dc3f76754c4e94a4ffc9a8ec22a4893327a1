@@ -1,0 +1,24 @@
+app-v3/src/api/client.ts
+  s_d0846ef0bc0e61::t_eb1b2d9e7900a2 24,120-125
+app-v3/tests/api/client.test.ts
+  s_d0846ef0bc0e61::t_2d18e93bd1d4ee 46-55,64-65,67-69
+  s_d0846ef0bc0e61::t_543defb8d3fede 56-63,66
+app-v3/src/flows/runComparison.ts
+  s_d0846ef0bc0e61::t_0c3d7bfeb22210 28,150-151
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "07f0dc3f76754c4e94a4ffc9a8ec22a4893327a1",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

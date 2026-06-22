@@ -1,0 +1,41 @@
+app-v3/tests/flows/runComparison.test.ts
+  s_d0846ef0bc0e61::t_d0d1a1b5fa7c41 372-425
+  s_d0846ef0bc0e61::t_f535443aeead25 309-316
+app-v3/src/flows/runComparison.ts
+  s_d0846ef0bc0e61::t_b41809a52beb34 87-103,108-115,118-120,132,139-140,548
+app-v3/src/diagnostics/replay.ts
+  s_d0846ef0bc0e61::t_28e3c570a70c49 147-158,520,547
+app-v3/tests/ui/results.test.ts
+  s_d0846ef0bc0e61::t_8cbff1c2904b3b 140-165
+app-v3/src/types/diagnostics.ts
+  s_d0846ef0bc0e61::t_35ffe34a6d1ae2 123-128
+app-v3/src/ui/results.ts
+  s_d0846ef0bc0e61::t_0e41ba9f5a3dfe 177-186
+app-v3/src/api/statements.ts
+  s_d0846ef0bc0e61::t_c1f0217174c865 100-101,110,118-121,139-140,154,156-160,169-175
+app-v3/src/types/result.ts
+  s_d0846ef0bc0e61::t_38c0689cd2dcdf 96-101
+app-v3/tests/api/statements.test.ts
+  s_d0846ef0bc0e61::t_344e3fa610472f 114-115,141-142,190-191,194-231
+  s_d0846ef0bc0e61::t_5eddae52292c44 189
+app-v3/src/diagnostics/capture.ts
+  s_d0846ef0bc0e61::t_2835d6bb03953d 212
+app-v3/tests/diagnostics/roundtrip.test.ts
+  s_d0846ef0bc0e61::t_98b418d060c9b8 137-142,146,152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "25f6c47948bc509316602c94a6c5004d917b5113",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

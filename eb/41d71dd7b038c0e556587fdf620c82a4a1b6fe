@@ -1,0 +1,30 @@
+app-v3/tests/flows/runComparison.test.ts
+  s_d0846ef0bc0e61::t_ca2f506d2c2c77 447-484
+app-v3/src/api/meters.ts
+  s_d0846ef0bc0e61::t_ad43b6cd956d10 3,66
+app-v3/tests/api/meters.test.ts
+  s_d0846ef0bc0e61::t_7e9f9283d275df 81-110
+app-v3/src/flows/runExportComparison.ts
+  s_d0846ef0bc0e61::t_17d35ad48bfc7e 11,29
+app-v3/tests/domain/tariff.test.ts
+  s_d0846ef0bc0e61::t_419c3e663658d3 109
+  s_d0846ef0bc0e61::t_ba10db9460eead 115-132
+app-v3/src/domain/tariff.ts
+  s_d0846ef0bc0e61::t_01213e0fd656a8 61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "eb41d71dd7b038c0e556587fdf620c82a4a1b6fe",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

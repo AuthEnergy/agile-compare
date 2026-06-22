@@ -85,7 +85,7 @@ export function openTariffOverrideModal(
         onClick: () => {
           const unit = parseFloat((unitInput as HTMLInputElement).value);
           const standing = parseFloat((standingInput as HTMLInputElement).value);
-          if (isNaN(unit) || isNaN(standing) || unit <= 0 || standing < 0) {
+          if (!Number.isFinite(unit) || !Number.isFinite(standing) || unit <= 0 || standing < 0) {
             errorMsg.style.display = '';
             return;
           }

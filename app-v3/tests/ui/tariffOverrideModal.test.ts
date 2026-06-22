@@ -50,4 +50,21 @@ describe('openTariffOverrideModal', () => {
     expect(unit.getAttribute('min')).toBe('0.01');
     expect(standing.getAttribute('min')).toBe('0');
   });
+
+  it('rejects non-finite rates', () => {
+    const onApply = vi.fn();
+    openTariffOverrideModal(null, null, onApply);
+    const [unit, standing] = inputs();
+    Object.defineProperty(unit, 'value', {
+      configurable: true,
+      get: () => 'Infinity',
+    });
+    standing.value = '0';
+
+    applyButton().click();
+
+    expect(onApply).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('unit rate greater than zero');
+    expect(document.querySelector('.modal-backdrop')).not.toBeNull();
+  });
 });

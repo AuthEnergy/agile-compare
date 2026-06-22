@@ -147,7 +147,13 @@ function parseFlexColumnSource(
 function parseStatementAttribution(value: unknown): RunContext['statementAttribution'] {
   const o = isObj(value) ? value : null;
   const mode = asStr(o?.['mode']);
-  if (mode !== 'safe-statements' && mode !== 'estimate-only-unsafe-multi-mpan') return undefined;
+  if (
+    mode !== 'safe-statements' &&
+    mode !== 'partial-statements-unsafe-multi-mpan' &&
+    mode !== 'estimate-only-unsafe-multi-mpan'
+  ) {
+    return undefined;
+  }
   return {
     mode,
     accountsWithMeter: asNum(o?.['accountsWithMeter']),

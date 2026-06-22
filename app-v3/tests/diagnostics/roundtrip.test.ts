@@ -135,9 +135,9 @@ describe('diagnostics round-trip (capture -> serialise -> replay)', () => {
       reason: 'Tracker rates are not modelled.',
     };
     run.context.statementAttribution = {
-      mode: 'estimate-only-unsafe-multi-mpan',
-      accountsWithMeter: 1,
-      accountsUsedForStatements: 0,
+      mode: 'partial-statements-unsafe-multi-mpan',
+      accountsWithMeter: 2,
+      accountsUsedForStatements: 1,
       unsafeAccountsWithMeter: 1,
     };
 

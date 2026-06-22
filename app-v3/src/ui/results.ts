@@ -184,6 +184,16 @@ export function renderResults(
       ),
     );
   }
+  if (run.context.statementAttribution?.mode === 'partial-statements-unsafe-multi-mpan') {
+    host.append(
+      callout(
+        'Some bills were not attributed',
+        'One or more accounts that list this MPAN also bill another electricity meter. We excluded those statements, so the “you paid” total includes only safely attributable bills and may not cover every account that bills this meter.',
+        'caution',
+        'info',
+      ),
+    );
+  }
   if (run.context.flexNote) {
     host.append(callout('Comparison baseline', run.context.flexNote, 'caution', 'info'));
   }

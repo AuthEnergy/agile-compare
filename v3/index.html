@@ -1548,13 +1548,14 @@ async function runComparison(client, input, onProgress = () => {
     unsafeAccountsWithMeter
   } = statementFetch;
   const estimateOnlyUnsafeStatements = allStatements.length === 0 && accountsUsedForStatements === 0 && unsafeAccountsWithMeter > 0;
+  const partialUnsafeStatements = accountsUsedForStatements > 0 && unsafeAccountsWithMeter > 0;
   if (allStatements.length === 0 && !estimateOnlyUnsafeStatements) {
     throw new Error(
       "No statements found on this account. Your account may not have statement history available via the API."
     );
   }
   const statementAttribution = {
-    mode: estimateOnlyUnsafeStatements ? "estimate-only-unsafe-multi-mpan" : "safe-statements",
+    mode: estimateOnlyUnsafeStatements ? "estimate-only-unsafe-multi-mpan" : partialUnsafeStatements ? "partial-statements-unsafe-multi-mpan" : "safe-statements",
     accountsWithMeter,
     accountsUsedForStatements,
     unsafeAccountsWithMeter
@@ -3338,6 +3339,16 @@ function renderResults(host, run, headline, replayMeta, cb) {
       )
     );
   }
+  if (run.context.statementAttribution?.mode === "partial-statements-unsafe-multi-mpan") {
+    host.append(
+      callout(
+        "Some bills were not attributed",
+        "One or more accounts that list this MPAN also bill another electricity meter. We excluded those statements, so the “you paid” total includes only safely attributable bills and may not cover every account that bills this meter.",
+        "caution",
+        "info"
+      )
+    );
+  }
   if (run.context.flexNote) {
     host.append(callout("Comparison baseline", run.context.flexNote, "caution", "info"));
   }
@@ -3528,7 +3539,7 @@ function openTariffOverrideModal(prefillUnit, prefillStanding, onApply) {
         onClick: () => {
           const unit = parseFloat(unitInput.value);
           const standing = parseFloat(standingInput.value);
-          if (isNaN(unit) || isNaN(standing) || unit <= 0 || standing < 0) {
+          if (!Number.isFinite(unit) || !Number.isFinite(standing) || unit <= 0 || standing < 0) {
             errorMsg.style.display = "";
             return;
           }
@@ -5029,7 +5040,9 @@ function parseFlexColumnSource(value, tariffOverride, currentAgreement) {
 function parseStatementAttribution(value) {
   const o = isObj(value) ? value : null;
   const mode = asStr(o?.["mode"]);
-  if (mode !== "safe-statements" && mode !== "estimate-only-unsafe-multi-mpan") return void 0;
+  if (mode !== "safe-statements" && mode !== "partial-statements-unsafe-multi-mpan" && mode !== "estimate-only-unsafe-multi-mpan") {
+    return void 0;
+  }
   return {
     mode,
     accountsWithMeter: asNum(o?.["accountsWithMeter"]),

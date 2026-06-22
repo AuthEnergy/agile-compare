@@ -370,6 +370,76 @@ describe('runComparison (end-to-end, mocked fetch)', () => {
     });
   });
 
+  it('marks statement attribution partial when an unsafe sibling account is excluded', async () => {
+    const baseFetch = importFetch();
+    const multiMpanAccountData: AccountData = {
+      number: 'A-MULTI',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+            {
+              mpan: '9999999999999',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S2' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    globalThis.fetch = (async (url: string | URL, opts?: { body?: string }) => {
+      const u = new URL(url.toString());
+      if (u.pathname.includes('/graphql/')) {
+        const b = JSON.parse(opts?.body ?? '{}');
+        if (String(b.query).includes('viewer')) {
+          return jsonResp({
+            data: {
+              viewer: {
+                accounts: [{ number: 'A-X' }, { number: 'A-MULTI' }],
+              },
+            },
+          });
+        }
+      }
+      if (u.pathname === '/v1/accounts/A-MULTI/') {
+        return jsonResp(multiMpanAccountData);
+      }
+      return baseFetch(url, opts);
+    }) as unknown as typeof fetch;
+
+    const run = await runComparison(createClient(input.apiKey), input);
+
+    expect(run.context.statementAttribution).toMatchObject({
+      mode: 'partial-statements-unsafe-multi-mpan',
+      accountsWithMeter: 2,
+      accountsUsedForStatements: 1,
+      unsafeAccountsWithMeter: 1,
+    });
+    expect(run.context.statementValidation.length).toBeGreaterThan(0);
+    expect(run.periods.some((p) => p.actualChargePence !== null)).toBe(true);
+  });
+
   it('falls back to estimate-only when primary statements cannot be attributed to one MPAN', async () => {
     const multiMpanAccountData: AccountData = {
       number: 'A-X',

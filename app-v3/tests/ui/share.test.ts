@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { computeHeadline } from '../../src/domain/headline';
 import { buildShareText, renderSharePanel } from '../../src/ui/share';
 import { makeRun } from '../diagnostics/runFactory';
@@ -106,12 +106,18 @@ describe('buildShareText', () => {
 
   it('renders a text-only share fallback when canvas is unavailable', () => {
     const run = onePeriod();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const panel = renderSharePanel(run, computeHeadline(run));
+    try {
+      const panel = renderSharePanel(run, computeHeadline(run));
 
-    expect(panel).not.toBeNull();
-    expect(panel?.querySelector('canvas')).toBeNull();
-    expect(panel?.textContent).toContain('Copy to clipboard');
-    expect(panel?.textContent).toContain('#DynamicTariffCheck');
+      expect(panel).not.toBeNull();
+      expect(panel?.querySelector('canvas')).toBeNull();
+      expect(panel?.textContent).toContain('Copy to clipboard');
+      expect(panel?.textContent).toContain('#DynamicTariffCheck');
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

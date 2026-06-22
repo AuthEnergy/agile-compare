@@ -30,8 +30,8 @@ export interface PeriodRowVM {
   flexAvgPence: number | null; // effective unit rate p/kWh for the yours/flex side
   agileAvgPence: number | null; // avg Agile unit rate p/kWh (energy only, excl. standing)
   // Per-period flex column label: the current tariff name + "(calc.)" for on-current
-  // periods (e.g. "Flux (calc.)"), "Flexible" for pre-switch/mixed periods where the
-  // Flexible calculation is a genuine alternative, not a proxy.
+  // periods when actual rates are available, "Flexible" for pre-switch/mixed
+  // periods where the Flexible calculation is a genuine alternative, not a proxy.
   flexLabel: string;
   readingCoveragePct: number; // 0–100: what fraction of expected half-hour slots have readings
   status: PeriodStatus;

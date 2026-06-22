@@ -100,6 +100,7 @@ export async function runComparison(
   } = statementFetch;
   const estimateOnlyUnsafeStatements =
     allStatements.length === 0 && accountsUsedForStatements === 0 && unsafeAccountsWithMeter > 0;
+  const partialUnsafeStatements = accountsUsedForStatements > 0 && unsafeAccountsWithMeter > 0;
   if (allStatements.length === 0 && !estimateOnlyUnsafeStatements) {
     throw new Error(
       'No statements found on this account. Your account may not have statement history available via the API.',
@@ -108,7 +109,9 @@ export async function runComparison(
   const statementAttribution = {
     mode: estimateOnlyUnsafeStatements
       ? ('estimate-only-unsafe-multi-mpan' as const)
-      : ('safe-statements' as const),
+      : partialUnsafeStatements
+        ? ('partial-statements-unsafe-multi-mpan' as const)
+        : ('safe-statements' as const),
     accountsWithMeter,
     accountsUsedForStatements,
     unsafeAccountsWithMeter,
@@ -310,8 +313,8 @@ export async function runComparison(
   // --- Actual current-tariff rates (non-Flexible, non-Agile users) ---
   // Flexible users: the flex column IS already their tariff (fetched above via product search).
   // Agile users: compare against Flexible by design — skip.
-  // All others (Go, Fixed, Tracker, Cosy, FLUX…): try to fetch their actual rates;
-  // fall back to Flexible proxy and record a note if unavailable.
+  // Supported current tariffs (flat-rate or Go-like day/night) use their actual
+  // rates; unsupported ToU shapes fall back to Flexible proxy with a caveat.
   const currentTariffKind = classifyTariffCode(currentAgreement?.tariff_code).kind;
   const onFlexible = currentTariffKind === 'flexible';
   const onAgile = currentTariffKind === 'agile';

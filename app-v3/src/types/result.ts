@@ -94,7 +94,10 @@ export interface RunContext {
   missingEstimate: MissingEstimate;
   statementsIncomplete: boolean;
   statementAttribution?: {
-    mode: 'safe-statements' | 'estimate-only-unsafe-multi-mpan';
+    mode:
+      | 'safe-statements'
+      | 'partial-statements-unsafe-multi-mpan'
+      | 'estimate-only-unsafe-multi-mpan';
     accountsWithMeter: number;
     accountsUsedForStatements: number;
     unsafeAccountsWithMeter: number;

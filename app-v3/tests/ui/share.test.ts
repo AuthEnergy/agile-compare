@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeHeadline } from '../../src/domain/headline';
-import { buildShareText } from '../../src/ui/share';
+import { buildShareText, renderSharePanel } from '../../src/ui/share';
 import { makeRun } from '../diagnostics/runFactory';
 
 const onePeriod = (over: Record<string, unknown> = {}) =>
@@ -102,5 +102,16 @@ describe('buildShareText', () => {
       valid_to: null,
     };
     expect(buildShareText(run, computeHeadline(run))).toBeNull();
+  });
+
+  it('renders a text-only share fallback when canvas is unavailable', () => {
+    const run = onePeriod();
+
+    const panel = renderSharePanel(run, computeHeadline(run));
+
+    expect(panel).not.toBeNull();
+    expect(panel?.querySelector('canvas')).toBeNull();
+    expect(panel?.textContent).toContain('Copy to clipboard');
+    expect(panel?.textContent).toContain('#DynamicTariffCheck');
   });
 });

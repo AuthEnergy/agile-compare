@@ -12,8 +12,8 @@ import { calculateCost } from '../domain/cost';
 import { detectGaps, estimateMissingKwh } from '../domain/gaps';
 import { splitLongPeriods } from '../domain/periods';
 import { billedKwhMismatch, summariseStatementTransactions } from '../domain/statements';
-import { makeTariffAtDateFn, tariffCodesInRange } from '../domain/tariff';
-import type { StatementCredit } from '../types/api';
+import { findCurrentAgreement, makeTariffAtDateFn, tariffCodesInRange } from '../domain/tariff';
+import type { StatementCharge, StatementCredit } from '../types/api';
 import type { RateWindow, RawPeriod } from '../types/domain';
 import type { AccountData, RawConsumptionRow } from '../types/octopus';
 import type {
@@ -38,6 +38,7 @@ interface RichPeriod extends RawPeriod {
   credits: StatementCredit[];
   transactionsAvailable: boolean;
   transactionsComplete: boolean;
+  statementCharges: StatementCharge[];
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -64,8 +65,7 @@ export async function runComparison(
     );
   }
   const agreements = getAgreementsForMpan(accountData, input.mpan);
-  const currentAgreement =
-    agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const currentAgreement = findCurrentAgreement(agreements, new Date());
   const postcodeArea = getPostcodeAreaForMpan(accountData, input.mpan);
   onProgress(`Account verified. Region ${regionLetter}.`, 'ok', 8);
 
@@ -158,6 +158,7 @@ export async function runComparison(
         credits: txnUsable ? txn.credits : [],
         transactionsAvailable: txn.available,
         transactionsComplete: txn.complete,
+        statementCharges: txnUsable ? txn.charges : [],
       };
     })
     .filter((p) => p.end > periodFrom && p.start < periodTo && p.end > p.start)
@@ -182,6 +183,7 @@ export async function runComparison(
       transactionsComplete: p.transactionsComplete,
       wasClamped,
       mismatch: !wasClamped && billedKwhMismatch(p.billedKwh, observedKwh),
+      statementCharges: p.statementCharges,
     };
   });
 
@@ -201,6 +203,7 @@ export async function runComparison(
     credits: [],
     transactionsAvailable: false,
     transactionsComplete: true,
+    statementCharges: [],
   });
   const hasReadingsIn = (from: Date, to: Date): boolean =>
     to.getTime() - from.getTime() > DAY_MS &&

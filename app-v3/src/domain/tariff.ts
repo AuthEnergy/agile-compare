@@ -14,6 +14,8 @@ export function classifyTariffCode(code: string | null | undefined): TariffClass
   if (c.includes('COSY')) return { kind: 'cosy', label: 'Cosy' };
   if (c.includes('INTELLI')) return { kind: 'go', label: 'Intelligent Go' };
   if (/(^|-)GO(-|$)/.test(c)) return { kind: 'go', label: 'Go' };
+  if (c.includes('FLUX')) return { kind: 'other', label: 'Flux' };
+  if (c.includes('POWLP')) return { kind: 'other', label: 'Power Loop' };
   if (c.includes('FIX')) return { kind: 'fixed', label: 'Fixed' };
   if (c.includes('VAR') || c.includes('FLEX')) return { kind: 'flexible', label: 'Flexible' };
   return { kind: 'other', label: code };
@@ -35,6 +37,28 @@ export function makeTariffAtDateFn(
     }
     return null;
   };
+}
+
+// The agreement actually in force at `at`. Octopus may pre-announce a future
+// agreement (validTo = null, validFrom in the future), so we can't just find
+// the open-ended one — we must check that validFrom has already passed.
+// Falls back to the last agreement if none covers `at` (e.g. data before first
+// agreement, or a diagnostic replayed after all agreements ended).
+export function findCurrentAgreement(
+  agreements: readonly Agreement[] | null | undefined,
+  at: Date,
+): Agreement | null {
+  const list = agreements ?? [];
+  const ms = at.getTime();
+  const sorted = [...list].sort(
+    (a, b) => new Date(b.valid_from).getTime() - new Date(a.valid_from).getTime(),
+  );
+  const active = sorted.find((a) => {
+    const from = new Date(a.valid_from).getTime();
+    const to = a.valid_to ? new Date(a.valid_to).getTime() : Infinity;
+    return from <= ms && to > ms;
+  });
+  return active ?? list[list.length - 1] ?? null;
 }
 
 // Distinct tariff codes in force at any instant during [start, end). >1 code

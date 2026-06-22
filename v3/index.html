@@ -89,7 +89,8 @@ const ICONS = {
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   arrowUpRight: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
   home: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
-  upload: '<path d="M12 2v8"/><path d="m16 6-4-4-4 4"/><rect x="3" y="14" width="18" height="7" rx="2"/>'
+  upload: '<path d="M12 2v8"/><path d="m16 6-4-4-4 4"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
+  activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
 };
 const LOGO_PATHS = '<path d="M 5.523 7.921 C 5.523 3.546 9.084 0 13.477 0 C 17.869 0 21.43 3.546 21.43 7.921 C 21.43 12.296 17.869 15.842 13.477 15.842 C 9.084 15.842 5.523 12.296 5.523 7.921 Z"/><path d="M 26.97 10.52 C 26.97 28.981 20.927 43.969 13.485 43.969 C 6.042 43.969 0 28.981 0 10.52 C 0 14.179 3.021 17.148 6.743 17.148 C 10.464 17.148 13.485 14.179 13.485 10.52 C 13.485 14.179 16.506 17.148 20.227 17.148 C 23.948 17.148 26.97 14.179 26.97 10.52 Z M 12.614 26.835 L 12.614 39.882 C 12.614 39.937 12.659 39.982 12.714 39.982 L 14.255 39.982 C 14.311 39.982 14.356 39.937 14.356 39.882 L 14.356 26.835 C 16.492 26.455 18.109 24.711 18.109 22.618 C 18.109 20.248 16.037 18.324 13.485 18.324 C 10.933 18.324 8.861 20.248 8.861 22.618 C 8.861 24.711 10.477 26.455 12.614 26.835 Z M 13.485 20.421 C 13.023 20.421 12.649 20.073 12.649 19.644 C 12.649 19.216 13.023 18.868 13.485 18.868 C 13.946 18.868 14.321 19.216 14.321 19.644 C 14.321 20.073 13.946 20.421 13.485 20.421 Z M 10.056 38.922 L 12.345 38.922 L 12.345 38.07 L 10.056 38.07 C 9.904 38.07 9.782 38.193 9.782 38.344 L 9.782 38.649 C 9.782 38.8 9.904 38.922 10.056 38.922 Z M 10.888 37.828 L 12.345 37.828 L 12.345 36.976 L 10.888 36.976 C 10.815 36.976 10.745 37.004 10.694 37.056 C 10.642 37.107 10.613 37.177 10.613 37.25 L 10.613 37.555 C 10.613 37.627 10.642 37.697 10.694 37.748 C 10.745 37.799 10.815 37.828 10.888 37.828 Z M 10.056 36.734 L 12.345 36.734 L 12.345 35.881 L 10.056 35.881 C 9.904 35.881 9.782 36.004 9.782 36.155 L 9.782 36.46 C 9.782 36.612 9.904 36.734 10.056 36.734 Z"/>';
 const SEMANTIC = {
@@ -5830,6 +5831,8 @@ function classifyTariffCode(code) {
   if (c2.includes("COSY")) return { kind: "cosy", label: "Cosy" };
   if (c2.includes("INTELLI")) return { kind: "go", label: "Intelligent Go" };
   if (/(^|-)GO(-|$)/.test(c2)) return { kind: "go", label: "Go" };
+  if (c2.includes("FLUX")) return { kind: "other", label: "Flux" };
+  if (c2.includes("POWLP")) return { kind: "other", label: "Power Loop" };
   if (c2.includes("FIX")) return { kind: "fixed", label: "Fixed" };
   if (c2.includes("VAR") || c2.includes("FLEX")) return { kind: "flexible", label: "Flexible" };
   return { kind: "other", label: code };
@@ -5847,6 +5850,19 @@ function makeTariffAtDateFn(agreements) {
     return null;
   };
 }
+function findCurrentAgreement(agreements, at2) {
+  const list = agreements ?? [];
+  const ms2 = at2.getTime();
+  const sorted = [...list].sort(
+    (a2, b2) => new Date(b2.valid_from).getTime() - new Date(a2.valid_from).getTime()
+  );
+  const active2 = sorted.find((a2) => {
+    const from = new Date(a2.valid_from).getTime();
+    const to2 = a2.valid_to ? new Date(a2.valid_to).getTime() : Infinity;
+    return from <= ms2 && to2 > ms2;
+  });
+  return active2 ?? list[list.length - 1] ?? null;
+}
 function tariffCodesInRange(agreements, start, end) {
   const sorted = [...agreements ?? []].sort(
     (a2, b2) => new Date(a2.valid_from).getTime() - new Date(b2.valid_from).getTime()
@@ -5859,12 +5875,24 @@ function tariffCodesInRange(agreements, start, end) {
   }
   return codes;
 }
+function isMajorMismatch(v2) {
+  if (!v2.mismatch) return false;
+  if (v2.billedKwh == null || v2.billedKwh === 0) return true;
+  return Math.abs(v2.billedKwh - v2.observedKwh) / Math.abs(v2.billedKwh) >= 0.05;
+}
+function periodHasMajorMismatch(p2, statementValidation) {
+  return statementValidation.some(
+    (v2) => isMajorMismatch(v2) && v2.displayStart < p2.end && v2.displayEnd > p2.start
+  );
+}
 function consistentSubset(run) {
   const { periods, context } = run;
+  const { statementValidation } = context;
   const currentTariff = context.currentAgreement ? context.currentAgreement.tariff_code : null;
+  const isClean = (p2) => p2.confident && !periodHasMajorMismatch(p2, statementValidation);
   const consistentResults = currentTariff ? periods.filter(
-    (p2) => p2.tariffCodes.length === 1 && p2.tariffCodes[0] === currentTariff && p2.confident
-  ) : periods.filter((p2) => p2.confident);
+    (p2) => p2.tariffCodes.length === 1 && p2.tariffCodes[0] === currentTariff && isClean(p2)
+  ) : periods.filter((p2) => isClean(p2));
   const useConsistentOnly = consistentResults.length > 0 && consistentResults.length < periods.length;
   return { consistentResults, useConsistentOnly };
 }
@@ -5930,11 +5958,11 @@ function computeHeadline(run) {
   const scopedBilled = billedStatements.filter(validationInScope);
   const scopedBilledKwh = scopedBilled.reduce((s2, v2) => s2 + (v2.billedKwh ?? 0), 0);
   const scopedObservedKwh = scopedBilled.reduce((s2, v2) => s2 + v2.observedKwh, 0);
-  const anyMismatch = statementValidation.some((v2) => v2.mismatch && validationInScope(v2));
+  const anyMismatch = statementValidation.some((v2) => isMajorMismatch(v2) && validationInScope(v2));
   const anyTxnIncomplete = statementValidation.some(
     (v2) => v2.transactionsAvailable && !v2.transactionsComplete && validationInScope(v2)
   );
-  const anyMismatchAllPeriods = statementValidation.some((v2) => v2.mismatch);
+  const anyMismatchAllPeriods = statementValidation.some((v2) => isMajorMismatch(v2));
   const allConfident = periods.length > 0 && periods.every((p2) => p2.confident);
   const trustworthy = (useConsistentOnly || allConfident) && !statementsIncomplete;
   const summaryHasActual = summaryScope.some(
@@ -6601,7 +6629,7 @@ async function fetchStatementsForMpan(client, token, mpan, primaryAccountNumber,
   }
   return { statements: [...byId.values()], incomplete, accountsWithMeter };
 }
-const DAY_MS$6 = 24 * 60 * 60 * 1e3;
+const DAY_MS$5 = 24 * 60 * 60 * 1e3;
 const MAX_PERIOD_DAYS = 500;
 function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standingChargeWindows, preSorted = false) {
   let kwh = 0;
@@ -6616,7 +6644,7 @@ function calculateCost(readings, periodStart, periodEnd, unitRateWindows, standi
       else energyCostPence += r2.kwh * rate;
     }
   }
-  const spanDays = (periodEnd.getTime() - periodStart.getTime()) / DAY_MS$6;
+  const spanDays = (periodEnd.getTime() - periodStart.getTime()) / DAY_MS$5;
   if (spanDays > MAX_PERIOD_DAYS) {
     throw new Error(
       `calculateCost called with an implausible date range (${spanDays.toFixed(0)} days, ${periodStart.toISOString()} to ${periodEnd.toISOString()}). This is almost certainly a bug (an unclamped statement date) rather than a real billing period.`
@@ -6723,12 +6751,12 @@ function estimateMissingKwh(readings, gaps) {
   }
   return { totalKwh, slots: totalSlots, perGap };
 }
-const DAY_MS$5 = 24 * 60 * 60 * 1e3;
+const DAY_MS$4 = 24 * 60 * 60 * 1e3;
 const MAX_SPLIT_PERIOD_DAYS = 2e4;
 function splitLongPeriods(rawPeriods) {
   const result = [];
   for (const p2 of rawPeriods) {
-    const spanDays = (p2.end.getTime() - p2.start.getTime()) / DAY_MS$5;
+    const spanDays = (p2.end.getTime() - p2.start.getTime()) / DAY_MS$4;
     if (spanDays > MAX_SPLIT_PERIOD_DAYS) {
       throw new RangeError(
         `splitLongPeriods called with an implausible span (${spanDays.toFixed(0)} days). This is almost certainly a bug or a hostile input, not a real billing period.`
@@ -6747,7 +6775,7 @@ function splitLongPeriods(rawPeriods) {
       nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
       nextMonth.setUTCHours(0, 0, 0, 0);
       const subEnd = nextMonth < p2.end ? nextMonth : new Date(p2.end);
-      const proportion = (subEnd.getTime() - subStart.getTime()) / DAY_MS$5 / totalDays;
+      const proportion = (subEnd.getTime() - subStart.getTime()) / DAY_MS$4 / totalDays;
       result.push({
         displayStart: subStart,
         displayEnd: subEnd,
@@ -6777,17 +6805,13 @@ function summariseStatementTransactions(statementNode) {
   const nodes = txns.edges.map((e2) => e2?.node).filter((n2) => Boolean(n2));
   const grossOf = (n2) => n2.amounts && typeof n2.amounts.gross === "number" ? n2.amounts.gross : 0;
   const billCharges = nodes.filter((n2) => n2.__typename === "BillCharge");
-  let electricityCharges = billCharges.filter((n2) => /electric/i.test(n2.title ?? ""));
-  if (electricityCharges.length === 0) {
-    electricityCharges = billCharges.filter(
-      (n2) => n2.consumption != null && n2.consumption.quantity != null
-    );
-  }
+  const electricityCharges = billCharges.filter((n2) => /electric/i.test(n2.title ?? ""));
   let electricityChargePence = null;
   let billedKwh = null;
   for (const c2 of electricityCharges) {
-    electricityChargePence = (electricityChargePence ?? 0) + grossOf(c2);
-    if (c2.consumption && c2.consumption.quantity != null) {
+    const gross = grossOf(c2);
+    electricityChargePence = (electricityChargePence ?? 0) + gross;
+    if (gross >= 0 && c2.consumption && c2.consumption.quantity != null) {
       billedKwh = (billedKwh ?? 0) + Number(c2.consumption.quantity);
     }
   }
@@ -6817,7 +6841,7 @@ function billedKwhMismatch(billedKwh, observedKwh) {
   const threshold = Math.max(50, 0.02 * Math.abs(billedKwh));
   return Math.abs(billedKwh - observedKwh) > threshold;
 }
-const DAY_MS$4 = 24 * 60 * 60 * 1e3;
+const DAY_MS$3 = 24 * 60 * 60 * 1e3;
 const isoDate = (d2) => d2.toISOString().slice(0, 10);
 const readNum = (v2) => typeof v2 === "number" ? v2 : null;
 async function runComparison(client, input, onProgress = () => {
@@ -6834,7 +6858,7 @@ async function runComparison(client, input, onProgress = () => {
     );
   }
   const agreements = getAgreementsForMpan(accountData, input.mpan);
-  const currentAgreement = agreements.find((a2) => !a2.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const currentAgreement = findCurrentAgreement(agreements, /* @__PURE__ */ new Date());
   const postcodeArea = getPostcodeAreaForMpan(accountData, input.mpan);
   onProgress(`Account verified. Region ${regionLetter}.`, "ok", 8);
   onProgress("Authenticating to fetch your real billing periods…", "active", 15);
@@ -6902,7 +6926,8 @@ async function runComparison(client, input, onProgress = () => {
       creditsPence: txnUsable ? txn.creditsPence : 0,
       credits: txnUsable ? txn.credits : [],
       transactionsAvailable: txn.available,
-      transactionsComplete: txn.complete
+      transactionsComplete: txn.complete,
+      statementCharges: txnUsable ? txn.charges : []
     };
   }).filter((p2) => p2.end > periodFrom && p2.start < periodTo && p2.end > p2.start).sort((a2, b2) => a2.start.getTime() - b2.start.getTime());
   const statementValidation = richPeriods.map((p2) => {
@@ -6922,7 +6947,8 @@ async function runComparison(client, input, onProgress = () => {
       transactionsAvailable: p2.transactionsAvailable,
       transactionsComplete: p2.transactionsComplete,
       wasClamped,
-      mismatch: !wasClamped && billedKwhMismatch(p2.billedKwh, observedKwh)
+      mismatch: !wasClamped && billedKwhMismatch(p2.billedKwh, observedKwh),
+      statementCharges: p2.statementCharges
     };
   });
   const synthPeriod = (from, to2) => ({
@@ -6935,9 +6961,10 @@ async function runComparison(client, input, onProgress = () => {
     creditsPence: 0,
     credits: [],
     transactionsAvailable: false,
-    transactionsComplete: true
+    transactionsComplete: true,
+    statementCharges: []
   });
-  const hasReadingsIn = (from, to2) => to2.getTime() - from.getTime() > DAY_MS$4 && readings.some((r2) => r2.start.getTime() >= from.getTime() && r2.start.getTime() < to2.getTime());
+  const hasReadingsIn = (from, to2) => to2.getTime() - from.getTime() > DAY_MS$3 && readings.some((r2) => r2.start.getTime() >= from.getTime() && r2.start.getTime() < to2.getTime());
   const sortedRich = [...richPeriods].sort((a2, b2) => a2.start.getTime() - b2.start.getTime());
   const periodsForSplit = [...richPeriods];
   let latestStatementEnd = null;
@@ -7240,7 +7267,7 @@ const REPLAY_CAPS = {
   maxPeriodDays: 800
 };
 const fmtDate$1 = (d2) => d2.toISOString().slice(0, 10);
-const HALF_HOUR_MS$3 = 30 * 60 * 1e3;
+const HALF_HOUR_MS$4 = 30 * 60 * 1e3;
 function rateWindowSummary(windows, label) {
   if (!windows || windows.length === 0) return `${label}: none fetched`;
   const sorted = [...windows].sort((a2, b2) => a2.validFrom.getTime() - b2.validFrom.getTime());
@@ -7356,7 +7383,7 @@ function buildImportDiagnostics(run, opts) {
       rangeCount: gapInfo.gaps.length,
       duplicateCount: gapInfo.duplicates.length,
       missingSlots: gapInfo.gaps.reduce(
-        (s2, g2) => s2 + Math.round((g2.end.getTime() - g2.start.getTime()) / HALF_HOUR_MS$3) + 1,
+        (s2, g2) => s2 + Math.round((g2.end.getTime() - g2.start.getTime()) / HALF_HOUR_MS$4) + 1,
         0
       ),
       ranges: gapInfo.gaps.map(
@@ -7397,7 +7424,15 @@ function buildImportDiagnostics(run, opts) {
       transactionsComplete: v2.transactionsComplete,
       electricityChargePence: v2.electricityChargePence != null ? v2.electricityChargePence.toFixed(0) : "n/a",
       creditsPence: (v2.creditsPence || 0).toFixed(0),
-      clamped: v2.wasClamped
+      clamped: v2.wasClamped,
+      // Individual BillCharge line items — title, kWh, and sign of grossPence lets
+      // us distinguish import (positive, customer pays) from export (negative,
+      // Octopus pays customer) when both appear as 'Electricity' charges.
+      charges: v2.statementCharges.map((c2) => ({
+        title: c2.title,
+        kwh: c2.kwh != null ? c2.kwh.toFixed(2) : "n/a",
+        grossPence: c2.grossPence.toFixed(0)
+      }))
     })),
     totals: {
       allPeriods: {
@@ -7495,8 +7530,8 @@ function captureFailureDiag(err, ctx, ids, opts) {
     progressLog: (ctx.progressLog || []).map((line) => redactPII(line, ids))
   };
 }
-const HALF_HOUR_MS$2 = 30 * 60 * 1e3;
-const DAY_MS$3 = 24 * 60 * 60 * 1e3;
+const HALF_HOUR_MS$3 = 30 * 60 * 1e3;
+const DAY_MS$2 = 24 * 60 * 60 * 1e3;
 function utcMidnightMs(d2) {
   return Date.UTC(d2.getUTCFullYear(), d2.getUTCMonth(), d2.getUTCDate());
 }
@@ -7505,8 +7540,8 @@ function buildDayComparisons(period, detail) {
   const periodStart = period.start.getTime();
   const periodEnd = period.end.getTime();
   const days = [];
-  for (let dayMid = utcMidnightMs(period.start); dayMid < periodEnd; dayMid += DAY_MS$3) {
-    const dayEnd = dayMid + DAY_MS$3;
+  for (let dayMid = utcMidnightMs(period.start); dayMid < periodEnd; dayMid += DAY_MS$2) {
+    const dayEnd = dayMid + DAY_MS$2;
     const winStart = Math.max(dayMid, periodStart);
     const winEnd = Math.min(dayEnd, periodEnd);
     if (winStart >= winEnd) continue;
@@ -7577,7 +7612,7 @@ function buildSlotCalculations(dayMid, period, detail) {
   const base = dayMid.getTime();
   const slots = [];
   for (let i2 = 0; i2 < 48; i2++) {
-    const slotStartMs = base + i2 * HALF_HOUR_MS$2;
+    const slotStartMs = base + i2 * HALF_HOUR_MS$3;
     const slotStart = new Date(slotStartMs);
     const inPeriod = slotStartMs >= periodStart && slotStartMs < periodEnd;
     const reading = byStart.get(slotStartMs);
@@ -7592,7 +7627,7 @@ function buildSlotCalculations(dayMid, period, detail) {
     const agileCostPence = inPeriod && hasReading && agileAvailable && agileRate !== null ? reading.kwh * agileRate : null;
     slots.push({
       intervalStart: slotStart,
-      intervalEnd: new Date(slotStartMs + HALF_HOUR_MS$2),
+      intervalEnd: new Date(slotStartMs + HALF_HOUR_MS$3),
       kwh,
       flexRate,
       agileRate,
@@ -7665,28 +7700,13 @@ const FALLBACK_TAG = {
   bg: "var(--amber-tint)"
 };
 const TAG_ICON = {
-  complete: {
-    name: "check",
-    fg: "var(--status-saving)",
-    bg: "var(--green-tint)"
-  },
-  preSwitch: {
-    name: "clock",
-    fg: "var(--status-caution)",
-    bg: "var(--amber-tint)"
-  },
-  mixed: {
-    name: "clock",
-    fg: "var(--status-caution)",
-    bg: "var(--amber-tint)"
-  },
-  partial: {
-    name: "clock",
-    fg: "var(--status-caution)",
-    bg: "var(--amber-tint)"
-  },
+  complete: { name: "circleCheck", fg: "var(--status-saving)", bg: "var(--green-tint)" },
+  mismatchMinor: { name: "circleCheck", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
+  preSwitch: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
+  mixed: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
+  partial: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
   incomplete: FALLBACK_TAG,
-  mismatch: { name: "alert", fg: "var(--status-risk)", bg: "var(--red-tint)" }
+  mismatch: { name: "x", fg: "var(--status-risk)", bg: "var(--red-tint)" }
 };
 function slotRow(s2, maxAbsRateDelta) {
   let rowBg;
@@ -7742,8 +7762,8 @@ function slotRow(s2, maxAbsRateDelta) {
     el$1("div", { class: "slot-flag", style: `background:${rowBg};color:${flagFg}` }, [flagText])
   ];
 }
-function slotGrid(day, run, period, columns) {
-  const slots = buildSlotCalculations(day.date, period, run.detail);
+function slotGrid(day, detail, period, columns) {
+  const slots = buildSlotCalculations(day.date, period, detail);
   const rateDeltas = slots.filter((s2) => s2.flexRate !== null && s2.agileRate !== null && !s2.flags.outOfPeriod).map((s2) => (s2.flexRate ?? 0) - (s2.agileRate ?? 0));
   const maxAbsRateDelta = Math.max(1, ...rateDeltas.map(Math.abs));
   const head = el$1("div", { class: "slot-grid-head" }, [
@@ -7798,10 +7818,10 @@ function dayDetailHead(day, columns) {
     })
   ]);
 }
-function dayCalendar(days, run, period, columns) {
+function dayCalendar(days, detail, period, columns, hint = "Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours.") {
   const agileDeltas = days.filter((d2) => d2.agileTotalPence !== null).map((d2) => d2.flexTotalPence - (d2.agileTotalPence ?? 0));
   const maxAbsDelta = Math.max(1, ...agileDeltas.map(Math.abs));
-  const detail = el$1("div", { class: "cal-detail" });
+  const calDetail = el$1("div", { class: "cal-detail" });
   const gridCache = /* @__PURE__ */ new Map();
   let selected = null;
   const showDay = (day, cell) => {
@@ -7810,11 +7830,11 @@ function dayCalendar(days, run, period, columns) {
     selected = cell;
     let grid = gridCache.get(day.date.getTime());
     if (!grid) {
-      grid = slotGrid(day, run, period, columns);
+      grid = slotGrid(day, detail, period, columns);
       gridCache.set(day.date.getTime(), grid);
     }
-    clear(detail);
-    detail.append(dayDetailHead(day, columns), grid);
+    clear(calDetail);
+    calDetail.append(dayDetailHead(day, columns), grid);
   };
   const months = /* @__PURE__ */ new Map();
   for (const d2 of days) {
@@ -7879,10 +7899,10 @@ function dayCalendar(days, run, period, columns) {
   return el$1("div", { class: "drill" }, [
     el$1("div", {
       class: "drill-hint",
-      text: "Green = Agile cheaper, red = Agile pricier. Tap a day for its 48 half-hours."
+      text: hint
     }),
     ...grids,
-    detail
+    calDetail
   ]);
 }
 function renderPeriodRow(vm, run, columns) {
@@ -7906,7 +7926,13 @@ function renderPeriodRow(vm, run, columns) {
           el$1("span", { class: "row-title", text: vm.title }),
           badge(vm.tag, vm.tagTone)
         ]),
-        el$1("span", { class: "row-sub", text: vm.reason })
+        el$1("span", { class: "row-sub" }, [
+          el$1("span", {
+            style: `font-weight:600;margin-right:3px;color:${vm.includedInHeadline === "yes" ? "var(--status-saving)" : vm.includedInHeadline === "caution" ? "var(--status-caution)" : "var(--status-risk)"}`,
+            text: vm.includedInHeadline === "yes" ? "✓" : vm.includedInHeadline === "caution" ? "⚠" : "✗"
+          }),
+          vm.reason
+        ])
       ]),
       el$1(
         "div",
@@ -7922,13 +7948,25 @@ function renderPeriodRow(vm, run, columns) {
           el$1("span", {
             class: "mono",
             style: "font-size:var(--text-caption);color:var(--text-muted)",
-            text: `${withYours(columns, columns.flexLabel, "flex")} ${vm.flexText}` + (vm.flexAvgPence !== null ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)` : "")
+            text: `${vm.flexLabel} ${vm.flexText}` + (vm.flexAvgPence !== null ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)` : "")
           }),
-          el$1("span", {
-            class: "mono",
-            style: "font-size:var(--text-caption);color:var(--text-muted);opacity:0.65",
-            text: vm.kwhText
-          })
+          el$1(
+            "span",
+            {
+              class: "mono",
+              style: "font-size:var(--text-caption);color:var(--text-muted);opacity:0.65;display:flex;align-items:center;gap:5px"
+            },
+            [
+              vm.kwhText,
+              el$1(
+                "span",
+                {
+                  style: `display:inline-flex;align-items:center;gap:2px;color:${vm.readingCoveragePct >= 95 ? "var(--text-muted)" : vm.readingCoveragePct >= 75 ? "var(--status-caution)" : "var(--status-risk)"}`
+                },
+                [`${vm.readingCoveragePct}%`, icon(ICONS.activity, 10)]
+              )
+            ]
+          )
         ]
       ),
       chevron
@@ -7950,7 +7988,7 @@ function renderPeriodRow(vm, run, columns) {
     head.classList.toggle("is-selected", open);
     if (open && !dayList) {
       const days = buildDayComparisons(vm.period, run.detail);
-      dayList = dayCalendar(days, run, vm.period, columns);
+      dayList = dayCalendar(days, run.detail, vm.period, { ...columns, flexLabel: vm.flexLabel });
       card.append(dayList);
     } else if (dayList) {
       dayList.style.display = open ? "" : "none";
@@ -8188,6 +8226,7 @@ function renderSharePanel(run, headline) {
     el$1("div", {}, [btn])
   ]);
 }
+const HALF_HOUR_MS$2 = 30 * 60 * 1e3;
 const MONTH_FMT = (d2) => [
   "January",
   "February",
@@ -8203,51 +8242,92 @@ const MONTH_FMT = (d2) => [
   "December"
 ][d2.getUTCMonth()] + ` ${d2.getUTCFullYear()}`;
 const pence$1 = (p2) => (p2 / 100).toFixed(2);
-function statementMismatchInPeriod(run, p2) {
-  return run.context.statementValidation.some(
-    (v2) => v2.mismatch && v2.displayStart < p2.end && v2.displayEnd > p2.start
+function mismatchDetailForPeriod(run, p2) {
+  const v2 = run.context.statementValidation.find(
+    (sv) => sv.mismatch && sv.displayStart < p2.end && sv.displayEnd > p2.start
   );
+  if (!v2)
+    return { hasMismatch: false, isMinor: false, meteredKwh: null, billedKwh: null, pct: null };
+  const pct = v2.billedKwh != null && v2.billedKwh !== 0 ? Math.abs(v2.billedKwh - v2.observedKwh) / Math.abs(v2.billedKwh) : null;
+  return {
+    hasMismatch: true,
+    isMinor: pct !== null && pct < 0.05,
+    meteredKwh: v2.observedKwh,
+    billedKwh: v2.billedKwh,
+    pct
+  };
 }
-function classifyPeriod(run, p2, currentTariff, allPredate) {
+function classifyPeriod(run, p2, currentTariff, allPredate, proxyFlexLabel) {
   const title = MONTH_FMT(p2.displayStart);
   const mixed = p2.tariffCodes.length > 1;
   const preSwitch = !mixed && !!p2.actualTariffCode && p2.actualTariffCode !== currentTariff;
-  const mismatch = statementMismatchInPeriod(run, p2);
+  const mismatchInfo = mismatchDetailForPeriod(run, p2);
   const onCurrent = !mixed && !preSwitch && (currentTariff === null || p2.tariffCodes[0] === currentTariff);
+  const flexLabel = onCurrent ? proxyFlexLabel : "Flexible";
+  const expectedSlots = Math.round((p2.end.getTime() - p2.start.getTime()) / HALF_HOUR_MS$2);
+  const actualSlots = run.detail.readings.filter(
+    (r2) => r2.start >= p2.start && r2.start < p2.end
+  ).length;
+  const readingCoveragePct = expectedSlots > 0 ? Math.min(100, Math.round(actualSlots / expectedSlots * 100)) : 100;
   let status;
   let tag;
   let tagTone;
   let reason;
+  let includedInHeadline;
   if (mixed) {
     status = "mixed";
     tag = "Mixed";
     tagTone = "caution";
     reason = "The switch landed mid-statement, mixing two tariffs.";
+    includedInHeadline = "no";
   } else if (preSwitch) {
     status = "preSwitch";
     tag = "Pre-tariff";
     tagTone = "caution";
-    reason = allPredate ? "From before you switched tariff — the figures above are based on this usage." : "Before your current tariff, so left out of the headline.";
-  } else if (mismatch) {
+    const oldLabel = p2.actualTariffCode ? classifyTariffCode(p2.actualTariffCode).label : null;
+    if (allPredate) {
+      reason = oldLabel ? `From before you switched tariff — ${oldLabel} rates aren't available from the API, so Flexible is used as the baseline.` : "From before you switched tariff — the figures above are based on this usage.";
+      includedInHeadline = "caution";
+    } else {
+      reason = oldLabel ? `Your ${oldLabel} rates for this period aren't available from the API — Flexible and Agile are shown as alternatives.` : "Before your current tariff — excluded from the headline.";
+      includedInHeadline = "no";
+    }
+  } else if (mismatchInfo.hasMismatch && !mismatchInfo.isMinor) {
     status = "mismatch";
     tag = "Statement mismatch";
     tagTone = "risk";
-    reason = "Bill and readings disagree, so the “vs bill” check is suppressed.";
+    const metered = mismatchInfo.meteredKwh !== null ? fmtKwh(mismatchInfo.meteredKwh, 0) : "?";
+    const billed = mismatchInfo.billedKwh !== null ? fmtKwh(mismatchInfo.billedKwh, 0) : "?";
+    const pctStr = mismatchInfo.pct !== null ? `${(mismatchInfo.pct * 100).toFixed(1)}%` : "unknown";
+    reason = `${metered} metered, ${billed} billed — ${pctStr} gap, too large to include reliably.`;
+    includedInHeadline = "no";
+  } else if (mismatchInfo.hasMismatch && mismatchInfo.isMinor) {
+    status = "mismatchMinor";
+    tag = "Small kWh gap";
+    tagTone = "caution";
+    const metered = mismatchInfo.meteredKwh !== null ? fmtKwh(mismatchInfo.meteredKwh, 0) : "?";
+    const billed = mismatchInfo.billedKwh !== null ? fmtKwh(mismatchInfo.billedKwh, 0) : "?";
+    const pctStr = mismatchInfo.pct !== null ? `${(mismatchInfo.pct * 100).toFixed(1)}%` : "small";
+    reason = `${metered} metered, ${billed} billed — ${pctStr} gap, small enough to include.`;
+    includedInHeadline = onCurrent && p2.confident ? "caution" : "no";
   } else if (onCurrent && p2.confident) {
     status = "complete";
     tag = "Complete";
     tagTone = "saving";
     reason = "On your current tariff, complete and confident.";
+    includedInHeadline = "yes";
   } else if (p2.wasClamped || p2.isSplit) {
     status = "partial";
     tag = "Partial";
     tagTone = "caution";
-    reason = "Statement still open or the window was clamped — incomplete.";
+    reason = "Statement still open or the window was clamped — figures incomplete.";
+    includedInHeadline = "no";
   } else {
     status = "incomplete";
     tag = "Incomplete";
     tagTone = "caution";
-    reason = "Some half-hour readings are missing, so it is left out.";
+    reason = "Some half-hour readings are missing.";
+    includedInHeadline = "no";
   }
   const excluded = !allPredate && (status === "preSwitch" || status === "mixed");
   return {
@@ -8256,14 +8336,15 @@ function classifyPeriod(run, p2, currentTariff, allPredate) {
     tag,
     tagTone,
     reason,
+    includedInHeadline,
+    flexLabel,
     kwhText: excluded ? "excl." : fmtKwh(p2.flex.kwh, 0),
     flexText: fmtMoney(p2.flex.totalPence),
     agileText: p2.agile ? fmtMoney(p2.agile.totalPence) : "n/a",
     flexAvgPence: p2.flex.kwh > 0 ? p2.flex.energyCostPence / p2.flex.kwh : null,
     agileAvgPence: p2.agile && p2.agile.kwh > 0 ? p2.agile.energyCostPence / p2.agile.kwh : null,
-    // Any period on the current tariff is drillable to day/slot maths — including a
-    // mismatch, whose total is suppressed from the headline but still worth opening.
-    expandable: status === "complete" || status === "mismatch" || status === "partial" || status === "incomplete",
+    readingCoveragePct,
+    expandable: p2.flex.kwh > 0,
     status
   };
 }
@@ -8272,7 +8353,16 @@ function computeResultsViewModel(run, headline) {
   const notice = headline.previousTariffOnly;
   const previousLabel = notice?.previousTariffLabel ?? null;
   const onPrev = previousLabel ? `on ${previousLabel}` : "before your switch";
-  const periods = run.periods.map((p2) => classifyPeriod(run, p2, currentTariff, notice !== null));
+  const proxyFlexLabel = (() => {
+    if (!currentTariff || run.context.tariffOverride) return headline.columns.flexLabel;
+    const cls = classifyTariffCode(currentTariff);
+    if (cls.kind === "agile") return "Flexible";
+    if (cls.kind === "flexible") return cls.label;
+    return `${cls.label} (calc.)`;
+  })();
+  const periods = run.periods.map(
+    (p2) => classifyPeriod(run, p2, currentTariff, notice !== null, proxyFlexLabel)
+  );
   const comp = headline.comparison;
   const useActual = headline.summaryHasActual && headline.actualComparable;
   const paidPence = useActual ? headline.summaryActual : notice ? headline.summaryFlex : comp.currentCalc ?? headline.summaryFlex;
@@ -8545,8 +8635,8 @@ function renderResults(host, run, headline, replayMeta, cb) {
           stmtRow("Observed kWh", fmtKwh(headline.scopedObservedKwh, 0), true)
         ]) : null,
         headline.wholeWindow.anyMismatchAllPeriods ? callout(
-          "A period was excluded",
-          "A statement disagreed with the readings for one period, so we dropped its “vs your bill” comparison and left it out of the headline.",
+          "Some periods had a large kWh gap",
+          "One or more periods had a statement and half-hourly reading gap of more than 5%. Those periods are excluded from the headline count and totals. See the period rows below for the exact figures.",
           "caution",
           "alert"
         ) : null
@@ -8730,80 +8820,149 @@ function applyUserTariff(run, unitRatePence, standingChargePence) {
     }
   };
 }
-const DAY_MS$2 = 24 * 60 * 60 * 1e3;
 const pence = (p2) => (p2 / 100).toFixed(2);
-function exportDays(run) {
-  const byDay = /* @__PURE__ */ new Map();
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+function exportMonths(run) {
+  const byKey = /* @__PURE__ */ new Map();
   for (const r2 of run.detail.readings) {
-    const dayMid = Math.floor(r2.start.getTime() / DAY_MS$2) * DAY_MS$2;
-    let d2 = byDay.get(dayMid);
-    if (!d2) {
-      d2 = { dateMid: dayMid, kwh: 0, valuePence: 0, readings: [] };
-      byDay.set(dayMid, d2);
+    const y2 = r2.start.getUTCFullYear();
+    const m2 = r2.start.getUTCMonth();
+    const key = `${y2}-${m2}`;
+    let mo2 = byKey.get(key);
+    if (!mo2) {
+      mo2 = {
+        label: `${MONTH_NAMES[m2] ?? ""} ${y2}`,
+        monthMs: Date.UTC(y2, m2, 1),
+        kwh: 0,
+        totalReadings: 0,
+        flatPence: 0,
+        flatUnmatched: 0,
+        agilePence: 0,
+        agileUnmatched: 0
+      };
+      byKey.set(key, mo2);
     }
-    d2.kwh += r2.kwh;
-    const rate = rateAtSorted(run.detail.agileWindows, r2.start);
-    if (rate !== null) d2.valuePence += r2.kwh * rate;
-    d2.readings.push(r2);
+    mo2.kwh += r2.kwh;
+    mo2.totalReadings += 1;
+    const flatRate = rateAtSorted(run.detail.flatWindows, r2.start);
+    if (flatRate !== null) mo2.flatPence += r2.kwh * flatRate;
+    else mo2.flatUnmatched += 1;
+    const agileRate = rateAtSorted(run.detail.agileWindows, r2.start);
+    if (agileRate !== null) mo2.agilePence += r2.kwh * agileRate;
+    else mo2.agileUnmatched += 1;
   }
-  return [...byDay.values()].sort((a2, b2) => a2.dateMid - b2.dateMid);
+  return [...byKey.values()];
 }
-function exportSlotTable(day, run) {
-  const head = el$1(
+const ZERO_STANDING = [{ validFrom: /* @__PURE__ */ new Date(0), validTo: null, value: 0 }];
+function exportMonthRow(mo2, run) {
+  const coveragePct = mo2.totalReadings > 0 ? Math.round((mo2.totalReadings - mo2.agileUnmatched) / mo2.totalReadings * 100) : 100;
+  const status = coveragePct >= 95 ? "complete" : coveragePct >= 75 ? "partial" : "mismatch";
+  const included = coveragePct >= 95 ? "yes" : coveragePct >= 75 ? "caution" : "no";
+  const reason = mo2.agileUnmatched === 0 ? "All export slots matched" : `${mo2.agileUnmatched} slot${mo2.agileUnmatched === 1 ? "" : "s"} unmatched`;
+  const ti2 = TAG_ICON[status] ?? FALLBACK_TAG;
+  const chevron = el$1("span", { class: "chevron" }, [icon(ICONS.chevronRight, 17)]);
+  const head = el$1("div", { class: "row", style: "cursor:pointer" }, [
+    el$1("span", { class: "row-tag", style: `background:${ti2.bg};color:${ti2.fg}` }, [
+      icon(ICONS[ti2.name], 15, 2.2)
+    ]),
+    el$1("div", { class: "row-main" }, [
+      el$1("div", { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap" }, [
+        el$1("span", { class: "row-title", text: mo2.label })
+      ]),
+      el$1("span", { class: "row-sub" }, [
+        el$1("span", {
+          style: `font-weight:600;margin-right:3px;color:${included === "yes" ? "var(--status-saving)" : included === "caution" ? "var(--status-caution)" : "var(--status-risk)"}`,
+          text: included === "yes" ? "✓" : included === "caution" ? "⚠" : "✗"
+        }),
+        reason
+      ])
+    ]),
+    el$1(
+      "div",
+      { style: "display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:104px" },
+      [
+        el$1("span", {
+          class: "mono",
+          style: "font-size:var(--text-data-sm);color:var(--text-strong)",
+          text: `Agile Out ${fmtMoney(mo2.agilePence)}`
+        }),
+        el$1("span", {
+          class: "mono",
+          style: "font-size:var(--text-caption);color:var(--text-muted)",
+          text: `Outgoing ${fmtMoney(mo2.flatPence)}`
+        }),
+        el$1(
+          "span",
+          {
+            class: "mono",
+            style: "font-size:var(--text-caption);color:var(--text-muted);opacity:0.65;display:flex;align-items:center;gap:5px"
+          },
+          [
+            fmtKwh(mo2.kwh, 1),
+            el$1(
+              "span",
+              {
+                style: `display:inline-flex;align-items:center;gap:2px;color:${coveragePct >= 95 ? "var(--text-muted)" : coveragePct >= 75 ? "var(--status-caution)" : "var(--status-risk)"}`
+              },
+              [`${coveragePct}%`, icon(ICONS.activity, 10)]
+            )
+          ]
+        )
+      ]
+    ),
+    chevron
+  ]);
+  const card = el$1(
     "div",
-    { class: "slot-grid-head", style: "grid-template-columns:60px repeat(3,1fr)" },
-    [
-      el$1("span", { text: "Slot" }),
-      el$1("span", { class: "tnum", text: "Exported" }),
-      el$1("span", { class: "tnum", text: "Agile Out" }),
-      el$1("span", { class: "tnum", text: "Paid" })
-    ]
+    {
+      style: "border:1px solid var(--border-soft);border-radius:var(--radius-md);overflow:hidden;background:var(--surface-card)"
+    },
+    [head]
   );
-  const rows = day.readings.map((r2) => {
-    const rate = rateAtSorted(run.detail.agileWindows, r2.start);
-    return el$1("div", { class: "slot-row", style: "grid-template-columns:60px repeat(3,1fr)" }, [
-      el$1("span", { text: fmtSlotTime(r2.start, new Date(r2.start.getTime() + 30 * 60 * 1e3)) }),
-      el$1("span", { class: "tnum", text: r2.kwh.toFixed(2) }),
-      el$1("span", { class: "tnum muted", text: rate === null ? "unmatched" : fmtPence(rate) }),
-      el$1("span", {
-        class: "tnum",
-        style: "font-weight:500;color:var(--status-saving)",
-        text: rate === null ? "n/a" : fmtMoney(r2.kwh * rate)
-      })
-    ]);
-  });
-  return el$1("div", { style: "border-top:1px solid var(--border-soft)" }, [
-    head,
-    el$1("div", { class: "slot-scroll" }, rows)
-  ]);
-}
-function exportDayRow(day, run) {
-  const chevron = el$1("span", { class: "chevron" }, [icon(ICONS.chevronRight, 13, 2.2)]);
-  const head = el$1("div", { class: "day-head" }, [
-    chevron,
-    el$1("span", { class: "day-date", text: fmtDate(new Date(day.dateMid)) }),
-    el$1("span", {
-      class: "mono",
-      style: "font-size:var(--text-data-sm);color:var(--text-muted)",
-      text: fmtKwh(day.kwh, 1)
-    }),
-    el$1("span", {
-      class: "mono",
-      style: "font-size:var(--text-data-sm);color:var(--status-saving)",
-      text: fmtMoney(day.valuePence)
-    })
-  ]);
-  const card = el$1("div", { class: "day" }, [head]);
-  let table = null;
+  let dayList = null;
   let open = false;
   head.addEventListener("click", () => {
     open = !open;
     chevron.classList.toggle("is-open", open);
-    if (open && !table) {
-      table = exportSlotTable(day, run);
-      card.append(table);
-    } else if (table) {
-      table.style.display = open ? "" : "none";
+    head.classList.toggle("is-selected", open);
+    if (open && !dayList) {
+      const monthStart = new Date(mo2.monthMs);
+      const monthEnd = new Date(mo2.monthMs);
+      monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1);
+      const period = { start: monthStart, end: monthEnd };
+      const detail = {
+        readings: run.detail.readings,
+        flexUnitSorted: run.detail.agileWindows,
+        agileUnitSorted: run.detail.flatWindows,
+        flexStanding: ZERO_STANDING,
+        agileStanding: ZERO_STANDING,
+        agileAvailable: true,
+        duplicateIntervals: run.detail.duplicateIntervals
+      };
+      const days = buildDayComparisons(period, detail);
+      dayList = dayCalendar(
+        days,
+        detail,
+        period,
+        { flexLabel: "Agile Out", agileLabel: "Outgoing", yoursColumn: null },
+        "Green = Agile Out pays more. Tap a day for its 48 half-hours."
+      );
+      card.append(dayList);
+    } else if (dayList) {
+      dayList.style.display = open ? "" : "none";
     }
   });
   return card;
@@ -8838,7 +8997,6 @@ function renderExportResults(host, run, cb) {
       label: "Difference",
       prefix: "£",
       amount: pence(Math.abs(delta)),
-      // "Agile − Flat = result": negative when Agile pays less than flat.
       sign: delta >= 0 ? "" : "−",
       descriptor: delta >= 0 ? "more on Agile" : "less on Agile",
       tone: delta >= 0 ? "saving" : "risk"
@@ -8849,43 +9007,24 @@ function renderExportResults(host, run, cb) {
       costCalc({ inputs, result, foot: `${fmtKwh(run.exportKwh, 1)} exported` })
     ])
   );
-  const detailCard = el$1(
-    "div",
-    { class: "card", style: "display:flex;flex-direction:column;gap:14px" },
-    [
-      el$1("div", { style: "display:flex;flex-direction:column;gap:3px" }, [
-        el$1("span", {
-          class: "row-title",
-          style: "font-size:var(--text-h3)",
-          text: "Half-hour export detail"
-        }),
-        el$1("span", {
-          class: "row-sub",
-          text: "Aggregate only by default. Raw timestamps can reveal when you generate."
-        })
-      ]),
-      switchRow({
-        label: "Show half-hour export detail",
-        description: "Stays on your device. Nothing is shared by turning this on.",
-        checked: cb.consent,
-        onChange: cb.onToggleConsent
-      })
-    ]
-  );
-  if (cb.consent) {
-    const days = exportDays(run);
-    detailCard.append(
-      el$1("div", { class: "drill", style: "background:transparent;padding:0" }, [
-        el$1("div", {
-          class: "drill-hint",
-          style: "padding:0 0 4px",
-          text: "Daily export. Tap a day for its half-hours."
-        }),
-        ...days.map((d2) => exportDayRow(d2, run))
+  const months = exportMonths(run);
+  if (months.length > 0) {
+    host.append(
+      el$1("div", { style: "display:flex;flex-direction:column;gap:9px" }, [
+        el$1(
+          "div",
+          {
+            style: "display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap"
+          },
+          [
+            el$1("span", { class: "eyebrow", text: "Monthly export income" }),
+            el$1("span", { class: "row-sub", text: "Tap a month for daily and half-hour detail." })
+          ]
+        ),
+        ...months.map((mo2) => exportMonthRow(mo2, run))
       ])
     );
   }
-  host.append(detailCard);
   host.append(
     el$1("div", { style: "display:flex;gap:10px;flex-wrap:wrap;padding-top:2px" }, [
       button("Start over", { variant: "secondary", onClick: cb.onReset }),
@@ -9579,8 +9718,7 @@ class App {
       renderExportResults(host, this.currentExport, {
         onReset: () => this.reset(),
         onDiagnostics: () => this.openDiagnostics(),
-        consent: this.state.exportConsent,
-        onToggleConsent: (v2) => this.setState({ exportConsent: v2 })
+        consent: this.state.exportConsent
       });
       return;
     }
@@ -9665,7 +9803,10 @@ class App {
         [
           el$1("div", { style: "text-align:center;display:flex;flex-direction:column;gap:6px" }, [
             el$1("h1", { style: "font-size:var(--text-h2)", text: "Reading your usage" }),
-            el$1("p", { class: "row-sub", text: "All in your browser. Nothing is uploaded." })
+            el$1("p", {
+              class: "row-sub",
+              text: "All in your browser. No personal data is uploaded."
+            })
           ]),
           el$1("div", { class: "steps-track", style: "height:6px" }, [fill]),
           el$1("div", { style: "display:flex;align-items:center;gap:11px;justify-content:center" }, [
@@ -10163,7 +10304,10 @@ function reconstruct(d2, readingsObj, rateWindowsObj, cw) {
     };
   });
   const tariffOverride = d2["tariffOverride"] === true;
-  const derivedCurrentAgreement = agreements.find((a2) => !a2.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const generatedAtStr = asStr(d2["generatedAt"]);
+  const generatedAtMs = generatedAtStr ? new Date(generatedAtStr).getTime() : NaN;
+  const referenceDate = Number.isFinite(generatedAtMs) ? new Date(generatedAtMs) : /* @__PURE__ */ new Date();
+  const derivedCurrentAgreement = findCurrentAgreement(agreements, referenceDate);
   const currentAgreement = tariffOverride ? {
     tariff_code: "User tariff",
     valid_from: asStr(cw["from"]),
@@ -10267,7 +10411,15 @@ function reconstruct(d2, readingsObj, rateWindowsObj, cw) {
         transactionsAvailable: !!o2["transactionsAvailable"],
         transactionsComplete: !!o2["transactionsComplete"],
         wasClamped: !!o2["clamped"],
-        mismatch: !!o2["mismatch"]
+        mismatch: !!o2["mismatch"],
+        statementCharges: asArr(o2["charges"]).map((c2) => {
+          const co2 = isObj(c2) ? c2 : {};
+          return {
+            title: asStr(co2["title"]),
+            grossPence: intOr0(co2["grossPence"]),
+            kwh: co2["kwh"] === "n/a" ? null : floatOrNull(co2["kwh"])
+          };
+        })
       };
     }
   );

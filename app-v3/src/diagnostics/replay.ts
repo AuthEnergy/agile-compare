@@ -1,6 +1,7 @@
 import { REPLAY_CAPS } from '../config';
 import { calculateCost } from '../domain/cost';
 import { splitLongPeriods } from '../domain/periods';
+import { findCurrentAgreement } from '../domain/tariff';
 import type { Agreement, CostResult, MissingEstimate, RateWindow, Reading } from '../types/domain';
 import type {
   ComparisonRun,
@@ -251,8 +252,12 @@ function reconstruct(
     };
   });
   const tariffOverride = d['tariffOverride'] === true;
-  const derivedCurrentAgreement =
-    agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  // Use generatedAt as the reference so a pre-announced future agreement (validTo=null,
+  // validFrom in the future) is not mistaken for the one in force when the file was made.
+  const generatedAtStr = asStr(d['generatedAt']);
+  const generatedAtMs = generatedAtStr ? new Date(generatedAtStr).getTime() : NaN;
+  const referenceDate = Number.isFinite(generatedAtMs) ? new Date(generatedAtMs) : new Date();
+  const derivedCurrentAgreement = findCurrentAgreement(agreements, referenceDate);
   const currentAgreement = tariffOverride
     ? {
         tariff_code: 'User tariff',
@@ -390,6 +395,14 @@ function reconstruct(
         transactionsComplete: !!o['transactionsComplete'],
         wasClamped: !!o['clamped'],
         mismatch: !!o['mismatch'],
+        statementCharges: asArr(o['charges']).map((c) => {
+          const co = isObj(c) ? c : {};
+          return {
+            title: asStr(co['title']),
+            grossPence: intOr0(co['grossPence']),
+            kwh: co['kwh'] === 'n/a' ? null : floatOrNull(co['kwh']),
+          };
+        }),
       };
     },
   );

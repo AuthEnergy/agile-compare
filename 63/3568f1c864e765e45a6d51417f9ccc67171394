@@ -1,0 +1,23 @@
+app-v3/tests/flows/applyUserTariff.test.ts
+  s_d0846ef0bc0e61::t_27e37a41fb23c9 130-137
+app-v3/src/ui/tariffOverrideModal.ts
+  s_d0846ef0bc0e61::t_85658288fa135e 24,39,88
+app-v3/tests/ui/tariffOverrideModal.test.ts
+  s_d0846ef0bc0e61::t_e2085a0aba2958 1-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "633568f1c864e765e45a6d51417f9ccc67171394",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

@@ -73,6 +73,11 @@ function run(periods: PeriodComparison[]): ComparisonRun {
       postcodeArea: 'AB',
       currentAgreement,
       agreements: [currentAgreement],
+      flexColumnSource: {
+        kind: 'flexible-current',
+        label: 'Flexible',
+        tariffCode: currentAgreement.tariff_code,
+      },
       periodFrom: start,
       periodTo: end,
       agileAvailable: true,
@@ -98,6 +103,10 @@ describe('applyUserTariff', () => {
 
     expect(updated.context.tariffOverride).toBe(true);
     expect(updated.context.currentAgreement?.tariff_code).toBe('User tariff');
+    expect(updated.context.flexColumnSource).toEqual({
+      kind: 'user-override',
+      label: 'User tariff',
+    });
     expect(updated.periods[0]?.actualTariffCode).toBe('User tariff');
     expect(updated.periods[0]?.tariffCodes).toEqual(['User tariff']);
     expect(updated.periods[0]?.flex.totalPence).toBe(100);
@@ -117,5 +126,13 @@ describe('applyUserTariff', () => {
     );
 
     expect(updated.periods.map((p) => p.confident)).toEqual([false, false]);
+  });
+
+  it('allows a zero standing charge', () => {
+    const updated = applyUserTariff(run([period()]), 25, 0);
+
+    expect(updated.periods[0]?.flex.energyCostPence).toBe(50);
+    expect(updated.periods[0]?.flex.standingChargePence).toBe(0);
+    expect(updated.periods[0]?.flex.totalPence).toBe(50);
   });
 });

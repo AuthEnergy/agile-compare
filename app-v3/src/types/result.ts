@@ -62,18 +62,46 @@ export interface RunDetail {
   duplicateIntervals: Set<number>;
 }
 
+export type FlexColumnSource =
+  | { kind: 'flexible-current'; label: string; tariffCode: string | null }
+  | { kind: 'flexible-alternative'; label: 'Flexible' }
+  | {
+      kind: 'current-tariff-rates';
+      label: string;
+      tariffCode: string;
+      rateShape: 'flat' | 'go-day-night';
+    }
+  | {
+      kind: 'flexible-proxy';
+      label: 'Flexible proxy';
+      actualTariffLabel: string;
+      actualTariffCode: string;
+      reason: string;
+    }
+  | { kind: 'user-override'; label: 'User tariff' };
+
 export interface RunContext {
   regionLetter: string;
   postcodeArea: string | null;
   currentAgreement: Agreement | null;
   agreements: Agreement[];
   tariffOverride?: boolean;
+  flexColumnSource: FlexColumnSource;
   periodFrom: Date;
   periodTo: Date;
   agileAvailable: boolean;
   statementValidation: StatementValidationEntry[];
   missingEstimate: MissingEstimate;
   statementsIncomplete: boolean;
+  statementAttribution?: {
+    mode:
+      | 'safe-statements'
+      | 'partial-statements-unsafe-multi-mpan'
+      | 'estimate-only-unsafe-multi-mpan';
+    accountsWithMeter: number;
+    accountsUsedForStatements: number;
+    unsafeAccountsWithMeter: number;
+  };
   // Honest "your bills end here" signal: the end of the most recent statement in
   // the window, and whether usage readings extend past it. When true, the recent
   // months get a Flexible/Agile estimate but no "actual paid" (no bill covers them).

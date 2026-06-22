@@ -1,4 +1,5 @@
 import type { Headline } from '../domain/headline';
+import { calculatedBaselineLabel, flexColumnLabel } from '../domain/flexSource';
 import { classifyTariffCode } from '../domain/tariff';
 import type { ComparisonRun, PeriodComparison, StatementValidationEntry } from '../types/result';
 import type { Tone } from './components';
@@ -29,8 +30,8 @@ export interface PeriodRowVM {
   flexAvgPence: number | null; // effective unit rate p/kWh for the yours/flex side
   agileAvgPence: number | null; // avg Agile unit rate p/kWh (energy only, excl. standing)
   // Per-period flex column label: the current tariff name + "(calc.)" for on-current
-  // periods (e.g. "Flux (calc.)"), "Flexible" for pre-switch/mixed periods where the
-  // Flexible calculation is a genuine alternative, not a proxy.
+  // periods when actual rates are available, "Flexible" for pre-switch/mixed
+  // periods where the Flexible calculation is a genuine alternative, not a proxy.
   flexLabel: string;
   readingCoveragePct: number; // 0–100: what fraction of expected half-hour slots have readings
   status: PeriodStatus;
@@ -236,19 +237,9 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
   // null when we can't safely name the previous tariff — use neutral wording then.
   const previousLabel = notice?.previousTariffLabel ?? null;
   const onPrev = previousLabel ? `on ${previousLabel}` : 'before your switch';
-  // Per-period flex label: for a named non-Flex/non-Agile tariff (Flux, Tracker…) on
-  // current-tariff periods, name the flex column after the user's own tariff + "(calc.)"
-  // to signal we're using Flexible rates as a proxy. Pre-switch and mixed periods always
-  // show "Flexible" because there the calculation is a genuine alternative, not a proxy.
-  const proxyFlexLabel = (() => {
-    if (!currentTariff || run.context.tariffOverride) return headline.columns.flexLabel;
-    const cls = classifyTariffCode(currentTariff);
-    if (cls.kind === 'agile') return 'Flexible'; // Agile users compare against Flexible
-    if (cls.kind === 'flexible') return cls.label; // Flexible users: the flex calc IS their tariff
-    return `${cls.label} (calc.)`; // Named non-Flex tariff: Flexible rates as proxy
-  })();
+  const flexLabel = flexColumnLabel(run.context.flexColumnSource);
   const periods = run.periods.map((p) =>
-    classifyPeriod(run, p, currentTariff, notice !== null, proxyFlexLabel),
+    classifyPeriod(run, p, currentTariff, notice !== null, flexLabel),
   );
 
   const comp = headline.comparison;
@@ -265,7 +256,9 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
       ? 'You paid'
       : notice
         ? 'Flexible (calc.)'
-        : `${headline.currentTariffLabel} (calc.)`,
+        : comp.onAgile
+          ? `${headline.currentTariffLabel} (calc.)`
+          : calculatedBaselineLabel(run.context.flexColumnSource),
     amount: pence(paidPence),
     prefix: '£',
     // Caption the paid figure after the tariff it actually reflects: the previous
@@ -275,7 +268,9 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
       ? useActual
         ? (previousLabel ?? 'Pre-switch')
         : 'Flexible'
-      : headline.currentTariffLabel,
+      : comp.onAgile
+        ? headline.currentTariffLabel
+        : flexLabel.replace(/ \(calc\.\)$/, ''),
     caption: notice ? 'Earlier usage' : 'Complete periods',
     tone: 'neutral',
   };

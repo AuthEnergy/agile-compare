@@ -4,7 +4,6 @@ import { ICONS, LOGO_PATHS } from './icons';
 import { clearApiKey, loadSavedApiKey, saveApiKey } from '../storage/credentials';
 import { loadAnalyticsConsent, saveAnalyticsConsent } from '../storage/analyticsConsent';
 import {
-  initAnalytics,
   trackComparisonSuccess,
   trackComparisonFailure,
   type ComparisonFailureProps,
@@ -18,7 +17,6 @@ import { runComparison, type RunInput } from '../flows/runComparison';
 import { runExportComparison } from '../flows/runExportComparison';
 import { buildExportDiagnostics, buildImportDiagnostics } from '../diagnostics/capture';
 import { captureFailureDiag, type FailureContext } from '../diagnostics/failure';
-import { classifyTariffCode } from '../domain/tariff';
 import type { PiiIdentifiers } from '../domain/redact';
 import type { AnyDiagnostics, DiagnosticsBundle, FailureDiagnostics } from '../types/diagnostics';
 import type { ComparisonRun, ExportRun, ProgressFn } from '../types/result';
@@ -147,7 +145,6 @@ export class App {
     // Restore an opt-in saved key so "remember" is a true contract, not a label.
     const savedKey = loadSavedApiKey();
     const analyticsConsent = loadAnalyticsConsent();
-    if (analyticsConsent) initAnalytics();
     this.state = {
       screen: 'connect',
       theme: initialTheme(),
@@ -216,12 +213,12 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err);
-      trackComparisonFailure({
-        ...classifyError(err),
-        stage: 'auth',
-        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-        tariffKind: null,
-      });
+      if (this.state.analyticsConsent) {
+        void trackComparisonFailure({
+          ...classifyError(err),
+          stage: 'auth',
+        });
+      }
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -266,12 +263,12 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err, meter);
-      trackComparisonFailure({
-        ...classifyError(err),
-        stage: 'fetch',
-        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-        tariffKind: classifyTariffCode(meter.tariffCode).kind,
-      });
+      if (this.state.analyticsConsent) {
+        void trackComparisonFailure({
+          ...classifyError(err),
+          stage: 'fetch',
+        });
+      }
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -291,7 +288,12 @@ export class App {
     } else if (claims?.estimate) {
       pctSaved = claims.estimate.cheaper === 'Agile' ? claims.estimate.pct : -claims.estimate.pct;
     }
-    trackComparisonSuccess({ outwardCode, pctSaved, kwhTotal: headline.summaryKwh, periodDays });
+    void trackComparisonSuccess({
+      outwardCode,
+      pctSaved,
+      kwhTotal: headline.summaryKwh,
+      periodDays,
+    });
   }
 
   // Build a failure diagnostic (v2 parity) the user can download/send from the
@@ -801,11 +803,10 @@ export class App {
     const analyticsSwitch = switchRow({
       label: 'Share anonymous results with Auth Energy',
       description:
-        'Sends postcode area (first half), % savings, total kWh and dates compared. No personal data, consumption data, tariff data, API key, MPAN, address, full postcode, or £ amounts are shared.',
+        'Default-on anonymous metrics: postcode area, percentage difference, total kWh and period length. No personal data, consumption data, tariff data, API key, MPAN, address, full postcode, dates, or £ amounts are shared.',
       checked: this.state.analyticsConsent,
       onChange: (checked) => {
         saveAnalyticsConsent(checked);
-        if (checked) initAnalytics();
         this.setState({ analyticsConsent: checked });
       },
     });

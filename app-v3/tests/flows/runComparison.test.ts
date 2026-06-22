@@ -305,6 +305,194 @@ describe('runComparison (end-to-end, mocked fetch)', () => {
     expect(run.context.readingsBeyondStatements).toBe(false);
     expect(run.periods.every((p) => p.actualChargePence !== null)).toBe(true);
   });
+
+  it('still errors when a safely attributable account has no statements', async () => {
+    globalThis.fetch = importFetch(undefined, []) as unknown as typeof fetch;
+
+    await expect(runComparison(createClient(input.apiKey), input)).rejects.toThrow(
+      'No statements found on this account',
+    );
+  });
+
+  it('uses Flexible proxy with a caveat for unsupported current ToU tariff shapes', async () => {
+    const COSY = 'E-1R-COSY-22-12-08-C';
+    const baseFetch = importFetch();
+    globalThis.fetch = (async (url: string | URL, opts?: { body?: string }) => {
+      const u = new URL(url.toString());
+      if (u.pathname.includes(COSY) && u.pathname.includes('night-unit-rates')) {
+        return jsonResp({
+          results: [
+            {
+              value_inc_vat: 12,
+              valid_from: winStart.toISOString(),
+              valid_to: winEnd.toISOString(),
+              payment_method: 'DIRECT_DEBIT',
+            },
+          ],
+        });
+      }
+      return baseFetch(url, opts);
+    }) as unknown as typeof fetch;
+    const cosyAccountData: AccountData = {
+      number: 'A-X',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: COSY,
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const run = await runComparison(createClient(input.apiKey), {
+      ...input,
+      accountData: cosyAccountData,
+    });
+
+    expect(run.context.flexNote).toContain('Cosy has time-of-use rates');
+    expect(run.context.flexColumnSource).toMatchObject({
+      kind: 'flexible-proxy',
+      actualTariffLabel: 'Cosy',
+      actualTariffCode: COSY,
+    });
+  });
+
+  it('marks statement attribution partial when an unsafe sibling account is excluded', async () => {
+    const baseFetch = importFetch();
+    const multiMpanAccountData: AccountData = {
+      number: 'A-MULTI',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+            {
+              mpan: '9999999999999',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S2' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    globalThis.fetch = (async (url: string | URL, opts?: { body?: string }) => {
+      const u = new URL(url.toString());
+      if (u.pathname.includes('/graphql/')) {
+        const b = JSON.parse(opts?.body ?? '{}');
+        if (String(b.query).includes('viewer')) {
+          return jsonResp({
+            data: {
+              viewer: {
+                accounts: [{ number: 'A-X' }, { number: 'A-MULTI' }],
+              },
+            },
+          });
+        }
+      }
+      if (u.pathname === '/v1/accounts/A-MULTI/') {
+        return jsonResp(multiMpanAccountData);
+      }
+      return baseFetch(url, opts);
+    }) as unknown as typeof fetch;
+
+    const run = await runComparison(createClient(input.apiKey), input);
+
+    expect(run.context.statementAttribution).toMatchObject({
+      mode: 'partial-statements-unsafe-multi-mpan',
+      accountsWithMeter: 2,
+      accountsUsedForStatements: 1,
+      unsafeAccountsWithMeter: 1,
+    });
+    expect(run.context.statementValidation.length).toBeGreaterThan(0);
+    expect(run.periods.some((p) => p.actualChargePence !== null)).toBe(true);
+  });
+
+  it('falls back to estimate-only when primary statements cannot be attributed to one MPAN', async () => {
+    const multiMpanAccountData: AccountData = {
+      number: 'A-X',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+            {
+              mpan: '9999999999999',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S2' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-C',
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const run = await runComparison(createClient(input.apiKey), {
+      ...input,
+      accountData: multiMpanAccountData,
+    });
+
+    expect(run.context.statementAttribution).toMatchObject({
+      mode: 'estimate-only-unsafe-multi-mpan',
+      accountsWithMeter: 1,
+      accountsUsedForStatements: 0,
+      unsafeAccountsWithMeter: 1,
+    });
+    expect(run.context.statementValidation).toEqual([]);
+    expect(run.periods.length).toBeGreaterThan(0);
+    expect(run.periods.every((p) => p.actualChargePence === null)).toBe(true);
+  });
 });
 
 describe('runExportComparison (end-to-end, mocked fetch)', () => {
@@ -325,5 +513,43 @@ describe('runExportComparison (end-to-end, mocked fetch)', () => {
     expect(run.agile?.valuePence).toBeCloseTo(run.exportKwh * 18, 1);
     // No standing-charge concept on the export model at all.
     expect(run).not.toHaveProperty('standingChargePence');
+  });
+
+  it('uses the in-force export agreement rather than a future open-ended one', async () => {
+    const exportAccountData: AccountData = {
+      number: 'A-X',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: true,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-AGILE-OUTGOING-19-05-13-C',
+                  valid_from: '2025-01-01T00:00:00Z',
+                  valid_to: '2099-01-01T00:00:00Z',
+                },
+                {
+                  tariff_code: 'E-1R-OUTGOING-FIX-12M-19-05-13-C',
+                  valid_from: '2099-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const run = await runExportComparison(createClient(input.apiKey), {
+      ...input,
+      accountData: exportAccountData,
+    });
+
+    expect(run.currentAgreement?.tariff_code).toBe('E-1R-AGILE-OUTGOING-19-05-13-C');
   });
 });

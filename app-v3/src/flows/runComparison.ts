@@ -25,9 +25,10 @@ import {
 } from '../domain/tariff';
 import type { StatementCharge, StatementCredit } from '../types/api';
 import type { RateWindow, RawPeriod } from '../types/domain';
-import type { AccountData, RawConsumptionRow } from '../types/octopus';
+import type { AccountData, Page, RawConsumptionRow } from '../types/octopus';
 import type {
   ComparisonRun,
+  FlexColumnSource,
   PeriodComparison,
   ProgressFn,
   StatementValidationEntry,
@@ -83,16 +84,43 @@ export async function runComparison(
   onProgress('Authenticating to fetch your real billing periods…', 'active', 15);
   const token = await obtainKrakenToken(client, input.apiKey);
   onProgress('Fetching statements…', 'active', 18);
-  const { statements: allStatements, incomplete: statementsIncomplete } =
-    await fetchStatementsForMpan(client, token, input.mpan, input.accountNumber, accountData);
-  if (allStatements.length === 0) {
+  const statementFetch = await fetchStatementsForMpan(
+    client,
+    token,
+    input.mpan,
+    input.accountNumber,
+    accountData,
+  );
+  const {
+    statements: allStatements,
+    incomplete: statementsIncomplete,
+    accountsWithMeter,
+    accountsUsedForStatements,
+    unsafeAccountsWithMeter,
+  } = statementFetch;
+  const estimateOnlyUnsafeStatements =
+    allStatements.length === 0 && accountsUsedForStatements === 0 && unsafeAccountsWithMeter > 0;
+  const partialUnsafeStatements = accountsUsedForStatements > 0 && unsafeAccountsWithMeter > 0;
+  if (allStatements.length === 0 && !estimateOnlyUnsafeStatements) {
     throw new Error(
       'No statements found on this account. Your account may not have statement history available via the API.',
     );
   }
+  const statementAttribution = {
+    mode: estimateOnlyUnsafeStatements
+      ? ('estimate-only-unsafe-multi-mpan' as const)
+      : partialUnsafeStatements
+        ? ('partial-statements-unsafe-multi-mpan' as const)
+        : ('safe-statements' as const),
+    accountsWithMeter,
+    accountsUsedForStatements,
+    unsafeAccountsWithMeter,
+  };
   const validStatements = allStatements.filter((s) => s.startAt && s.endAt);
   onProgress(
-    `Found ${allStatements.length} statement(s).`,
+    estimateOnlyUnsafeStatements
+      ? 'No safely attributable statements — using estimates only.'
+      : `Found ${allStatements.length} statement(s).`,
     statementsIncomplete ? 'err' : 'ok',
     20,
   );
@@ -104,14 +132,15 @@ export async function runComparison(
   const earliestApprox = new Date(dataAvailableTo);
   earliestApprox.setMonth(earliestApprox.getMonth() - 13);
   const starts = validStatements.map((s) => new Date(s.startAt as string).getTime());
-  const earliestStatement = new Date(Math.min(...starts));
+  const earliestStatement = starts.length ? new Date(Math.min(...starts)) : null;
   // Upper bound is the consumption horizon (~7 days ago), NOT the last bill. The
   // Flexible/Agile calc needs only readings + rates, so recent usage past the most
   // recent statement still gets compared (a synthetic trailing period below carries
   // it, with no "actual paid"). Capping at the last statement silently dropped any
   // usage a user had beyond their latest bill.
   const periodTo = dataAvailableTo;
-  const periodFrom = earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
+  const periodFrom =
+    earliestStatement && earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
   onProgress(`Comparison window: ${isoDate(periodFrom)} to ${isoDate(periodTo)}.`, 'ok', 25);
 
   // --- consumption (merged + deduped across serials) ---
@@ -121,7 +150,8 @@ export async function runComparison(
   const readings = merged.readings;
   if (readings.length === 0) {
     const testPath = `/electricity-meter-points/${input.mpan}/meters/${input.serial}/consumption/`;
-    const testData = await client.restGetAllPages<RawConsumptionRow>(testPath, { page_size: 1 });
+    const testPage = await client.restGet<Page<RawConsumptionRow>>(testPath, { page_size: 1 });
+    const testData = testPage.results ?? [];
     if (testData.length === 0) {
       throw new Error(
         `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`,
@@ -283,8 +313,8 @@ export async function runComparison(
   // --- Actual current-tariff rates (non-Flexible, non-Agile users) ---
   // Flexible users: the flex column IS already their tariff (fetched above via product search).
   // Agile users: compare against Flexible by design — skip.
-  // All others (Go, Fixed, Tracker, Cosy, FLUX…): try to fetch their actual rates;
-  // fall back to Flexible proxy and record a note if unavailable.
+  // Supported current tariffs (flat-rate or Go-like day/night) use their actual
+  // rates; unsupported ToU shapes fall back to Flexible proxy with a caveat.
   const currentTariffKind = classifyTariffCode(currentAgreement?.tariff_code).kind;
   const onFlexible = currentTariffKind === 'flexible';
   const onAgile = currentTariffKind === 'agile';
@@ -293,14 +323,16 @@ export async function runComparison(
   if (!onFlexible && !onAgile && currentAgreement) {
     onProgress('Fetching your current tariff rates…', 'active', 62);
     try {
-      currentTariffRates = await fetchCurrentTariffRates(
+      const currentTariffRateResult = await fetchCurrentTariffRates(
         client,
         currentAgreement.tariff_code,
         periodFrom,
         periodTo,
       );
-      if (currentTariffRates) {
-        const label = currentTariffRates.isToU ? 'time-of-use' : 'flat-rate';
+      if (currentTariffRateResult.status === 'available') {
+        currentTariffRates = currentTariffRateResult;
+        const label =
+          currentTariffRateResult.rateShape === 'go-day-night' ? 'Go-style day/night' : 'flat-rate';
         onProgress(
           `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
           'ok',
@@ -308,17 +340,51 @@ export async function runComparison(
         );
       } else {
         flexNote =
-          'Your current tariff rates are not available via the Octopus API — ' +
-          'Flexible Octopus is used as the comparison baseline for these periods.';
-        onProgress('Current tariff rates unavailable — using Flexible as proxy.', 'ok', 64);
+          currentTariffRateResult.reason +
+          ' Flexible Octopus is used as the comparison baseline for these periods.';
+        onProgress(
+          currentTariffRateResult.status === 'unsupported'
+            ? 'Current tariff shape unsupported — using Flexible as proxy.'
+            : 'Current tariff rates unavailable — using Flexible as proxy.',
+          'ok',
+          64,
+        );
       }
     } catch {
       flexNote =
-        'Could not fetch your current tariff rates — ' +
+        'Could not fetch your current tariff rates. ' +
         'Flexible Octopus is used as the comparison baseline for these periods.';
       onProgress('Current tariff rate fetch failed — using Flexible as proxy.', 'ok', 64);
     }
   }
+  const currentTariffCode = currentAgreement?.tariff_code ?? null;
+  const currentTariffLabel = currentTariffCode
+    ? classifyTariffCode(currentTariffCode).label
+    : 'your tariff';
+  const flexColumnSource: FlexColumnSource = onFlexible
+    ? {
+        kind: 'flexible-current',
+        label: currentTariffLabel,
+        tariffCode: currentTariffCode,
+      }
+    : onAgile
+      ? { kind: 'flexible-alternative', label: 'Flexible' }
+      : currentTariffRates && currentTariffCode
+        ? {
+            kind: 'current-tariff-rates',
+            label: currentTariffLabel,
+            tariffCode: currentTariffCode,
+            rateShape: currentTariffRates.rateShape,
+          }
+        : currentTariffCode
+          ? {
+              kind: 'flexible-proxy',
+              label: 'Flexible proxy',
+              actualTariffLabel: currentTariffLabel,
+              actualTariffCode: currentTariffCode,
+              reason: flexNote ?? 'Current tariff rates are not available via the Octopus API.',
+            }
+          : { kind: 'flexible-alternative', label: 'Flexible' };
 
   // --- Agile rates (optional) ---
   onProgress('Discovering Agile Octopus product version(s)…', 'active', 65);
@@ -386,7 +452,6 @@ export async function runComparison(
     ? [...agileUnitRates].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime())
     : [];
   const tariffAt = makeTariffAtDateFn(agreements);
-  const currentTariffCode = currentAgreement?.tariff_code ?? null;
   const currentStandingSorted = currentTariffRates
     ? [...currentTariffRates.standingWindows].sort(
         (a, b) => a.validFrom.getTime() - b.validFrom.getTime(),
@@ -477,12 +542,14 @@ export async function runComparison(
       postcodeArea,
       currentAgreement,
       agreements,
+      flexColumnSource,
       periodFrom,
       periodTo,
       agileAvailable,
       statementValidation,
       missingEstimate,
       statementsIncomplete,
+      statementAttribution,
       latestStatementEnd,
       readingsBeyondStatements,
       agileSkipReason,

@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { computeHeadline } from '../../src/domain/headline';
-import { buildShareText } from '../../src/ui/share';
+import { buildShareText, renderSharePanel } from '../../src/ui/share';
 import { makeRun } from '../diagnostics/runFactory';
 
 const onePeriod = (over: Record<string, unknown> = {}) =>
@@ -57,6 +57,32 @@ describe('buildShareText', () => {
     expect(text).not.toContain('£');
   });
 
+  it('shares Flexible proxy as the estimate baseline when actual tariff rates are unavailable', () => {
+    const run = onePeriod();
+    const TRACKER = 'E-1R-TRACKER-24-10-01-A';
+    run.periods.forEach((p) => {
+      p.tariffCodes = [TRACKER];
+      p.actualTariffCode = TRACKER;
+    });
+    run.context.currentAgreement = {
+      tariff_code: TRACKER,
+      valid_from: '2024-01-01T00:00:00.000Z',
+      valid_to: null,
+    };
+    run.context.flexColumnSource = {
+      kind: 'flexible-proxy',
+      label: 'Flexible proxy',
+      actualTariffLabel: 'Tracker',
+      actualTariffCode: TRACKER,
+      reason: 'Tracker rates are not modelled.',
+    };
+
+    const text = buildShareText(run, computeHeadline(run));
+
+    expect(text).toContain('Agile worked out 12.0% cheaper than Flexible proxy');
+    expect(text).not.toContain('Tracker worked out');
+  });
+
   it('returns null when the headline is not trustworthy', () => {
     const run = onePeriod();
     run.context.statementsIncomplete = true;
@@ -76,5 +102,22 @@ describe('buildShareText', () => {
       valid_to: null,
     };
     expect(buildShareText(run, computeHeadline(run))).toBeNull();
+  });
+
+  it('renders a text-only share fallback when canvas is unavailable', () => {
+    const run = onePeriod();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const panel = renderSharePanel(run, computeHeadline(run));
+
+      expect(panel).not.toBeNull();
+      expect(panel?.querySelector('canvas')).toBeNull();
+      expect(panel?.textContent).toContain('Copy to clipboard');
+      expect(panel?.textContent).toContain('#DynamicTariffCheck');
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });

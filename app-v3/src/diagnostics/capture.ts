@@ -153,6 +153,7 @@ export function buildImportDiagnostics(
     region: context.regionLetter,
     currentTariffCode: currentTariffCode ?? 'unknown',
     tariffOverride: context.tariffOverride ?? false,
+    flexColumnSource: context.flexColumnSource,
     postcodeArea: context.postcodeArea || 'not available',
     agreements: (context.agreements || []).map((a) => ({
       tariffCode: a.tariff_code,
@@ -208,6 +209,7 @@ export function buildImportDiagnostics(
     },
     billingPeriods,
     statementsIncomplete: !!context.statementsIncomplete,
+    ...(context.statementAttribution ? { statementAttribution: context.statementAttribution } : {}),
     statementValidation: context.statementValidation.map((v) => ({
       period: `${fmtDate(v.displayStart)} to ${fmtDate(v.displayEnd)}`,
       billedKwh: v.billedKwh != null ? v.billedKwh.toFixed(2) : 'n/a',

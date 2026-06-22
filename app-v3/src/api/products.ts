@@ -1,33 +1,48 @@
 import type { RateWindow } from '../types/domain';
 import type { DiscoveredProduct, ProductRow, RawRateRow } from '../types/octopus';
 import type { OctopusClient, Params } from './client';
-import { productCodeFromTariffCode } from '../domain/tariff';
+import { classifyTariffCode, productCodeFromTariffCode } from '../domain/tariff';
 import { buildGoRateWindows } from '../domain/rates';
 
+export type CurrentTariffRateShape = 'flat' | 'go-day-night';
+
 export interface CurrentTariffRates {
-  // Unit rate windows, sorted ascending and ready for calculateCost. For ToU tariffs
-  // (night-unit-rates returned results) these are the pre-merged day+night windows;
-  // for flat-rate tariffs these are just the standard-unit-rates windows sorted.
+  status: 'available';
+  // Unit rate windows, sorted ascending and ready for calculateCost. Go-like tariffs
+  // are merged from standard day windows plus night windows; flat/single-register
+  // tariffs use the standard-unit-rates windows directly.
   unitWindows: RateWindow[];
   standingWindows: RateWindow[];
   productCode: string;
-  isToU: boolean; // true when night-unit-rates were merged in
+  rateShape: CurrentTariffRateShape;
 }
 
-// Fetch actual rate windows for any Octopus tariff the user is currently on, using
-// the tariff code from their agreement (no product-name search needed). Tries
-// night-unit-rates automatically — if the endpoint returns data the tariff is ToU
-// (Go, Intelligent Go, Cosy…) and the windows are merged accordingly. Returns null
-// if the product code can't be parsed or standard-unit-rates returns nothing (tariff
-// not in API — caller should fall back to Flexible and warn the user).
+export type CurrentTariffRatesResult =
+  | CurrentTariffRates
+  | { status: 'unavailable'; productCode: string | null; reason: string }
+  | { status: 'unsupported'; productCode: string; reason: string };
+
+// Fetch actual rate windows for the tariff the user is currently on, using the
+// tariff code from their agreement (no product-name search needed). This fails
+// closed: single-register rates and Go/Intelligent Go day+night shapes are priced;
+// other ToU shapes (Cosy, Flux, Power Loop, unknown multi-band tariffs) return an
+// explicit unsupported status so callers can use Flexible proxy with a caveat.
 export async function fetchCurrentTariffRates(
   client: OctopusClient,
   tariffCode: string,
   periodFrom: Date,
   periodTo: Date,
-): Promise<CurrentTariffRates | null> {
+): Promise<CurrentTariffRatesResult> {
   const productCode = productCodeFromTariffCode(tariffCode);
-  if (!productCode) return null;
+  if (!productCode) {
+    return {
+      status: 'unavailable',
+      productCode: null,
+      reason: 'Could not derive a product code from your current tariff code.',
+    };
+  }
+  const tariff = classifyTariffCode(tariffCode);
+  const isGoLike = tariff.kind === 'go';
 
   let dayWindows: RateWindow[];
   let standingWindows: RateWindow[];
@@ -44,12 +59,22 @@ export async function fetchCurrentTariffRates(
       fetchRateWindows(client, productCode, tariffCode, 'standing-charges', periodFrom, periodTo),
     ]);
   } catch {
-    return null;
+    return {
+      status: 'unavailable',
+      productCode,
+      reason: 'Could not fetch standard unit rates and standing charges for your current tariff.',
+    };
   }
-  if (dayWindows.length === 0) return null;
+  if (dayWindows.length === 0) {
+    return {
+      status: 'unavailable',
+      productCode,
+      reason: 'The Octopus API returned no standard unit rates for your current tariff.',
+    };
+  }
 
-  // Probe for off-peak rates (Go, Intelligent Go, Cosy, FLUX import…); silently
-  // skip if the endpoint doesn't exist or returns nothing.
+  // Probe for off-peak rates. A positive response means the tariff is not a plain
+  // single-register shape; only Go-like two-band day/night tariffs are modelled.
   let nightWindows: RateWindow[] = [];
   try {
     nightWindows = await fetchRateWindows(
@@ -61,15 +86,32 @@ export async function fetchCurrentTariffRates(
       periodTo,
     );
   } catch {
-    /* flat-rate tariff — no night-unit-rates endpoint */
+    /* flat/single-register tariff — no night-unit-rates endpoint */
   }
 
-  const isToU = nightWindows.length > 0;
-  const unitWindows = isToU
-    ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo)
-    : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
+  if (nightWindows.length > 0 && !isGoLike) {
+    return {
+      status: 'unsupported',
+      productCode,
+      reason: `${tariff.label} has time-of-use rates that this page cannot model safely yet.`,
+    };
+  }
 
-  return { unitWindows, standingWindows, productCode, isToU };
+  if (isGoLike && nightWindows.length === 0) {
+    return {
+      status: 'unavailable',
+      productCode,
+      reason: `${tariff.label} needs day and night rate windows, but the Octopus API returned no night rates.`,
+    };
+  }
+
+  const rateShape: CurrentTariffRateShape = isGoLike ? 'go-day-night' : 'flat';
+  const unitWindows =
+    rateShape === 'go-day-night'
+      ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo)
+      : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
+
+  return { status: 'available', unitWindows, standingWindows, productCode, rateShape };
 }
 
 export interface MergedRateWindows {

@@ -42,8 +42,8 @@ export function makeTariffAtDateFn(
 // The agreement actually in force at `at`. Octopus may pre-announce a future
 // agreement (validTo = null, validFrom in the future), so we can't just find
 // the open-ended one — we must check that validFrom has already passed.
-// Falls back to the last agreement if none covers `at` (e.g. data before first
-// agreement, or a diagnostic replayed after all agreements ended).
+// Falls back to the newest agreement by valid_from if none covers `at` (e.g.
+// data before first agreement, or a diagnostic replayed after all agreements ended).
 export function findCurrentAgreement(
   agreements: readonly Agreement[] | null | undefined,
   at: Date,
@@ -58,7 +58,7 @@ export function findCurrentAgreement(
     const to = a.valid_to ? new Date(a.valid_to).getTime() : Infinity;
     return from <= ms && to > ms;
   });
-  return active ?? list[list.length - 1] ?? null;
+  return active ?? sorted[0] ?? null;
 }
 
 // Extract the product code from a tariff code.

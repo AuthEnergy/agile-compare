@@ -14,12 +14,12 @@
 -->
 <!--
   Defence-in-depth backstop, NOT a sandbox. This single-file app loads no external
-  scripts/styles/images/fonts and only talks to Octopus's API, so the policy below
-  denies everything by default and re-opens only the channels the app uses: inline
-  script/style, same-origin + data: images, and fetch to Octopus. The build is a
+  scripts/styles/images/fonts. The policy below denies everything by default and
+  re-opens only the channels the app uses: inline script/style, same-origin + data:
+  images, fetch to Octopus, and narrow direct PostHog event sharing. The build is a
   single UNMINIFIED inline file, so "read the one file and verify it does nothing
-  sneaky" still holds. Kept byte-for-byte identical to v2 (a compatibility gate;
-  see tools/verify-single-file.mjs). LIMIT: 'unsafe-inline' means an inline-injected
+  sneaky" still holds. The exact v3 CSP is gated by tools/verify-single-file.mjs.
+  LIMIT: 'unsafe-inline' means an inline-injected
   script could run, and a meta-tag CSP can't set frame-ancestors or block nav-based
   exfiltration — closing those needs a real response header + hashes (tracked follow-up).
 -->

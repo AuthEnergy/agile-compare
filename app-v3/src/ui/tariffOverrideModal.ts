@@ -21,7 +21,7 @@ export function openTariffOverrideModal(
     placeholder: 'e.g. 24.50',
     value: prefillUnit !== null ? String(prefillUnit) : '',
   });
-  unitInput.setAttribute('min', '0');
+  unitInput.setAttribute('min', '0.01');
   unitInput.setAttribute('step', '0.01');
 
   const standingInput = el('input', {
@@ -36,7 +36,7 @@ export function openTariffOverrideModal(
   const errorMsg = el('span', {
     class: 'field-hint',
     style: 'color:var(--status-risk);display:none',
-    text: 'Please enter valid rates (both must be numbers greater than zero).',
+    text: 'Please enter a unit rate greater than zero and a standing charge of zero or more.',
   });
 
   const modal = el('div', { class: 'modal' }, [
@@ -85,7 +85,7 @@ export function openTariffOverrideModal(
         onClick: () => {
           const unit = parseFloat((unitInput as HTMLInputElement).value);
           const standing = parseFloat((standingInput as HTMLInputElement).value);
-          if (isNaN(unit) || isNaN(standing) || unit <= 0 || standing <= 0) {
+          if (!Number.isFinite(unit) || !Number.isFinite(standing) || unit <= 0 || standing < 0) {
             errorMsg.style.display = '';
             return;
           }

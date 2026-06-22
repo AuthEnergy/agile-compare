@@ -137,6 +137,58 @@ describe('renderResults — all data predates the current tariff', () => {
     expect(text).not.toContain('We found statements up to');
   });
 
+  it('explains estimate-only mode when statements cannot be attributed to one MPAN', () => {
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: null,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.context.statementAttribution = {
+      mode: 'estimate-only-unsafe-multi-mpan',
+      accountsWithMeter: 1,
+      accountsUsedForStatements: 0,
+      unsafeAccountsWithMeter: 1,
+    };
+
+    renderResults(host, run, computeHeadline(run), null, cb);
+    const text = host.textContent ?? '';
+    expect(text).toContain('Bills not attributed safely');
+    expect(text).toContain('left out the billed “you paid” total');
+  });
+
+  it('caveats partial statement attribution when unsafe sibling accounts were excluded', () => {
+    const run = makeRun([
+      {
+        start: '2025-01-01',
+        end: '2025-02-01',
+        tariff: 'current',
+        actual: 5000,
+        flexEnergy: 4200,
+        flexStanding: 800,
+        agileEnergy: 3600,
+        agileStanding: 800,
+      },
+    ]);
+    run.context.statementAttribution = {
+      mode: 'partial-statements-unsafe-multi-mpan',
+      accountsWithMeter: 2,
+      accountsUsedForStatements: 1,
+      unsafeAccountsWithMeter: 1,
+    };
+
+    renderResults(host, run, computeHeadline(run), null, cb);
+    const text = host.textContent ?? '';
+    expect(text).toContain('Some bills were not attributed');
+    expect(text).toContain('includes only safely attributable bills');
+  });
+
   it('hides the statement-check card (no 0/0) when no bill covers the summarised periods', () => {
     const run = makeRun([
       {

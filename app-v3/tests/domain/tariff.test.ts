@@ -106,10 +106,28 @@ describe('findCurrentAgreement', () => {
     );
   });
 
-  it('falls back to the last agreement when none covers the reference date', () => {
+  it('falls back to the newest agreement when none covers the reference date', () => {
     // reference date is before any agreement
     expect(findCurrentAgreement(agreements, new Date('2020-01-01T00:00:00Z'))?.tariff_code).toBe(
       agreements[agreements.length - 1]?.tariff_code,
+    );
+  });
+
+  it('falls back to the newest agreement even when the input order is unsorted', () => {
+    const unsorted: Agreement[] = [
+      {
+        tariff_code: 'E-1R-NEW-A',
+        valid_from: '2025-03-15T00:00:00Z',
+        valid_to: null,
+      },
+      {
+        tariff_code: 'E-1R-OLD-A',
+        valid_from: '2025-01-01T00:00:00Z',
+        valid_to: '2025-03-15T00:00:00Z',
+      },
+    ];
+    expect(findCurrentAgreement(unsorted, new Date('2020-01-01T00:00:00Z'))?.tariff_code).toBe(
+      'E-1R-NEW-A',
     );
   });
 });

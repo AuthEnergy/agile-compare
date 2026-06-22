@@ -126,6 +126,9 @@ export function makeRun(
       currentAgreement,
       agreements,
       tariffOverride: opts.tariffOverride ?? false,
+      flexColumnSource: opts.tariffOverride
+        ? { kind: 'user-override', label: 'User tariff' }
+        : { kind: 'flexible-current', label: 'Flexible', tariffCode: CURRENT_TARIFF },
       periodFrom: new Date('2024-12-01T00:00:00Z'),
       periodTo: new Date('2025-03-01T00:00:00Z'),
       agileAvailable: true,

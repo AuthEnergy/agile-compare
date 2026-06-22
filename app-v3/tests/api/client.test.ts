@@ -43,6 +43,30 @@ describe('createClient', () => {
     expect(all).toEqual([1, 2, 3]);
   });
 
+  it('throws instead of silently truncating when REST pagination exceeds the page cap', async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return jsonResp({
+        results: [calls],
+        next: 'https://api.octopus.energy/v1/x/?page=next',
+      });
+    }) as unknown as typeof fetch;
+
+    let err: unknown;
+    try {
+      await createClient('k').restGetAllPages<number>('/x/');
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(OctopusApiError);
+    expect(err instanceof Error ? err.message : '').toBe(
+      'Octopus API pagination exceeded 50 pages for a REST list response.',
+    );
+    expect(err instanceof Error ? err.message : '').not.toContain('/x/');
+    expect(calls).toBe(50);
+  });
+
   it('graphqlRequest throws an OctopusApiError on GraphQL errors', async () => {
     globalThis.fetch = (async () =>
       jsonResp({ errors: [{ message: 'boom' }] })) as unknown as typeof fetch;

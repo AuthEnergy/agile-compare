@@ -78,6 +78,36 @@ describe('collectMeters', () => {
     };
     expect(collectMeters(data)).toHaveLength(0);
   });
+
+  it('does not present a future open-ended agreement as the current tariff', () => {
+    const data: AccountData = {
+      number: 'A-FAKE0001',
+      properties: [
+        {
+          electricity_meter_points: [
+            {
+              mpan: '1900000000019',
+              meters: [{ serial_number: 'IMP019' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-AGILE-24-10-01-A',
+                  valid_from: '2025-01-01T00:00:00Z',
+                  valid_to: '2099-01-01T00:00:00Z',
+                },
+                {
+                  tariff_code: 'E-1R-VAR-22-11-01-A',
+                  valid_from: '2099-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(collectMeters(data)[0]?.tariffCode).toBe('E-1R-AGILE-24-10-01-A');
+  });
 });
 
 describe('sortMeters', () => {

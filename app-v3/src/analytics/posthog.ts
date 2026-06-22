@@ -1,30 +1,46 @@
-// PostHog analytics wrapper — only fires when the user has opted in.
-// Autocapture and session recording are explicitly disabled at init; the only
-// events that ever fire are the two named exports below.
-import posthog from 'posthog-js';
-
 const PH_KEY = 'phc_BWYdViiVQJGut9XjZiCbjDGRsPixaJgZQLnVFyJpi5Jt';
-const PH_HOST = 'https://eu.i.posthog.com';
+export const POSTHOG_CAPTURE_URL = 'https://eu.i.posthog.com/capture/';
 
-let active = false;
+let distinctId: string | null = null;
 
-export function initAnalytics(): void {
-  if (active) return;
-  active = true;
-  posthog.init(PH_KEY, {
-    api_host: PH_HOST,
-    autocapture: false,
-    capture_pageview: false,
-    capture_pageleave: false,
-    disable_session_recording: true,
-    // Prevents posthog-js loading a remote config script from eu-assets.i.posthog.com,
-    // which would violate the app's strict script-src CSP. We don't use feature flags
-    // so this has no functional cost.
-    advanced_disable_flags: true,
-    // No cookies, no localStorage writes — PostHog uses a fresh random distinct_id
-    // per session so individual sessions cannot be correlated across visits.
-    persistence: 'memory',
-  });
+function getDistinctId(): string {
+  if (distinctId) return distinctId;
+  const cryptoApi = globalThis.crypto;
+  distinctId =
+    typeof cryptoApi?.randomUUID === 'function'
+      ? cryptoApi.randomUUID()
+      : `otc-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
+  return distinctId;
+}
+
+function outwardCode(value: string | null): string | null {
+  if (value === null) return null;
+  const normalised = value.trim().toUpperCase();
+  if (!normalised || /\s/.test(normalised)) return null;
+  return /^(?:GIR|[A-Z]{1,2}\d[A-Z\d]?)$/.test(normalised) ? normalised : null;
+}
+
+type EventProperties = Record<string, string | number | boolean | null>;
+
+async function capture(event: string, properties: EventProperties): Promise<void> {
+  try {
+    await fetch(POSTHOG_CAPTURE_URL, {
+      method: 'POST',
+      credentials: 'omit',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: PH_KEY,
+        event,
+        properties: {
+          ...properties,
+          distinct_id: getDistinctId(),
+        },
+      }),
+    });
+  } catch {
+    /* analytics must never affect the comparison journey */
+  }
 }
 
 export interface ComparisonSuccessProps {
@@ -35,10 +51,9 @@ export interface ComparisonSuccessProps {
   periodDays: number;
 }
 
-export function trackComparisonSuccess(props: ComparisonSuccessProps): void {
-  if (!active) return;
-  posthog.capture('comparison_complete', {
-    outward_code: props.outwardCode,
+export function trackComparisonSuccess(props: ComparisonSuccessProps): Promise<void> {
+  return capture('comparison_complete', {
+    outward_code: outwardCode(props.outwardCode),
     pct_saved: props.pctSaved !== null ? Math.round(props.pctSaved * 10) / 10 : null,
     kwh_total: Math.round(props.kwhTotal),
     period_days: Math.round(props.periodDays),
@@ -52,26 +67,18 @@ export interface ComparisonFailureProps {
   // Which stage of the live journey failed: 'auth' (account discovery) or
   // 'fetch' (reading meter data + running the comparison).
   stage: 'auth' | 'fetch';
-  // Last progress log entry — shows exactly where in the flow it stopped.
-  // Progress messages are PII-free (no MPANs or account numbers).
-  progressLast?: string | null;
-  // Classified tariff kind (e.g. 'go', 'fixed', 'flexible') of the selected meter.
-  tariffKind?: string | null;
 }
 
-export function trackComparisonFailure(props: ComparisonFailureProps): void {
-  if (!active) return;
-  posthog.capture('comparison_failed', {
+export function trackComparisonFailure(props: ComparisonFailureProps): Promise<void> {
+  return capture('comparison_failed', {
     error_type: props.errorType,
     http_status: props.httpStatus,
     cors_likely: props.corsLikely,
     stage: props.stage,
-    progress_last: props.progressLast,
-    tariff_kind: props.tariffKind,
   });
 }
 
-// Exported only for unit tests — resets module state between test cases.
+// Exported only for unit tests; production sessions keep a fresh per-page id.
 export function _resetForTest(): void {
-  active = false;
+  distinctId = null;
 }

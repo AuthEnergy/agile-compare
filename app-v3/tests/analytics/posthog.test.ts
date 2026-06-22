@@ -1,155 +1,149 @@
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Mock the posthog-js module before importing our wrapper.
-vi.mock('posthog-js', () => ({
-  default: {
-    init: vi.fn(),
-    capture: vi.fn(),
-  },
-}));
-
+import { readFileSync } from 'node:fs';
 import {
   _resetForTest,
-  initAnalytics,
+  POSTHOG_CAPTURE_URL,
   trackComparisonFailure,
   trackComparisonSuccess,
 } from '../../src/analytics/posthog';
-import posthog from 'posthog-js';
 
-// vi.mocked preserves the shape while adding Mock methods.
-const mockInit = vi.mocked(posthog.init);
-const mockCapture = vi.mocked(posthog.capture);
+const origFetch = globalThis.fetch;
+
+interface SeenRequest {
+  url: string;
+  init: RequestInit;
+}
+
+let seen: SeenRequest[] = [];
+
+function mockFetch(): void {
+  seen = [];
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    seen.push({ url: url.toString(), init: init ?? {} });
+    return { ok: true } as Response;
+  }) as typeof fetch;
+}
+
+function bodyAt(index: number): {
+  api_key?: string;
+  event?: string;
+  properties?: Record<string, unknown>;
+} {
+  const req = seen[index];
+  assert(req !== undefined);
+  expect(typeof req.init.body).toBe('string');
+  return JSON.parse(String(req.init.body)) as {
+    api_key?: string;
+    event?: string;
+    properties?: Record<string, unknown>;
+  };
+}
 
 beforeEach(() => {
   _resetForTest();
-  vi.clearAllMocks();
+  mockFetch();
+  localStorage.clear();
+  sessionStorage.clear();
+  document.cookie = '';
 });
 
 afterEach(() => {
   _resetForTest();
+  globalThis.fetch = origFetch;
+  vi.restoreAllMocks();
 });
 
-describe('analytics — when consent has not been given', () => {
-  it('does not call posthog.capture for success events', () => {
-    trackComparisonSuccess({ outwardCode: 'SW1', pctSaved: 10, kwhTotal: 500, periodDays: 30 });
-    expect(mockCapture).not.toHaveBeenCalled();
-  });
-
-  it('does not call posthog.capture for failure events', () => {
-    trackComparisonFailure({
-      errorType: 'NetworkError',
-      httpStatus: null,
-      corsLikely: false,
-      stage: 'auth',
-      progressLast: null,
-      tariffKind: null,
+describe('PostHog direct capture', () => {
+  it('sends comparison_complete with only the approved app properties', async () => {
+    await trackComparisonSuccess({
+      outwardCode: 'sw1',
+      pctSaved: 12.54,
+      kwhTotal: 523.4,
+      periodDays: 30.6,
     });
-    expect(mockCapture).not.toHaveBeenCalled();
-  });
-});
 
-describe('initAnalytics', () => {
-  it('calls posthog.init with autocapture and session recording disabled', () => {
-    initAnalytics();
-    expect(mockInit).toHaveBeenCalledOnce();
-    expect(mockInit).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        autocapture: false,
-        capture_pageview: false,
-        disable_session_recording: true,
-        persistence: 'memory',
-      }),
-    );
-  });
-
-  it('calls posthog.init with the EU host', () => {
-    initAnalytics();
-    expect(mockInit).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ api_host: 'https://eu.i.posthog.com' }),
-    );
-  });
-
-  it('only calls posthog.init once even when called multiple times', () => {
-    initAnalytics();
-    initAnalytics();
-    expect(mockInit).toHaveBeenCalledOnce();
-  });
-});
-
-describe('trackComparisonSuccess', () => {
-  beforeEach(() => {
-    initAnalytics();
-  });
-
-  it('fires comparison_complete with correct property names', () => {
-    trackComparisonSuccess({ outwardCode: 'SW1', pctSaved: 12.5, kwhTotal: 523.4, periodDays: 31 });
-    expect(mockCapture).toHaveBeenCalledWith('comparison_complete', {
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.url).toBe(POSTHOG_CAPTURE_URL);
+    expect(seen[0]?.init).toMatchObject({
+      method: 'POST',
+      credentials: 'omit',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const body = bodyAt(0);
+    expect(body.api_key).toMatch(/^phc_/);
+    expect(body.event).toBe('comparison_complete');
+    expect(body.properties).toEqual({
       outward_code: 'SW1',
       pct_saved: 12.5,
       kwh_total: 523,
       period_days: 31,
+      distinct_id: expect.any(String),
     });
   });
 
-  it('rounds kwh_total and period_days to integers', () => {
-    trackComparisonSuccess({ outwardCode: 'N1', pctSaved: 5, kwhTotal: 199.9, periodDays: 30.9 });
-    const call = mockCapture.mock.calls[0];
-    assert(call !== undefined);
-    const props = call[1] as Record<string, unknown>;
-    expect(props['kwh_total']).toBe(200);
-    expect(props['period_days']).toBe(31);
+  it('drops invalid or full postcode values before capture', async () => {
+    await trackComparisonSuccess({
+      outwardCode: 'SW1A 1AA',
+      pctSaved: null,
+      kwhTotal: 300,
+      periodDays: 28,
+    });
+
+    expect(bodyAt(0).properties?.['outward_code']).toBeNull();
   });
 
-  it('passes null outward_code when unavailable', () => {
-    trackComparisonSuccess({ outwardCode: null, pctSaved: null, kwhTotal: 300, periodDays: 28 });
-    const call = mockCapture.mock.calls[0];
-    assert(call !== undefined);
-    const props = call[1] as Record<string, unknown>;
-    expect(props['outward_code']).toBeNull();
-    expect(props['pct_saved']).toBeNull();
-  });
-});
-
-describe('trackComparisonFailure', () => {
-  beforeEach(() => {
-    initAnalytics();
-  });
-
-  it('fires comparison_failed with correct property names', () => {
-    trackComparisonFailure({
+  it('sends comparison_failed with the narrow failure shape', async () => {
+    await trackComparisonFailure({
       errorType: 'OctopusApiError',
       httpStatus: 401,
       corsLikely: false,
       stage: 'auth',
-      progressLast: 'Fetching statements…',
-      tariffKind: 'go',
     });
-    expect(mockCapture).toHaveBeenCalledWith('comparison_failed', {
+
+    const body = bodyAt(0);
+    expect(body.event).toBe('comparison_failed');
+    expect(body.properties).toEqual({
       error_type: 'OctopusApiError',
       http_status: 401,
       cors_likely: false,
       stage: 'auth',
-      progress_last: 'Fetching statements…',
-      tariff_kind: 'go',
+      distinct_id: expect.any(String),
     });
+    expect(body.properties).not.toHaveProperty('progress_last');
+    expect(body.properties).not.toHaveProperty('tariff_kind');
   });
 
-  it('accepts "fetch" as a stage value and passes nulls through', () => {
-    trackComparisonFailure({
+  it('uses one ephemeral distinct id for the current page only', async () => {
+    await trackComparisonSuccess({ outwardCode: 'N1', pctSaved: 5, kwhTotal: 200, periodDays: 31 });
+    await trackComparisonFailure({
       errorType: 'TypeError',
       httpStatus: null,
       corsLikely: true,
       stage: 'fetch',
-      progressLast: null,
-      tariffKind: null,
     });
-    const call = mockCapture.mock.calls[0];
-    assert(call !== undefined);
-    const props = call[1] as Record<string, unknown>;
-    expect(props['stage']).toBe('fetch');
-    expect(props['progress_last']).toBeNull();
-    expect(props['tariff_kind']).toBeNull();
+
+    expect(bodyAt(0).properties?.['distinct_id']).toBe(bodyAt(1).properties?.['distinct_id']);
+    expect(bodyAt(1).properties).not.toHaveProperty('progress_last');
+    expect(bodyAt(1).properties).not.toHaveProperty('tariff_kind');
+  });
+
+  it('does not create PostHog browser storage', async () => {
+    await trackComparisonSuccess({ outwardCode: null, pctSaved: null, kwhTotal: 0, periodDays: 0 });
+
+    expect(Object.keys(localStorage).filter((k) => k.toLowerCase().includes('posthog'))).toEqual(
+      [],
+    );
+    expect(Object.keys(sessionStorage).filter((k) => k.toLowerCase().includes('posthog'))).toEqual(
+      [],
+    );
+    expect(document.cookie.toLowerCase()).not.toContain('posthog');
+  });
+
+  it('keeps the capture origin in the source CSP', () => {
+    const html = readFileSync('index.html', 'utf8');
+    const origin = new URL(POSTHOG_CAPTURE_URL).origin;
+
+    expect(html).toContain(`connect-src https://api.octopus.energy ${origin};`);
   });
 });

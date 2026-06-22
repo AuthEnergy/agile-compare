@@ -122,6 +122,7 @@ export function buildSampleRun(): ComparisonRun {
         { tariff_code: OLD, valid_from: '2025-01-01', valid_to: '2026-03-01' },
         { tariff_code: CUR, valid_from: '2026-03-01', valid_to: null },
       ],
+      flexColumnSource: { kind: 'flexible-current', label: 'Flexible', tariffCode: CUR },
       periodFrom: new Date(START),
       periodTo: new Date(START + DAYS * DAY_MS),
       agileAvailable: true,

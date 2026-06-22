@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const builtPath = join(here, '..', '..', 'v3', 'index.html');
 
-// Must match v2/index.html:29 byte-for-byte (deliberate compatibility gate).
+// Deliberate v3 policy: Octopus API plus narrow direct PostHog event capture.
 const CANONICAL_CSP =
   `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
   `script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; ` +
@@ -31,9 +31,9 @@ if (!existsSync(builtPath)) {
 }
 const html = readFileSync(builtPath, 'utf8');
 
-// 1) CSP byte-for-byte.
+// 1) CSP byte-for-byte against the v3 policy above.
 if (!html.includes(CANONICAL_CSP)) {
-  errors.push('CSP meta does not match the canonical v2 policy byte-for-byte');
+  errors.push('CSP meta does not match the canonical v3 policy byte-for-byte');
 }
 
 // 2) No external script/style/asset references (would break the CSP boot / single-file).
@@ -47,8 +47,8 @@ if (/(?:src|href)\s*=\s*["'][^"']*\/assets\//i.test(html)) {
 }
 
 // 3) Unminified: many short lines, no absurdly long single line.
-// Threshold is 5 000 (not 2 000) to accommodate bundled dependencies (e.g. posthog-js)
-// that have long object-literal defaults; real minifiers produce lines of 50 000+.
+// Threshold is 5 000 (not 2 000) to allow long, hand-readable literals;
+// real minifiers produce lines of 50 000+.
 const lines = html.split('\n');
 const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
 if (lines.length < 20) errors.push(`only ${lines.length} lines — looks minified/single-line`);

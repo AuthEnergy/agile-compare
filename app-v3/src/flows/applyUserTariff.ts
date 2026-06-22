@@ -68,6 +68,7 @@ export function applyUserTariff(
         valid_to: context.periodTo.toISOString(),
       },
       tariffOverride: true,
+      flexColumnSource: { kind: 'user-override', label: 'User tariff' },
     },
   };
 }

@@ -294,14 +294,16 @@ export async function runComparison(
   if (!onFlexible && !onAgile && currentAgreement) {
     onProgress('Fetching your current tariff rates…', 'active', 62);
     try {
-      currentTariffRates = await fetchCurrentTariffRates(
+      const currentTariffRateResult = await fetchCurrentTariffRates(
         client,
         currentAgreement.tariff_code,
         periodFrom,
         periodTo,
       );
-      if (currentTariffRates) {
-        const label = currentTariffRates.isToU ? 'time-of-use' : 'flat-rate';
+      if (currentTariffRateResult.status === 'available') {
+        currentTariffRates = currentTariffRateResult;
+        const label =
+          currentTariffRateResult.rateShape === 'go-day-night' ? 'Go-style day/night' : 'flat-rate';
         onProgress(
           `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
           'ok',
@@ -309,13 +311,19 @@ export async function runComparison(
         );
       } else {
         flexNote =
-          'Your current tariff rates are not available via the Octopus API — ' +
-          'Flexible Octopus is used as the comparison baseline for these periods.';
-        onProgress('Current tariff rates unavailable — using Flexible as proxy.', 'ok', 64);
+          currentTariffRateResult.reason +
+          ' Flexible Octopus is used as the comparison baseline for these periods.';
+        onProgress(
+          currentTariffRateResult.status === 'unsupported'
+            ? 'Current tariff shape unsupported — using Flexible as proxy.'
+            : 'Current tariff rates unavailable — using Flexible as proxy.',
+          'ok',
+          64,
+        );
       }
     } catch {
       flexNote =
-        'Could not fetch your current tariff rates — ' +
+        'Could not fetch your current tariff rates. ' +
         'Flexible Octopus is used as the comparison baseline for these periods.';
       onProgress('Current tariff rate fetch failed — using Flexible as proxy.', 'ok', 64);
     }
@@ -337,7 +345,7 @@ export async function runComparison(
             kind: 'current-tariff-rates',
             label: currentTariffLabel,
             tariffCode: currentTariffCode,
-            rateShape: currentTariffRates.isToU ? 'time-of-use' : 'flat',
+            rateShape: currentTariffRates.rateShape,
           }
         : currentTariffCode
           ? {

@@ -100,7 +100,7 @@ function parseFlexColumnSource(
       kind,
       label: asStr(o?.['label'], classifyTariffCode(tariffCode).label),
       tariffCode,
-      rateShape: shape === 'time-of-use' ? 'time-of-use' : 'flat',
+      rateShape: shape === 'go-day-night' || shape === 'time-of-use' ? 'go-day-night' : 'flat',
     };
   }
   if (kind === 'flexible-proxy') {

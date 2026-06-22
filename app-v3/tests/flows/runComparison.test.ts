@@ -305,6 +305,62 @@ describe('runComparison (end-to-end, mocked fetch)', () => {
     expect(run.context.readingsBeyondStatements).toBe(false);
     expect(run.periods.every((p) => p.actualChargePence !== null)).toBe(true);
   });
+
+  it('uses Flexible proxy with a caveat for unsupported current ToU tariff shapes', async () => {
+    const COSY = 'E-1R-COSY-22-12-08-C';
+    const baseFetch = importFetch();
+    globalThis.fetch = (async (url: string | URL, opts?: { body?: string }) => {
+      const u = new URL(url.toString());
+      if (u.pathname.includes(COSY) && u.pathname.includes('night-unit-rates')) {
+        return jsonResp({
+          results: [
+            {
+              value_inc_vat: 12,
+              valid_from: winStart.toISOString(),
+              valid_to: winEnd.toISOString(),
+              payment_method: 'DIRECT_DEBIT',
+            },
+          ],
+        });
+      }
+      return baseFetch(url, opts);
+    }) as unknown as typeof fetch;
+    const cosyAccountData: AccountData = {
+      number: 'A-X',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: false,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: COSY,
+                  valid_from: '2023-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const run = await runComparison(createClient(input.apiKey), {
+      ...input,
+      accountData: cosyAccountData,
+    });
+
+    expect(run.context.flexNote).toContain('Cosy has time-of-use rates');
+    expect(run.context.flexColumnSource).toMatchObject({
+      kind: 'flexible-proxy',
+      actualTariffLabel: 'Cosy',
+      actualTariffCode: COSY,
+    });
+  });
 });
 
 describe('runExportComparison (end-to-end, mocked fetch)', () => {

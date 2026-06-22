@@ -69,7 +69,7 @@ export type FlexColumnSource =
       kind: 'current-tariff-rates';
       label: string;
       tariffCode: string;
-      rateShape: 'flat' | 'time-of-use';
+      rateShape: 'flat' | 'go-day-night';
     }
   | {
       kind: 'flexible-proxy';

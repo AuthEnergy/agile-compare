@@ -13,8 +13,8 @@ export function rateAt(rateWindows: readonly RateWindow[], instant: Date): numbe
   return null;
 }
 
-// Build a non-overlapping, fully-covered rate window list for a time-of-use tariff
-// with a fixed daily off-peak window (Go, Cosy…). Night windows take priority; the
+// Build a non-overlapping, fully-covered rate window list for a Go-like tariff
+// with fixed daily off-peak windows. Night windows take priority; the
 // day rate fills every gap. The result covers [from, to) exactly, is sorted ascending
 // by validFrom, and is safe to pass directly to rateAtSorted / calculateCost.
 //

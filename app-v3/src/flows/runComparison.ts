@@ -25,7 +25,7 @@ import {
 } from '../domain/tariff';
 import type { StatementCharge, StatementCredit } from '../types/api';
 import type { RateWindow, RawPeriod } from '../types/domain';
-import type { AccountData, RawConsumptionRow } from '../types/octopus';
+import type { AccountData, Page, RawConsumptionRow } from '../types/octopus';
 import type {
   ComparisonRun,
   FlexColumnSource,
@@ -147,7 +147,8 @@ export async function runComparison(
   const readings = merged.readings;
   if (readings.length === 0) {
     const testPath = `/electricity-meter-points/${input.mpan}/meters/${input.serial}/consumption/`;
-    const testData = await client.restGetAllPages<RawConsumptionRow>(testPath, { page_size: 1 });
+    const testPage = await client.restGet<Page<RawConsumptionRow>>(testPath, { page_size: 1 });
+    const testData = testPage.results ?? [];
     if (testData.length === 0) {
       throw new Error(
         `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`,

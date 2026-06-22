@@ -21,6 +21,7 @@ export class OctopusApiError extends Error {
 
 const REST_BASE = 'https://api.octopus.energy/v1';
 const GRAPHQL_URL = 'https://api.octopus.energy/v1/graphql/';
+export const MAX_REST_PAGES = 50;
 
 // Octopus rate-limits; a heavy run (a year of half-hourly Agile rates is ~17k
 // rows / a dozen pages) can trip a 429. Without retry, one transient 429/5xx
@@ -116,7 +117,12 @@ export function createClient(
     let nextUrl: string | null = REST_BASE + path;
     let nextParams: Params | null = params;
     let guard = 0;
-    while (nextUrl && guard < 50) {
+    while (nextUrl) {
+      if (guard >= MAX_REST_PAGES) {
+        throw new OctopusApiError(
+          `Octopus API pagination exceeded ${MAX_REST_PAGES} pages for a REST list response.`,
+        );
+      }
       const url: URL = new URL(nextUrl);
       for (const [k, v] of Object.entries(nextParams ?? {})) {
         if (v !== undefined && v !== null) url.searchParams.set(k, String(v));

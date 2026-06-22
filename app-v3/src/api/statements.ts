@@ -97,6 +97,8 @@ export async function fetchStatements(
 
 export interface MeterStatementsResult extends FetchStatementsResult {
   accountsWithMeter: number; // how many of the key's accounts list THIS meter point
+  accountsUsedForStatements: number; // accounts that can safely attribute statements to THIS MPAN
+  unsafeAccountsWithMeter: number; // accounts listing THIS MPAN plus at least one other electricity MPAN
 }
 
 const electricityMeterPoints = (acct: AccountData) =>
@@ -105,9 +107,7 @@ const electricityMeterPoints = (acct: AccountData) =>
 // A statement's bill-charges carry no MPAN, so an account's statements can only be
 // safely attributed to THIS meter when the account has exactly one electricity
 // meter point and it is this MPAN — otherwise another meter's spend would be mixed
-// in. The primary account is exempt (it was always used pre-change, and is the one
-// the user explicitly selected a meter from); the extra same-meter accounts this
-// change adds must pass the stricter single-meter check.
+// in.
 const accountSafeForMpan = (acct: AccountData, mpan: string): boolean => {
   const points = electricityMeterPoints(acct);
   return points.length === 1 && points[0]?.mpan === mpan;
@@ -115,12 +115,10 @@ const accountSafeForMpan = (acct: AccountData, mpan: string): boolean => {
 const accountHasMpan = (acct: AccountData, mpan: string): boolean =>
   electricityMeterPoints(acct).some((em) => em.mpan === mpan);
 
-// Statements for an MPAN, gathered across the key's accounts that bill this exact
-// meter. Covers billing migrating to a new account number while the physical meter
-// stays put — the primary alone then returns a stale statement history. The primary
-// is always included (single-account keys behave exactly as before); ADDITIONAL
-// accounts contribute only when they bill this one meter alone, so another
-// property's bills are never mixed in.
+// Statements for an MPAN, gathered across the key's accounts that can safely bill
+// this exact meter. Covers billing migrating to a new account number while the
+// physical meter stays put. Every account, including the primary account the user
+// selected from, must pass the same single-MPAN attribution check.
 export async function fetchStatementsForMpan(
   client: OctopusClient,
   token: string,
@@ -138,6 +136,8 @@ export async function fetchStatementsForMpan(
   const byId = new Map<string, StatementNode>();
   let incomplete = false;
   let accountsWithMeter = 0;
+  let accountsUsedForStatements = 0;
+  let unsafeAccountsWithMeter = 0;
 
   for (const num of [primaryAccountNumber, ...others]) {
     const isPrimary = num === primaryAccountNumber;
@@ -151,10 +151,13 @@ export async function fetchStatementsForMpan(
         continue; // sibling accounts are additive — a failure to read one never sinks the run
       }
     }
-    // Primary: include as before. Additional accounts: only if they bill this meter
-    // (and nothing else), so another property's charges can't be mis-attributed.
-    if (isPrimary ? !accountHasMpan(acct, mpan) : !accountSafeForMpan(acct, mpan)) continue;
+    if (!accountHasMpan(acct, mpan)) continue;
     accountsWithMeter++;
+    if (!accountSafeForMpan(acct, mpan)) {
+      unsafeAccountsWithMeter++;
+      continue;
+    }
+    accountsUsedForStatements++;
     const res = await fetchStatements(client, token, num);
     if (res.incomplete) incomplete = true;
     for (const s of res.statements) {
@@ -163,5 +166,11 @@ export async function fetchStatementsForMpan(
     }
   }
 
-  return { statements: [...byId.values()], incomplete, accountsWithMeter };
+  return {
+    statements: [...byId.values()],
+    incomplete,
+    accountsWithMeter,
+    accountsUsedForStatements,
+    unsafeAccountsWithMeter,
+  };
 }

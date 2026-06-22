@@ -84,16 +84,40 @@ export async function runComparison(
   onProgress('Authenticating to fetch your real billing periods…', 'active', 15);
   const token = await obtainKrakenToken(client, input.apiKey);
   onProgress('Fetching statements…', 'active', 18);
-  const { statements: allStatements, incomplete: statementsIncomplete } =
-    await fetchStatementsForMpan(client, token, input.mpan, input.accountNumber, accountData);
-  if (allStatements.length === 0) {
+  const statementFetch = await fetchStatementsForMpan(
+    client,
+    token,
+    input.mpan,
+    input.accountNumber,
+    accountData,
+  );
+  const {
+    statements: allStatements,
+    incomplete: statementsIncomplete,
+    accountsWithMeter,
+    accountsUsedForStatements,
+    unsafeAccountsWithMeter,
+  } = statementFetch;
+  const estimateOnlyUnsafeStatements =
+    allStatements.length === 0 && accountsUsedForStatements === 0 && unsafeAccountsWithMeter > 0;
+  if (allStatements.length === 0 && !estimateOnlyUnsafeStatements) {
     throw new Error(
       'No statements found on this account. Your account may not have statement history available via the API.',
     );
   }
+  const statementAttribution = {
+    mode: estimateOnlyUnsafeStatements
+      ? ('estimate-only-unsafe-multi-mpan' as const)
+      : ('safe-statements' as const),
+    accountsWithMeter,
+    accountsUsedForStatements,
+    unsafeAccountsWithMeter,
+  };
   const validStatements = allStatements.filter((s) => s.startAt && s.endAt);
   onProgress(
-    `Found ${allStatements.length} statement(s).`,
+    estimateOnlyUnsafeStatements
+      ? 'No safely attributable statements — using estimates only.'
+      : `Found ${allStatements.length} statement(s).`,
     statementsIncomplete ? 'err' : 'ok',
     20,
   );
@@ -105,14 +129,15 @@ export async function runComparison(
   const earliestApprox = new Date(dataAvailableTo);
   earliestApprox.setMonth(earliestApprox.getMonth() - 13);
   const starts = validStatements.map((s) => new Date(s.startAt as string).getTime());
-  const earliestStatement = new Date(Math.min(...starts));
+  const earliestStatement = starts.length ? new Date(Math.min(...starts)) : null;
   // Upper bound is the consumption horizon (~7 days ago), NOT the last bill. The
   // Flexible/Agile calc needs only readings + rates, so recent usage past the most
   // recent statement still gets compared (a synthetic trailing period below carries
   // it, with no "actual paid"). Capping at the last statement silently dropped any
   // usage a user had beyond their latest bill.
   const periodTo = dataAvailableTo;
-  const periodFrom = earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
+  const periodFrom =
+    earliestStatement && earliestStatement > earliestApprox ? earliestStatement : earliestApprox;
   onProgress(`Comparison window: ${isoDate(periodFrom)} to ${isoDate(periodTo)}.`, 'ok', 25);
 
   // --- consumption (merged + deduped across serials) ---
@@ -520,6 +545,7 @@ export async function runComparison(
       statementValidation,
       missingEstimate,
       statementsIncomplete,
+      statementAttribution,
       latestStatementEnd,
       readingsBeyondStatements,
       agileSkipReason,

@@ -209,6 +209,7 @@ export function buildImportDiagnostics(
     },
     billingPeriods,
     statementsIncomplete: !!context.statementsIncomplete,
+    ...(context.statementAttribution ? { statementAttribution: context.statementAttribution } : {}),
     statementValidation: context.statementValidation.map((v) => ({
       period: `${fmtDate(v.displayStart)} to ${fmtDate(v.displayEnd)}`,
       billedKwh: v.billedKwh != null ? v.billedKwh.toFixed(2) : 'n/a',

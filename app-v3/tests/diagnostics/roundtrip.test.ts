@@ -134,14 +134,22 @@ describe('diagnostics round-trip (capture -> serialise -> replay)', () => {
       actualTariffCode: TRACKER,
       reason: 'Tracker rates are not modelled.',
     };
+    run.context.statementAttribution = {
+      mode: 'estimate-only-unsafe-multi-mpan',
+      accountsWithMeter: 1,
+      accountsUsedForStatements: 0,
+      unsafeAccountsWithMeter: 1,
+    };
 
     const d1 = buildImportDiagnostics(run, { generatedAt: GEN });
     expect(d1.flexColumnSource).toEqual(run.context.flexColumnSource);
+    expect(d1.statementAttribution).toEqual(run.context.statementAttribution);
     const replayed = replayDiagnostics(JSON.stringify(d1));
     expect(replayed.ok).toBe(true);
     if (!replayed.ok || replayed.kind !== 'import') throw new Error('expected import replay');
 
     expect(replayed.run.context.flexColumnSource).toEqual(run.context.flexColumnSource);
+    expect(replayed.run.context.statementAttribution).toEqual(run.context.statementAttribution);
     expect(computeHeadline(replayed.run).columns.flexLabel).toBe('Flexible proxy (calc.)');
   });
 });

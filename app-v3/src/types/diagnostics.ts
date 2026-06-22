@@ -120,6 +120,12 @@ export interface ImportDiagnostics {
   };
   billingPeriods: DiagBillingPeriod[];
   statementsIncomplete: boolean;
+  statementAttribution?: {
+    mode: 'safe-statements' | 'estimate-only-unsafe-multi-mpan';
+    accountsWithMeter: number;
+    accountsUsedForStatements: number;
+    unsafeAccountsWithMeter: number;
+  };
   statementValidation: DiagStatementValidation[];
   totals: {
     allPeriods: {

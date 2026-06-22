@@ -93,6 +93,12 @@ export interface RunContext {
   statementValidation: StatementValidationEntry[];
   missingEstimate: MissingEstimate;
   statementsIncomplete: boolean;
+  statementAttribution?: {
+    mode: 'safe-statements' | 'estimate-only-unsafe-multi-mpan';
+    accountsWithMeter: number;
+    accountsUsedForStatements: number;
+    unsafeAccountsWithMeter: number;
+  };
   // Honest "your bills end here" signal: the end of the most recent statement in
   // the window, and whether usage readings extend past it. When true, the recent
   // months get a Flexible/Agile estimate but no "actual paid" (no bill covers them).

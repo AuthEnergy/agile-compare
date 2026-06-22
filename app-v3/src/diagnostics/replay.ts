@@ -144,6 +144,18 @@ function parseFlexColumnSource(
   };
 }
 
+function parseStatementAttribution(value: unknown): RunContext['statementAttribution'] {
+  const o = isObj(value) ? value : null;
+  const mode = asStr(o?.['mode']);
+  if (mode !== 'safe-statements' && mode !== 'estimate-only-unsafe-multi-mpan') return undefined;
+  return {
+    mode,
+    accountsWithMeter: asNum(o?.['accountsWithMeter']),
+    accountsUsedForStatements: asNum(o?.['accountsUsedForStatements']),
+    unsafeAccountsWithMeter: asNum(o?.['unsafeAccountsWithMeter']),
+  };
+}
+
 const fail = (reason: ReplayErrorReason, message: string): ReplayFailure => ({
   ok: false,
   reason,
@@ -505,6 +517,7 @@ function reconstruct(
   };
 
   const productsObj = isObj(d['products']) ? d['products'] : {};
+  const statementAttribution = parseStatementAttribution(d['statementAttribution']);
   const detail: RunDetail = {
     readings,
     flexUnitSorted,
@@ -531,6 +544,7 @@ function reconstruct(
     statementValidation,
     missingEstimate,
     statementsIncomplete: !!d['statementsIncomplete'],
+    ...(statementAttribution ? { statementAttribution } : {}),
     gapInfo,
     products: {
       flexProductCode: asStr(productsObj['flexProductCode']),

@@ -174,6 +174,16 @@ export function renderResults(
         };
     host.append(callout(note.title, note.body, 'caution', 'info'));
   }
+  if (run.context.statementAttribution?.mode === 'estimate-only-unsafe-multi-mpan') {
+    host.append(
+      callout(
+        'Bills not attributed safely',
+        'This account has more than one electricity meter, and Octopus statements do not say which MPAN each charge belongs to. We have left out the billed “you paid” total and shown published-rate estimates for this meter only.',
+        'caution',
+        'info',
+      ),
+    );
+  }
   if (run.context.flexNote) {
     host.append(callout('Comparison baseline', run.context.flexNote, 'caution', 'info'));
   }

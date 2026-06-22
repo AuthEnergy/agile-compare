@@ -111,6 +111,8 @@ describe('fetchStatementsForMpan', () => {
     );
     // A-OLD (primary) + A-NEW both list the meter; A-OTHER does not.
     expect(res.accountsWithMeter).toBe(2);
+    expect(res.accountsUsedForStatements).toBe(2);
+    expect(res.unsafeAccountsWithMeter).toBe(0);
     expect(res.statements.map((s) => s.id).sort()).toEqual([1, 2]);
   });
 
@@ -136,6 +138,8 @@ describe('fetchStatementsForMpan', () => {
       acctWith(MPAN),
     );
     expect(res.accountsWithMeter).toBe(1);
+    expect(res.accountsUsedForStatements).toBe(1);
+    expect(res.unsafeAccountsWithMeter).toBe(0);
     expect(res.statements.map((s) => s.id)).toEqual([1]);
   });
 
@@ -182,7 +186,48 @@ describe('fetchStatementsForMpan', () => {
       'A-OLD',
       acctWith(MPAN),
     );
-    expect(res.accountsWithMeter).toBe(1); // A-MULTI is skipped (would mix another meter's bills)
+    expect(res.accountsWithMeter).toBe(2); // A-MULTI lists the MPAN but is unsafe to use
+    expect(res.accountsUsedForStatements).toBe(1);
+    expect(res.unsafeAccountsWithMeter).toBe(1);
     expect(res.statements.map((s) => s.id)).toEqual([1]);
+  });
+
+  it('does not use primary account statements when the primary also bills another meter', async () => {
+    const primary: AccountData = {
+      number: 'A-MULTI',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            { mpan: MPAN, meters: [{ serial_number: 'S1' }], agreements: [] },
+            { mpan: '9999999999999', meters: [{ serial_number: 'S2' }], agreements: [] },
+          ],
+        },
+      ],
+    } as unknown as AccountData;
+    let statementFetches = 0;
+    globalThis.fetch = (async (url: string | URL, opts?: { body?: string }) => {
+      const u = new URL(url.toString());
+      if (u.pathname.includes('/graphql/')) {
+        const body = JSON.parse(opts?.body ?? '{}');
+        const q: string = body.query ?? '';
+        if (q.includes('viewer')) {
+          return jsonResp({ data: { viewer: { accounts: [{ number: 'A-MULTI' }] } } });
+        }
+        if (q.includes('Statements')) {
+          statementFetches++;
+          return jsonResp({ data: { account: { ledgers: [ledger([stmt(1)], false)] } } });
+        }
+      }
+      throw new Error('unhandled ' + u.pathname);
+    }) as unknown as typeof fetch;
+
+    const res = await fetchStatementsForMpan(createClient('k'), 'tok', MPAN, 'A-MULTI', primary);
+
+    expect(statementFetches).toBe(0);
+    expect(res.accountsWithMeter).toBe(1);
+    expect(res.accountsUsedForStatements).toBe(0);
+    expect(res.unsafeAccountsWithMeter).toBe(1);
+    expect(res.statements).toEqual([]);
   });
 });

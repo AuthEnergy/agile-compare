@@ -444,4 +444,42 @@ describe('runExportComparison (end-to-end, mocked fetch)', () => {
     // No standing-charge concept on the export model at all.
     expect(run).not.toHaveProperty('standingChargePence');
   });
+
+  it('uses the in-force export agreement rather than a future open-ended one', async () => {
+    const exportAccountData: AccountData = {
+      number: 'A-X',
+      properties: [
+        {
+          postcode: 'AB1 2CD',
+          electricity_meter_points: [
+            {
+              mpan: '1234567890123',
+              gsp: '_C',
+              is_export: true,
+              meters: [{ serial_number: 'S1' }],
+              agreements: [
+                {
+                  tariff_code: 'E-1R-AGILE-OUTGOING-19-05-13-C',
+                  valid_from: '2025-01-01T00:00:00Z',
+                  valid_to: '2099-01-01T00:00:00Z',
+                },
+                {
+                  tariff_code: 'E-1R-OUTGOING-FIX-12M-19-05-13-C',
+                  valid_from: '2099-01-01T00:00:00Z',
+                  valid_to: null,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const run = await runExportComparison(createClient(input.apiKey), {
+      ...input,
+      accountData: exportAccountData,
+    });
+
+    expect(run.currentAgreement?.tariff_code).toBe('E-1R-AGILE-OUTGOING-19-05-13-C');
+  });
 });

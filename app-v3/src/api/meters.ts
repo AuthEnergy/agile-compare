@@ -1,5 +1,6 @@
 import { fetchAccount } from './account';
 import { OctopusApiError, type OctopusClient } from './client';
+import { findCurrentAgreement } from '../domain/tariff';
 import type { AccountData } from '../types/octopus';
 
 // One selectable meter: an MPAN with its (possibly swapped) serials, flagged
@@ -62,7 +63,7 @@ export function collectMeters(accountData: AccountData): MeterChoice[] {
         !!em.is_export ||
         (agreements.length > 0 &&
           agreements.every((a) => EXPORT_PATTERNS.test(a.tariff_code || '')));
-      const current = agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1];
+      const current = findCurrentAgreement(agreements, new Date());
       meters.push({
         accountNumber,
         mpan: em.mpan ?? '',

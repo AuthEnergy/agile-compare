@@ -8,6 +8,7 @@ import { fetchMergedRateWindows, findProductsByDisplayNameOverlapping } from '..
 import type { OctopusClient } from '../api/client';
 import { calculateExportValue } from '../domain/cost';
 import { detectGaps } from '../domain/gaps';
+import { findCurrentAgreement } from '../domain/tariff';
 import type { ExportRun, ProgressFn } from '../types/result';
 import type { RunInput } from './runComparison';
 
@@ -25,8 +26,7 @@ export async function runExportComparison(
     throw new Error(`Could not determine the region for export MPAN ${input.mpan}.`);
   }
   const agreements = getAgreementsForMpan(accountData, input.mpan);
-  const currentAgreement =
-    agreements.find((a) => !a.valid_to) ?? agreements[agreements.length - 1] ?? null;
+  const currentAgreement = findCurrentAgreement(agreements, new Date());
   const postcodeArea = getPostcodeAreaForMpan(accountData, input.mpan);
   onProgress(`Export meter verified. Region ${regionLetter}.`, 'ok', 10);
 

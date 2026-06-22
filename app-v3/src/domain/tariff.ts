@@ -58,7 +58,7 @@ export function findCurrentAgreement(
     const to = a.valid_to ? new Date(a.valid_to).getTime() : Infinity;
     return from <= ms && to > ms;
   });
-  return active ?? list[list.length - 1] ?? null;
+  return active ?? sorted[0] ?? null;
 }
 
 // Extract the product code from a tariff code.

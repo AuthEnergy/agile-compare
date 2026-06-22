@@ -317,9 +317,7 @@ function trackComparisonFailure(props) {
     error_type: props.errorType,
     http_status: props.httpStatus,
     cors_likely: props.corsLikely,
-    stage: props.stage,
-    progress_last: props.progressLast ?? null,
-    tariff_kind: props.tariffKind ?? null
+    stage: props.stage
   });
 }
 function flexColumnLabel(source) {
@@ -4316,9 +4314,7 @@ class App {
       if (this.state.analyticsConsent) {
         void trackComparisonFailure({
           ...classifyError(err),
-          stage: "auth",
-          progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-          tariffKind: null
+          stage: "auth"
         });
       }
       this.setState({ screen: "connect", error: errorMessage(err) });
@@ -4365,9 +4361,7 @@ class App {
       if (this.state.analyticsConsent) {
         void trackComparisonFailure({
           ...classifyError(err),
-          stage: "fetch",
-          progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-          tariffKind: classifyTariffCode(meter.tariffCode).kind
+          stage: "fetch"
         });
       }
       this.setState({ screen: "connect", error: errorMessage(err) });

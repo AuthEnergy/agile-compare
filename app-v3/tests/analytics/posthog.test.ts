@@ -99,8 +99,6 @@ describe('PostHog direct capture', () => {
       httpStatus: 401,
       corsLikely: false,
       stage: 'auth',
-      progressLast: 'Fetching statements…',
-      tariffKind: 'go',
     });
 
     const body = bodyAt(0);
@@ -110,10 +108,10 @@ describe('PostHog direct capture', () => {
       http_status: 401,
       cors_likely: false,
       stage: 'auth',
-      progress_last: 'Fetching statements…',
-      tariff_kind: 'go',
       distinct_id: expect.any(String),
     });
+    expect(body.properties).not.toHaveProperty('progress_last');
+    expect(body.properties).not.toHaveProperty('tariff_kind');
   });
 
   it('uses one ephemeral distinct id for the current page only', async () => {
@@ -123,13 +121,11 @@ describe('PostHog direct capture', () => {
       httpStatus: null,
       corsLikely: true,
       stage: 'fetch',
-      progressLast: null,
-      tariffKind: null,
     });
 
     expect(bodyAt(0).properties?.['distinct_id']).toBe(bodyAt(1).properties?.['distinct_id']);
-    expect(bodyAt(1).properties?.['progress_last']).toBeNull();
-    expect(bodyAt(1).properties?.['tariff_kind']).toBeNull();
+    expect(bodyAt(1).properties).not.toHaveProperty('progress_last');
+    expect(bodyAt(1).properties).not.toHaveProperty('tariff_kind');
   });
 
   it('does not create PostHog browser storage', async () => {

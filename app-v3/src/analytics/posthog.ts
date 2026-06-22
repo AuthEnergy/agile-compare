@@ -67,11 +67,6 @@ export interface ComparisonFailureProps {
   // Which stage of the live journey failed: 'auth' (account discovery) or
   // 'fetch' (reading meter data + running the comparison).
   stage: 'auth' | 'fetch';
-  // Last progress log entry — shows exactly where in the flow it stopped.
-  // Progress messages are PII-free (no MPANs or account numbers).
-  progressLast?: string | null;
-  // Classified tariff kind (e.g. 'go', 'fixed', 'flexible') of the selected meter.
-  tariffKind?: string | null;
 }
 
 export function trackComparisonFailure(props: ComparisonFailureProps): Promise<void> {
@@ -80,8 +75,6 @@ export function trackComparisonFailure(props: ComparisonFailureProps): Promise<v
     http_status: props.httpStatus,
     cors_likely: props.corsLikely,
     stage: props.stage,
-    progress_last: props.progressLast ?? null,
-    tariff_kind: props.tariffKind ?? null,
   });
 }
 

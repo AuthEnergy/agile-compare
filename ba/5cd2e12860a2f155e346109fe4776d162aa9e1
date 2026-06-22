@@ -1,0 +1,22 @@
+app-v3/tests/analytics/posthog.test.ts
+  s_d0846ef0bc0e61::t_5f873ce65824ed 113-114,127-128
+v3/index.html
+  s_d0846ef0bc0e61::t_6c24d84bbf95a1 4317,4364
+  s_d0846ef0bc0e61::t_aae2699c3126f3 320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ba5cd2e12860a2f155e346109fe4776d162aa9e1",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

@@ -1,0 +1,31 @@
+app-v3/src/flows/runComparison.ts
+  s_d0846ef0bc0e61::t_e6a60b9fa5491c 297,303-306,314-322,326,348
+app-v3/tests/flows/runComparison.test.ts
+  s_d0846ef0bc0e61::t_c6c4bbaa9066b1 308-363
+app-v3/src/diagnostics/replay.ts
+  s_d0846ef0bc0e61::t_4d22120286d70a 103
+app-v3/src/domain/rates.ts
+  s_d0846ef0bc0e61::t_c4ae9900d51fd9 16-17
+app-v3/src/api/products.ts
+  s_d0846ef0bc0e61::t_89e2180f3d8582 4,7-8,10-13,17,20-29,35,37-45,62-73,76-77,89-105,108-112,114
+app-v3/src/types/result.ts
+  s_d0846ef0bc0e61::t_7101717093de9e 72
+app-v3/tests/api/products.test.ts
+  s_d0846ef0bc0e61::t_3e271b7df09ca5 3-7,24-42,68-161
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.9",
+  "base_commit_sha": "ae69bc9f11a53b7a44da8710d24826b3a8d2b880",
+  "prompts": {},
+  "sessions": {
+    "s_d0846ef0bc0e61": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eee99-9f6c-7b42-b3d8-90f7bfaf95c7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

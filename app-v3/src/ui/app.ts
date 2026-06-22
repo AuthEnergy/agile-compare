@@ -18,6 +18,7 @@ import { runComparison, type RunInput } from '../flows/runComparison';
 import { runExportComparison } from '../flows/runExportComparison';
 import { buildExportDiagnostics, buildImportDiagnostics } from '../diagnostics/capture';
 import { captureFailureDiag, type FailureContext } from '../diagnostics/failure';
+import { classifyTariffCode } from '../domain/tariff';
 import type { PiiIdentifiers } from '../domain/redact';
 import type { AnyDiagnostics, DiagnosticsBundle, FailureDiagnostics } from '../types/diagnostics';
 import type { ComparisonRun, ExportRun, ProgressFn } from '../types/result';
@@ -215,7 +216,12 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err);
-      trackComparisonFailure({ ...classifyError(err), stage: 'auth' });
+      trackComparisonFailure({
+        ...classifyError(err),
+        stage: 'auth',
+        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+        tariffKind: null,
+      });
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -260,7 +266,12 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err, meter);
-      trackComparisonFailure({ ...classifyError(err), stage: 'fetch' });
+      trackComparisonFailure({
+        ...classifyError(err),
+        stage: 'fetch',
+        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+        tariffKind: classifyTariffCode(meter.tariffCode).kind,
+      });
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }

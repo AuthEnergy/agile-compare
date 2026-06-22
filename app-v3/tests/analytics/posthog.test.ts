@@ -41,6 +41,8 @@ describe('analytics — when consent has not been given', () => {
       httpStatus: null,
       corsLikely: false,
       stage: 'auth',
+      progressLast: null,
+      tariffKind: null,
     });
     expect(mockCapture).not.toHaveBeenCalled();
   });
@@ -121,25 +123,33 @@ describe('trackComparisonFailure', () => {
       httpStatus: 401,
       corsLikely: false,
       stage: 'auth',
+      progressLast: 'Fetching statements…',
+      tariffKind: 'go',
     });
     expect(mockCapture).toHaveBeenCalledWith('comparison_failed', {
       error_type: 'OctopusApiError',
       http_status: 401,
       cors_likely: false,
       stage: 'auth',
+      progress_last: 'Fetching statements…',
+      tariff_kind: 'go',
     });
   });
 
-  it('accepts "fetch" as a stage value', () => {
+  it('accepts "fetch" as a stage value and passes nulls through', () => {
     trackComparisonFailure({
       errorType: 'TypeError',
       httpStatus: null,
       corsLikely: true,
       stage: 'fetch',
+      progressLast: null,
+      tariffKind: null,
     });
     const call = mockCapture.mock.calls[0];
     assert(call !== undefined);
     const props = call[1] as Record<string, unknown>;
     expect(props['stage']).toBe('fetch');
+    expect(props['progress_last']).toBeNull();
+    expect(props['tariff_kind']).toBeNull();
   });
 });

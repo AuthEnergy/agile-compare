@@ -5819,7 +5819,9 @@ function trackComparisonFailure(props) {
     error_type: props.errorType,
     http_status: props.httpStatus,
     cors_likely: props.corsLikely,
-    stage: props.stage
+    stage: props.stage,
+    progress_last: props.progressLast,
+    tariff_kind: props.tariffKind
   });
 }
 function classifyTariffCode(code) {
@@ -9677,7 +9679,12 @@ class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err);
-      trackComparisonFailure({ ...classifyError(err), stage: "auth" });
+      trackComparisonFailure({
+        ...classifyError(err),
+        stage: "auth",
+        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+        tariffKind: null
+      });
       this.setState({ screen: "connect", error: errorMessage(err) });
     }
   }
@@ -9719,7 +9726,12 @@ class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err, meter);
-      trackComparisonFailure({ ...classifyError(err), stage: "fetch" });
+      trackComparisonFailure({
+        ...classifyError(err),
+        stage: "fetch",
+        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+        tariffKind: classifyTariffCode(meter.tariffCode).kind
+      });
       this.setState({ screen: "connect", error: errorMessage(err) });
     }
   }

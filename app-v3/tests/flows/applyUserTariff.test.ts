@@ -127,4 +127,12 @@ describe('applyUserTariff', () => {
 
     expect(updated.periods.map((p) => p.confident)).toEqual([false, false]);
   });
+
+  it('allows a zero standing charge', () => {
+    const updated = applyUserTariff(run([period()]), 25, 0);
+
+    expect(updated.periods[0]?.flex.energyCostPence).toBe(50);
+    expect(updated.periods[0]?.flex.standingChargePence).toBe(0);
+    expect(updated.periods[0]?.flex.totalPence).toBe(50);
+  });
 });

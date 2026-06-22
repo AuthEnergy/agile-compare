@@ -4,7 +4,6 @@ import { ICONS, LOGO_PATHS } from './icons';
 import { clearApiKey, loadSavedApiKey, saveApiKey } from '../storage/credentials';
 import { loadAnalyticsConsent, saveAnalyticsConsent } from '../storage/analyticsConsent';
 import {
-  initAnalytics,
   trackComparisonSuccess,
   trackComparisonFailure,
   type ComparisonFailureProps,
@@ -147,7 +146,6 @@ export class App {
     // Restore an opt-in saved key so "remember" is a true contract, not a label.
     const savedKey = loadSavedApiKey();
     const analyticsConsent = loadAnalyticsConsent();
-    if (analyticsConsent) initAnalytics();
     this.state = {
       screen: 'connect',
       theme: initialTheme(),
@@ -216,12 +214,14 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err);
-      trackComparisonFailure({
-        ...classifyError(err),
-        stage: 'auth',
-        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-        tariffKind: null,
-      });
+      if (this.state.analyticsConsent) {
+        void trackComparisonFailure({
+          ...classifyError(err),
+          stage: 'auth',
+          progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+          tariffKind: null,
+        });
+      }
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -266,12 +266,14 @@ export class App {
     } catch (err) {
       if (myRun !== this.runSeq) return;
       this.captureFailure(err, meter);
-      trackComparisonFailure({
-        ...classifyError(err),
-        stage: 'fetch',
-        progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
-        tariffKind: classifyTariffCode(meter.tariffCode).kind,
-      });
+      if (this.state.analyticsConsent) {
+        void trackComparisonFailure({
+          ...classifyError(err),
+          stage: 'fetch',
+          progressLast: this.progressLog[this.progressLog.length - 1] ?? null,
+          tariffKind: classifyTariffCode(meter.tariffCode).kind,
+        });
+      }
       this.setState({ screen: 'connect', error: errorMessage(err) });
     }
   }
@@ -291,7 +293,12 @@ export class App {
     } else if (claims?.estimate) {
       pctSaved = claims.estimate.cheaper === 'Agile' ? claims.estimate.pct : -claims.estimate.pct;
     }
-    trackComparisonSuccess({ outwardCode, pctSaved, kwhTotal: headline.summaryKwh, periodDays });
+    void trackComparisonSuccess({
+      outwardCode,
+      pctSaved,
+      kwhTotal: headline.summaryKwh,
+      periodDays,
+    });
   }
 
   // Build a failure diagnostic (v2 parity) the user can download/send from the
@@ -805,7 +812,6 @@ export class App {
       checked: this.state.analyticsConsent,
       onChange: (checked) => {
         saveAnalyticsConsent(checked);
-        if (checked) initAnalytics();
         this.setState({ analyticsConsent: checked });
       },
     });

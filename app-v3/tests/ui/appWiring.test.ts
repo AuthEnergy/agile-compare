@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
 // Mock the network-touching modules so this exercises only the App's live-journey
 // WIRING (connect → discover → meter picker → fetch → results). The flows
@@ -15,11 +15,16 @@ vi.mock('../../src/api/client', () => ({
 vi.mock('../../src/api/meters', () => ({ discoverMeters: vi.fn() }));
 vi.mock('../../src/flows/runComparison', () => ({ runComparison: vi.fn() }));
 vi.mock('../../src/flows/runExportComparison', () => ({ runExportComparison: vi.fn() }));
+vi.mock('../../src/analytics/posthog', () => ({
+  trackComparisonSuccess: vi.fn(),
+  trackComparisonFailure: vi.fn(),
+}));
 
 import { App, type UiActions } from '../../src/ui/app';
 import { discoverMeters, type MeterChoice } from '../../src/api/meters';
 import { runComparison } from '../../src/flows/runComparison';
 import { runExportComparison } from '../../src/flows/runExportComparison';
+import { trackComparisonFailure, trackComparisonSuccess } from '../../src/analytics/posthog';
 import { buildSampleRun } from '../../src/data/sample';
 import type { ExportRun } from '../../src/types/result';
 import type { AccountData } from '../../src/types/octopus';
@@ -47,6 +52,14 @@ function clickButton(root: HTMLElement, label: string): void {
   btn.click();
 }
 
+function clickSwitch(root: HTMLElement, label: string): void {
+  const btn = [...root.querySelectorAll('button[role="switch"]')].find((b) =>
+    b.textContent?.includes(label),
+  );
+  if (!btn) throw new Error(`switch "${label}" not found`);
+  (btn as HTMLButtonElement).click();
+}
+
 const exportRun: ExportRun = {
   regionLetter: 'C',
   postcodeArea: 'BS1',
@@ -62,6 +75,12 @@ const exportRun: ExportRun = {
 };
 
 describe('App live-journey wiring', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    document.body.innerHTML = '';
+  });
+
   it('connect → meter picker → fetch → import results', async () => {
     vi.mocked(discoverMeters).mockResolvedValue([meter({})]);
     vi.mocked(runComparison).mockResolvedValue(buildSampleRun());
@@ -77,6 +96,7 @@ describe('App live-journey wiring', () => {
     clickButton(root, 'Fetch this meter');
     await vi.waitFor(() => expect(root.textContent).toContain('Your comparison'));
     expect(vi.mocked(runComparison)).toHaveBeenCalledOnce();
+    expect(vi.mocked(trackComparisonSuccess)).toHaveBeenCalledOnce();
   });
 
   it('routes an export meter to the export results screen', async () => {
@@ -105,6 +125,7 @@ describe('App live-journey wiring', () => {
     await app.runLive('sk_bad');
     expect(root.textContent).toContain("That didn't work");
     expect(root.textContent).toContain('No accounts found');
+    expect(vi.mocked(trackComparisonFailure)).toHaveBeenCalledOnce();
 
     // v2 parity: a failure diagnostic is offered for download/send.
     clickButton(root, 'Download diagnostics');
@@ -124,5 +145,43 @@ describe('App live-journey wiring', () => {
 
     expect(root.textContent).not.toContain('Which meter?');
     expect(root.textContent).toContain('would have cost'); // back on connect
+  });
+
+  it('does not send analytics on first load', () => {
+    const root = document.createElement('div');
+    const app = new App(root, noActions);
+    app.mount();
+
+    expect(vi.mocked(trackComparisonSuccess)).not.toHaveBeenCalled();
+    expect(vi.mocked(trackComparisonFailure)).not.toHaveBeenCalled();
+  });
+
+  it('does not send failure analytics after the user unticks sharing', async () => {
+    vi.mocked(discoverMeters).mockRejectedValue(new Error('No accounts found for this API key.'));
+
+    const root = document.createElement('div');
+    const app = new App(root, noActions);
+    app.mount();
+    clickSwitch(root, 'Share anonymous results with Auth Energy');
+
+    await app.runLive('sk_bad');
+
+    expect(vi.mocked(trackComparisonFailure)).not.toHaveBeenCalled();
+  });
+
+  it('does not send success analytics when the saved preference is off', async () => {
+    localStorage.setItem('otc-analytics-consent', 'false');
+    vi.mocked(discoverMeters).mockResolvedValue([meter({})]);
+    vi.mocked(runComparison).mockResolvedValue(buildSampleRun());
+
+    const root = document.createElement('div');
+    const app = new App(root, noActions);
+    app.mount();
+
+    await app.runLive('sk_test_key');
+    clickButton(root, 'Fetch this meter');
+    await vi.waitFor(() => expect(root.textContent).toContain('Your comparison'));
+
+    expect(vi.mocked(trackComparisonSuccess)).not.toHaveBeenCalled();
   });
 });

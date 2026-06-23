@@ -3389,7 +3389,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
           })
         ]),
         el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" }, [
-          button("Edit tariff", { variant: "secondary", onClick: cb.onEditTariff }),
+          button("Other tariffs", { variant: "secondary", onClick: cb.onEditTariff }),
           cb.onResetTariff ? button("Reset to API rates", { variant: "ghost", onClick: cb.onResetTariff }) : null
         ])
       ]
@@ -3685,7 +3685,7 @@ function makeManualFields(prefill) {
 }
 function buildPickerModal(options, close) {
   const { flexLabel, prefillLeft, prefillRight, leftSelection, rightSelection, onApply } = options;
-  const leftSel = makeSelect(KEEP_FLEX, `Account Tariff (${flexLabel})`);
+  const leftSel = makeSelect(KEEP_FLEX, `Contracted Tariff (${flexLabel})`);
   const leftManual = makeManualFields(prefillLeft);
   const leftLoadingOpt = document.createElement("option");
   leftLoadingOpt.disabled = true;

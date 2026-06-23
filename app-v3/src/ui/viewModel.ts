@@ -1,6 +1,5 @@
 import type { Headline } from '../domain/headline';
 import { calculatedBaselineLabel, flexColumnLabel } from '../domain/flexSource';
-import { classifyTariffCode } from '../domain/tariff';
 import type { ComparisonRun, PeriodComparison, StatementValidationEntry } from '../types/result';
 import type { Tone } from './components';
 import { fmtDateShort, fmtKwh, fmtMoney } from './format';
@@ -153,19 +152,23 @@ function classifyPeriod(
   let reason: string;
   let includedInHeadline: 'yes' | 'caution' | 'no';
 
+  const toProductCode = (tariffCode: string) =>
+    /^E-\d+R-(.+)-[A-P]$/i.exec(tariffCode)?.[1] ?? tariffCode;
+
   if (mixed) {
     status = 'mixed';
     tag = 'Mixed';
     tagTone = 'caution';
-    reason = 'The switch landed mid-statement, mixing two tariffs.';
+    const codes = p.tariffCodes.map(toProductCode).join(' + ');
+    reason = `Mixed tariffs in one statement period: ${codes}.`;
     includedInHeadline = 'no';
   } else if (preSwitch) {
     status = 'preSwitch';
     tag = 'Pre-tariff';
     tagTone = 'caution';
-    const oldLabel = p.actualTariffCode ? classifyTariffCode(p.actualTariffCode).label : null;
-    if (oldLabel) {
-      reason = `Contracted: ${oldLabel}. Calculated using: Flexible Octopus — ${oldLabel} rates aren't available from the API.`;
+    const oldCode = p.actualTariffCode ? toProductCode(p.actualTariffCode) : null;
+    if (oldCode) {
+      reason = `Contracted: ${oldCode}. Calculated using: Flexible Octopus — ${oldCode} rates aren't available from the API.`;
     } else if (allPredate) {
       reason = 'From before you switched tariff — the figures above are based on this usage.';
     } else {
@@ -233,7 +236,7 @@ function classifyPeriod(
       readingCoveragePct < 100
         ? 'Some half-hour readings are missing.'
         : unmatchedRates
-          ? 'Rate data does not fully cover this period.'
+          ? 'Tariff data does not fully cover this period.'
           : 'Some half-hour readings are missing.';
     includedInHeadline = 'no';
   }
@@ -251,7 +254,7 @@ function classifyPeriod(
   const ratesCoverageNote = usingProxy
     ? `Flexible proxy rates used — ${flexSource.actualTariffLabel} rates aren't available from the API`
     : ratesCoverage === 'full'
-      ? 'Rate data fully covers this period'
+      ? 'Tariff data fully covers this period'
       : `${totalUnmatched} slot${totalUnmatched !== 1 ? 's' : ''} have no matching rate`;
 
   // In the all-pre-switch case the figures sum over EVERY period (pre-switch AND

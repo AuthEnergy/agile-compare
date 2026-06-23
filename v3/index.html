@@ -1728,7 +1728,7 @@ async function runComparison(client, input, onProgress = () => {
     const testData = testPage.results ?? [];
     if (testData.length === 0) {
       throw new Error(
-        `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`
+        `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data is nolonger/not yet available.`
       );
     }
     const earliest = testData[0]?.interval_start ?? "";
@@ -2837,7 +2837,7 @@ function renderPeriodRow(vm, run, columns) {
     "activity",
     covFg,
     covBg,
-    `${vm.readingCoveragePct}% of expected half-hour slots have readings`
+    `${vm.readingCoveragePct}% of expected half-hour meter data have readings`
   );
   const rateFg = vm.ratesCoverage === "full" ? "var(--status-saving)" : vm.ratesCoverage === "partial" ? "var(--status-caution)" : "var(--status-risk)";
   const rateBg = vm.ratesCoverage === "full" ? "var(--green-tint)" : vm.ratesCoverage === "partial" ? "var(--amber-tint)" : "var(--red-tint)";
@@ -3195,19 +3195,21 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
   let tagTone;
   let reason;
   let includedInHeadline;
+  const toProductCode = (tariffCode) => /^E-\d+R-(.+)-[A-P]$/i.exec(tariffCode)?.[1] ?? tariffCode;
   if (mixed) {
     status = "mixed";
     tag = "Mixed";
     tagTone = "caution";
-    reason = "The switch landed mid-statement, mixing two tariffs.";
+    const codes = p.tariffCodes.map(toProductCode).join(" + ");
+    reason = `Mixed tariffs in one statement period: ${codes}.`;
     includedInHeadline = "no";
   } else if (preSwitch) {
     status = "preSwitch";
     tag = "Pre-tariff";
     tagTone = "caution";
-    const oldLabel = p.actualTariffCode ? classifyTariffCode(p.actualTariffCode).label : null;
-    if (oldLabel) {
-      reason = `Contracted: ${oldLabel}. Calculated using: Flexible Octopus — ${oldLabel} rates aren't available from the API.`;
+    const oldCode = p.actualTariffCode ? toProductCode(p.actualTariffCode) : null;
+    if (oldCode) {
+      reason = `Contracted: ${oldCode}. Calculated using: Flexible Octopus — ${oldCode} rates aren't available from the API.`;
     } else if (allPredate) {
       reason = "From before you switched tariff — the figures above are based on this usage.";
     } else {
@@ -3261,14 +3263,14 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     tag = "Incomplete";
     tagTone = "caution";
     const unmatchedRates = p.flex.unmatchedReadings > 0 || p.flex.unmatchedStandingDays > 0 || (p.agile?.unmatchedReadings ?? 0) > 0 || (p.agile?.unmatchedStandingDays ?? 0) > 0;
-    reason = readingCoveragePct < 100 ? "Some half-hour readings are missing." : unmatchedRates ? "Rate data does not fully cover this period." : "Some half-hour readings are missing.";
+    reason = readingCoveragePct < 100 ? "Some half-hour readings are missing." : unmatchedRates ? "Tariff data does not fully cover this period." : "Some half-hour readings are missing.";
     includedInHeadline = "no";
   }
   const flexUnmatched = p.flex.unmatchedReadings + p.flex.unmatchedStandingDays;
   const agileUnmatched = (p.agile?.unmatchedReadings ?? 0) + (p.agile?.unmatchedStandingDays ?? 0);
   const totalUnmatched = flexUnmatched + agileUnmatched;
   const ratesCoverage = usingProxy ? "partial" : totalUnmatched === 0 ? "full" : flexUnmatched > expectedSlots * 0.5 ? "missing" : "partial";
-  const ratesCoverageNote = usingProxy ? `Flexible proxy rates used — ${flexSource.actualTariffLabel} rates aren't available from the API` : ratesCoverage === "full" ? "Rate data fully covers this period" : `${totalUnmatched} slot${totalUnmatched !== 1 ? "s" : ""} have no matching rate`;
+  const ratesCoverageNote = usingProxy ? `Flexible proxy rates used — ${flexSource.actualTariffLabel} rates aren't available from the API` : ratesCoverage === "full" ? "Tariff data fully covers this period" : `${totalUnmatched} slot${totalUnmatched !== 1 ? "s" : ""} have no matching rate`;
   const excluded = !allPredate && (status === "preSwitch" || status === "mixed");
   return {
     period: p,
@@ -3521,7 +3523,8 @@ function renderResults(host, run, headline, replayMeta, cb) {
     };
     host.append(callout(note.title, note.body, "caution", "info"));
   }
-  if (run.context.statementAttribution?.mode === "estimate-only-unsafe-multi-mpan") {
+  const noneIsBilled = run.context.readingsBeyondStatements && !run.context.latestStatementEnd;
+  if (!noneIsBilled && run.context.statementAttribution?.mode === "estimate-only-unsafe-multi-mpan") {
     host.append(
       callout(
         "Bills not attributed safely",
@@ -5435,7 +5438,7 @@ class App {
           card,
           callout(
             "Your data never leaves your device",
-            "API Key is used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only.",
+            'API Key is used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only. Turn off "Share anonymous results" if required.',
             "support",
             "lock"
           ),

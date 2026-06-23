@@ -230,7 +230,7 @@ describe('computeResultsViewModel', () => {
     const row = must(vm.periods[0], 'p0');
     expect(row.status).toBe('preSwitch');
     expect(row.kwhText).not.toBe('excl.');
-    expect(row.reason).toContain('Contracted: Fixed');
+    expect(row.reason).toContain('Contracted: FIX-12M-23');
     expect(row.reason).toContain('Calculated using: Flexible Octopus');
     expect(row.reason).toContain("aren't available from the API");
     expect(row.includedInHeadline).toBe('caution');

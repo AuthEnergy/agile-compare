@@ -347,7 +347,7 @@ export function renderPeriodRow(
     'activity',
     covFg,
     covBg,
-    `${vm.readingCoveragePct}% of expected half-hour slots have readings`,
+    `${vm.readingCoveragePct}% of expected half-hour meter data have readings`,
   );
 
   const rateFg =

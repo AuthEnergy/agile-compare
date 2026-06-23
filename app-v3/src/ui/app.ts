@@ -947,7 +947,7 @@ export class App {
           card,
           callout(
             'Your data never leaves your device',
-            'API Key is used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only.',
+            'API Key is used once to read your data directly from Octopus to your device. Remembering it is optional and stays in this browser only. Turn off "Share anonymous results" if required.',
             'support',
             'lock',
           ),

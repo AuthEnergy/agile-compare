@@ -154,7 +154,7 @@ export async function runComparison(
     const testData = testPage.results ?? [];
     if (testData.length === 0) {
       throw new Error(
-        `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data may not have started flowing yet.`,
+        `No half-hourly consumption data found for MPAN ${input.mpan}. This meter may not be a smart meter, or data is nolonger/not yet available.`,
       );
     }
     const earliest = testData[0]?.interval_start ?? '';

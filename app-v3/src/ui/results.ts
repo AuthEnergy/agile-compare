@@ -189,7 +189,11 @@ export function renderResults(
         };
     host.append(callout(note.title, note.body, 'caution', 'info'));
   }
-  if (run.context.statementAttribution?.mode === 'estimate-only-unsafe-multi-mpan') {
+  const noneIsBilled = run.context.readingsBeyondStatements && !run.context.latestStatementEnd;
+  if (
+    !noneIsBilled &&
+    run.context.statementAttribution?.mode === 'estimate-only-unsafe-multi-mpan'
+  ) {
     host.append(
       callout(
         'Bills not attributed safely',

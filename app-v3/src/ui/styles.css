@@ -1010,6 +1010,25 @@ button {
   color: var(--text-muted);
 }
 
+/* Tooltip — singleton <div class="app-tooltip"> appended to <body> by tooltip.ts,
+   positioned with fixed so it escapes any overflow:hidden container. */
+.app-tooltip {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  line-height: 1.4;
+  max-width: 220px;
+  word-break: break-word;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
 @media (max-width: 640px) {
   .slot-grid-head,
   .slot-row {

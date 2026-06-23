@@ -263,12 +263,13 @@ export function computeHeadline(run: ComparisonRun): Headline {
     flexSource.kind === 'user-override';
   const columns: HeadlineColumns = {
     flexLabel: flexColumnLabel(flexSource),
-    agileLabel: 'Agile',
+    agileLabel: context.agileColumnLabel ?? 'Agile',
     yoursColumn: onAgile ? 'agile' : flexIsYours ? 'flex' : null,
   };
   const compareFlexible = onAgile && previousTariffOnly === null;
   const altTotal = compareFlexible ? summaryFlex : summaryAgile;
-  const altLabel = compareFlexible ? 'Flexible' : 'Agile';
+  const defaultAltLabel = compareFlexible ? 'Flexible' : 'Agile';
+  const altLabel = context.agileColumnLabel ?? defaultAltLabel;
   const currentCalc = onAgile ? summaryAgile : summaryFlex;
 
   let verdict: HeadlineVerdict | null = null;

@@ -23,7 +23,8 @@ import type { ComparisonRun, ExportRun, ProgressFn } from '../types/result';
 import { renderResults, renderResultsEmpty } from './results';
 import { computeShareClaims } from './share';
 import { openTariffOverrideModal } from './tariffOverrideModal';
-import { applyUserTariff } from '../flows/applyUserTariff';
+import { applyTariffComparison, type TariffColumn } from '../flows/applyTariffComparison';
+import { discoverConsumerTariffNames, fetchTariffRatesByName } from '../api/products';
 import { renderExportResults } from './exportResults';
 import { renderTiming } from './timing';
 import { renderFooter } from './footer';
@@ -111,7 +112,14 @@ export class App {
   private screenRenderers = new Map<Screen, (host: HTMLElement) => void>();
   private currentRun: ComparisonRun | null = null;
   private originalRun: ComparisonRun | null = null;
-  private userTariffOverride: { unitRate: number; standingCharge: number } | null = null;
+  private columnOverride: {
+    left?:
+      | { kind: 'named'; name: string }
+      | { kind: 'manual'; unitRate: number; standingCharge: number };
+    right?:
+      | { kind: 'named'; name: string }
+      | { kind: 'manual'; unitRate: number; standingCharge: number };
+  } | null = null;
   private currentExport: ExportRun | null = null;
   private replayMeta: string | null = null;
   private liveClient: OctopusClient | null = null;
@@ -175,7 +183,7 @@ export class App {
     this.currentExport = null;
     this.currentMeter = null;
     this.replayMeta = replayMeta;
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.setState({ screen: 'results', statusMessage: null, error: null });
   }
 
@@ -391,26 +399,71 @@ export class App {
     this.currentMeter = null;
     this.failureDiag = null;
     this.replayMeta = null;
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.setState({ screen: 'connect', statusMessage: null, error: null });
   }
 
   private openTariffOverrideModal(): void {
     const base = this.originalRun ?? this.currentRun;
     if (!base) return;
-    openTariffOverrideModal(
-      this.userTariffOverride?.unitRate ?? null,
-      this.userTariffOverride?.standingCharge ?? null,
-      (unitRate, standingCharge) => {
-        this.userTariffOverride = { unitRate, standingCharge };
-        this.currentRun = applyUserTariff(base, unitRate, standingCharge);
+    const { regionLetter, periodFrom, periodTo, flexColumnSource } = base.context;
+    const client = this.liveClient;
+
+    const prev = this.columnOverride;
+    const prefillLeft =
+      prev?.left?.kind === 'manual'
+        ? { unitRate: prev.left.unitRate, standingCharge: prev.left.standingCharge }
+        : null;
+    const prefillRight =
+      prev?.right?.kind === 'manual'
+        ? { unitRate: prev.right.unitRate, standingCharge: prev.right.standingCharge }
+        : null;
+    const leftSelection = prev?.left?.kind === 'named' ? prev.left.name : null;
+    const rightSelection = prev?.right?.kind === 'named' ? prev.right.name : null;
+
+    openTariffOverrideModal({
+      flexLabel: flexColumnSource.label,
+      prefillLeft,
+      prefillRight,
+      leftSelection,
+      rightSelection,
+      loadTariffNames: client
+        ? () => discoverConsumerTariffNames(client, periodFrom, periodTo)
+        : null,
+      fetchRatesByName: client
+        ? (name) => fetchTariffRatesByName(client, name, regionLetter, periodFrom, periodTo)
+        : null,
+      onApply: (flexCol: TariffColumn | null, agileCol: TariffColumn | null) => {
+        const override: NonNullable<typeof this.columnOverride> = {};
+        if (flexCol) {
+          override.left =
+            flexCol.label === 'User tariff'
+              ? {
+                  kind: 'manual',
+                  unitRate: flexCol.unitWindows[0]?.value ?? 0,
+                  standingCharge: flexCol.standingWindows[0]?.value ?? 0,
+                }
+              : { kind: 'named', name: flexCol.label };
+        }
+        if (agileCol) {
+          override.right =
+            agileCol.label === 'User tariff'
+              ? {
+                  kind: 'manual',
+                  unitRate: agileCol.unitWindows[0]?.value ?? 0,
+                  standingCharge: agileCol.standingWindows[0]?.value ?? 0,
+                }
+              : { kind: 'named', name: agileCol.label };
+        }
+        this.columnOverride = Object.keys(override).length ? override : null;
+        this.currentRun = applyTariffComparison(base, flexCol, agileCol);
         this.setState({ screen: 'results' });
       },
-    );
+    });
   }
 
   private resetTariff(): void {
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.currentRun = this.originalRun;
     this.setState({ screen: 'results' });
   }
@@ -421,7 +474,7 @@ export class App {
       onReset: () => this.reset(),
       onDiagnostics: () => this.openDiagnostics(),
       onEditTariff: () => this.openTariffOverrideModal(),
-      onResetTariff: this.userTariffOverride ? () => this.resetTariff() : null,
+      onResetTariff: this.currentRun?.context.tariffOverride ? () => this.resetTariff() : null,
     };
   }
 

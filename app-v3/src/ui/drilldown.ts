@@ -310,9 +310,59 @@ export function renderPeriodRow(
   columns: HeadlineColumns,
 ): HTMLElement {
   const ti = TAG_ICON[vm.status] ?? FALLBACK_TAG;
-  const tag = el('span', { class: 'row-tag', style: `background:${ti.bg};color:${ti.fg}` }, [
-    icon(ICONS[ti.name], 15, 2.2),
-  ]);
+
+  // Small icon chip for the meta strip — coloured background, tooltip on hover.
+  function metaChip(
+    iconName: keyof typeof ICONS,
+    fg: string,
+    bg: string,
+    tooltip: string,
+  ): HTMLElement {
+    return el(
+      'span',
+      {
+        style: `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:${bg};color:${fg};cursor:help;flex-shrink:0`,
+        dataset: { tooltip },
+      },
+      [icon(ICONS[iconName], 12, 2)],
+    );
+  }
+
+  const statusChip = metaChip(ti.name, ti.fg, ti.bg, `${vm.tag}: ${vm.reason}`);
+
+  const covFg =
+    vm.readingCoveragePct >= 95
+      ? 'var(--status-saving)'
+      : vm.readingCoveragePct >= 75
+        ? 'var(--status-caution)'
+        : 'var(--status-risk)';
+  const covBg =
+    vm.readingCoveragePct >= 95
+      ? 'var(--green-tint)'
+      : vm.readingCoveragePct >= 75
+        ? 'var(--amber-tint)'
+        : 'var(--red-tint)';
+  const coverageChip = metaChip(
+    'activity',
+    covFg,
+    covBg,
+    `${vm.readingCoveragePct}% of expected half-hour slots have readings`,
+  );
+
+  const rateFg =
+    vm.ratesCoverage === 'full'
+      ? 'var(--status-saving)'
+      : vm.ratesCoverage === 'partial'
+        ? 'var(--status-caution)'
+        : 'var(--status-risk)';
+  const rateBg =
+    vm.ratesCoverage === 'full'
+      ? 'var(--green-tint)'
+      : vm.ratesCoverage === 'partial'
+        ? 'var(--amber-tint)'
+        : 'var(--red-tint)';
+  const rateChip = metaChip('tag', rateFg, rateBg, vm.ratesCoverageNote);
+
   const chevron = el('span', { class: 'chevron', style: vm.expandable ? '' : 'opacity:0.25' }, [
     icon(ICONS.chevronRight, 17),
   ]);
@@ -323,29 +373,22 @@ export function renderPeriodRow(
       style: vm.expandable ? 'cursor:pointer' : 'cursor:default',
     },
     [
-      tag,
       el('div', { class: 'row-main' }, [
+        // Title row: month/year • badge • kWh
         el('div', { style: 'display:flex;align-items:center;gap:8px;flex-wrap:wrap' }, [
           el('span', { class: 'row-title', text: vm.title }),
           badge(vm.tag, vm.tagTone as Tone),
-        ]),
-        el('span', { class: 'row-sub' }, [
           el('span', {
-            style: `font-weight:600;margin-right:3px;color:${
-              vm.includedInHeadline === 'yes'
-                ? 'var(--status-saving)'
-                : vm.includedInHeadline === 'caution'
-                  ? 'var(--status-caution)'
-                  : 'var(--status-risk)'
-            }`,
-            text:
-              vm.includedInHeadline === 'yes'
-                ? '✓'
-                : vm.includedInHeadline === 'caution'
-                  ? '⚠'
-                  : '✗',
+            class: 'mono',
+            style: 'font-size:var(--text-caption);color:var(--text-muted)',
+            text: vm.kwhText,
           }),
-          vm.reason,
+        ]),
+        // Icon strip: status • reading coverage • rate coverage
+        el('div', { style: 'display:flex;align-items:center;gap:5px;margin-top:5px' }, [
+          statusChip,
+          coverageChip,
+          rateChip,
         ]),
       ]),
       el(
@@ -368,30 +411,6 @@ export function renderPeriodRow(
               `${vm.flexLabel} ${vm.flexText}` +
               (vm.flexAvgPence !== null ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)` : ''),
           }),
-          el(
-            'span',
-            {
-              class: 'mono',
-              style:
-                'font-size:var(--text-caption);color:var(--text-muted);opacity:0.65;display:flex;align-items:center;gap:5px',
-            },
-            [
-              vm.kwhText,
-              el(
-                'span',
-                {
-                  style: `display:inline-flex;align-items:center;gap:2px;color:${
-                    vm.readingCoveragePct >= 95
-                      ? 'var(--text-muted)'
-                      : vm.readingCoveragePct >= 75
-                        ? 'var(--status-caution)'
-                        : 'var(--status-risk)'
-                  }`,
-                },
-                [`${vm.readingCoveragePct}%`, icon(ICONS.activity, 10)],
-              ),
-            ],
-          ),
         ],
       ),
       chevron,

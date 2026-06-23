@@ -90,7 +90,8 @@ const ICONS = {
   arrowUpRight: '<path d="M7 7h10v10"/><path d="M7 17 17 7"/>',
   home: '<path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   upload: '<path d="M12 2v8"/><path d="m16 6-4-4-4 4"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
-  activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>'
+  activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  tag: '<path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>'
 };
 const LOGO_PATHS = '<path d="M 5.523 7.921 C 5.523 3.546 9.084 0 13.477 0 C 17.869 0 21.43 3.546 21.43 7.921 C 21.43 12.296 17.869 15.842 13.477 15.842 C 9.084 15.842 5.523 12.296 5.523 7.921 Z"/><path d="M 26.97 10.52 C 26.97 28.981 20.927 43.969 13.485 43.969 C 6.042 43.969 0 28.981 0 10.52 C 0 14.179 3.021 17.148 6.743 17.148 C 10.464 17.148 13.485 14.179 13.485 10.52 C 13.485 14.179 16.506 17.148 20.227 17.148 C 23.948 17.148 26.97 14.179 26.97 10.52 Z M 12.614 26.835 L 12.614 39.882 C 12.614 39.937 12.659 39.982 12.714 39.982 L 14.255 39.982 C 14.311 39.982 14.356 39.937 14.356 39.882 L 14.356 26.835 C 16.492 26.455 18.109 24.711 18.109 22.618 C 18.109 20.248 16.037 18.324 13.485 18.324 C 10.933 18.324 8.861 20.248 8.861 22.618 C 8.861 24.711 10.477 26.455 12.614 26.835 Z M 13.485 20.421 C 13.023 20.421 12.649 20.073 12.649 19.644 C 12.649 19.216 13.023 18.868 13.485 18.868 C 13.946 18.868 14.321 19.216 14.321 19.644 C 14.321 20.073 13.946 20.421 13.485 20.421 Z M 10.056 38.922 L 12.345 38.922 L 12.345 38.07 L 10.056 38.07 C 9.904 38.07 9.782 38.193 9.782 38.344 L 9.782 38.649 C 9.782 38.8 9.904 38.922 10.056 38.922 Z M 10.888 37.828 L 12.345 37.828 L 12.345 36.976 L 10.888 36.976 C 10.815 36.976 10.745 37.004 10.694 37.056 C 10.642 37.107 10.613 37.177 10.613 37.25 L 10.613 37.555 C 10.613 37.627 10.642 37.697 10.694 37.748 C 10.745 37.799 10.815 37.828 10.888 37.828 Z M 10.056 36.734 L 12.345 36.734 L 12.345 35.881 L 10.056 35.881 C 9.904 35.881 9.782 36.004 9.782 36.155 L 9.782 36.46 C 9.782 36.612 9.904 36.734 10.056 36.734 Z"/>';
 const SEMANTIC = {
@@ -339,7 +340,7 @@ function calculatedBaselineLabel(source) {
     case "flexible-proxy":
       return "Flexible proxy (calc.)";
     case "user-override":
-      return "User tariff (calc.)";
+      return `${source.label} (calc.)`;
     case "flexible-alternative":
       return "Flexible (calc.)";
   }
@@ -517,12 +518,13 @@ function computeHeadline(run) {
   const flexIsYours = flexSource.kind === "flexible-current" || flexSource.kind === "current-tariff-rates" || flexSource.kind === "user-override";
   const columns = {
     flexLabel: flexColumnLabel(flexSource),
-    agileLabel: "Agile",
+    agileLabel: context.agileColumnLabel ?? "Agile",
     yoursColumn: onAgile ? "agile" : flexIsYours ? "flex" : null
   };
   const compareFlexible = onAgile && previousTariffOnly === null;
   const altTotal = compareFlexible ? summaryFlex : summaryAgile;
-  const altLabel = compareFlexible ? "Flexible" : "Agile";
+  const defaultAltLabel = compareFlexible ? "Flexible" : "Agile";
+  const altLabel = context.agileColumnLabel ?? defaultAltLabel;
   const currentCalc = onAgile ? summaryAgile : summaryFlex;
   let verdict = null;
   if (trustworthy && hasActual && altTotal !== null) {
@@ -1138,6 +1140,124 @@ async function fetchRateWindows(client, productCode, tariffCode, kind, periodFro
     validTo: r.valid_to ? new Date(r.valid_to) : null,
     value: r.value_inc_vat
   }));
+}
+async function discoverConsumerTariffNames(client, periodFrom, periodTo) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const at of [periodFrom, periodTo, null]) {
+    const params = { brand: "OCTOPUS_ENERGY" };
+    if (at) params["available_at"] = at.toISOString();
+    let results;
+    try {
+      results = await client.restGetAllPages("/products/", params);
+    } catch {
+      continue;
+    }
+    for (const p of results) {
+      if (p.is_business || p.is_prepay || !p.display_name) continue;
+      const nameLower = p.display_name.toLowerCase();
+      if (nameLower.includes("agile")) continue;
+      if (nameLower.includes("outgoing") || nameLower.includes("export")) continue;
+      seen.add(p.display_name);
+    }
+  }
+  return [...seen].sort();
+}
+async function findProductVersionsByDisplayName(client, displayName, periodFrom, periodTo) {
+  const samples = [];
+  const stepMs = 45 * 24 * 60 * 60 * 1e3;
+  for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) samples.push(new Date(t));
+  samples.push(periodTo);
+  samples.push(null);
+  const byCode = /* @__PURE__ */ new Map();
+  const probe = async (at) => {
+    const params = { brand: "OCTOPUS_ENERGY" };
+    if (at) params["available_at"] = at.toISOString();
+    let results;
+    try {
+      results = await client.restGetAllPages("/products/", params);
+    } catch {
+      return;
+    }
+    for (const p of results) {
+      if (p.display_name === displayName && !p.is_business && !p.is_prepay && !byCode.has(p.code)) {
+        byCode.set(p.code, {
+          code: p.code,
+          available_from: p.available_from ?? null,
+          available_to: p.available_to ?? null
+        });
+      }
+    }
+  };
+  for (const at of samples) await probe(at);
+  const fromMs = periodFrom.getTime();
+  const toMs = periodTo.getTime();
+  const dayMs = 24 * 60 * 60 * 1e3;
+  const boundaries = /* @__PURE__ */ new Set();
+  for (const p of [...byCode.values()]) {
+    for (const edge of [p.available_from, p.available_to]) {
+      if (!edge) continue;
+      const ms = new Date(edge).getTime();
+      for (const side of [-dayMs, dayMs]) {
+        const t = ms + side;
+        if (t > fromMs && t < toMs) boundaries.add(Math.floor(t / dayMs) * dayMs);
+      }
+    }
+  }
+  for (const t of boundaries) await probe(new Date(t));
+  const products = [...byCode.values()];
+  const overlapping = products.filter((p) => {
+    const af = p.available_from ? new Date(p.available_from).getTime() : -Infinity;
+    const at = p.available_to ? new Date(p.available_to).getTime() : Infinity;
+    return af < periodTo.getTime() && at > periodFrom.getTime();
+  });
+  const chosen = overlapping.length ? overlapping : products;
+  chosen.sort(
+    (a, b) => new Date(a.available_from ?? 0).getTime() - new Date(b.available_from ?? 0).getTime()
+  );
+  return chosen;
+}
+async function fetchTariffRatesByName(client, displayName, regionLetter, periodFrom, periodTo) {
+  const products = await findProductVersionsByDisplayName(
+    client,
+    displayName,
+    periodFrom,
+    periodTo
+  );
+  if (products.length === 0) return null;
+  const [dayMerged, standingMerged] = await Promise.all([
+    fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      "standard-unit-rates",
+      periodFrom,
+      periodTo
+    ),
+    fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      "standing-charges",
+      periodFrom,
+      periodTo
+    )
+  ]);
+  if (dayMerged.windows.length === 0) return null;
+  let nightWindows = [];
+  try {
+    const nightMerged = await fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      "night-unit-rates",
+      periodFrom,
+      periodTo
+    );
+    nightWindows = nightMerged.windows;
+  } catch {
+  }
+  const unitWindows = nightWindows.length > 0 ? buildGoRateWindows(dayMerged.windows, nightWindows, periodFrom, periodTo) : dayMerged.windows;
+  return { unitWindows, standingWindows: standingMerged.windows };
 }
 async function fetchMergedRateWindows(client, products, regionLetter, kind, periodFrom, periodTo) {
   let all = [];
@@ -2674,9 +2794,28 @@ function dayCalendar(days, detail, period, columns, hint = "Green = Agile cheape
 }
 function renderPeriodRow(vm, run, columns) {
   const ti = TAG_ICON[vm.status] ?? FALLBACK_TAG;
-  const tag = el("span", { class: "row-tag", style: `background:${ti.bg};color:${ti.fg}` }, [
-    icon(ICONS[ti.name], 15, 2.2)
-  ]);
+  function metaChip(iconName, fg, bg, tooltip) {
+    return el(
+      "span",
+      {
+        style: `display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;background:${bg};color:${fg};cursor:help;flex-shrink:0`,
+        dataset: { tooltip }
+      },
+      [icon(ICONS[iconName], 12, 2)]
+    );
+  }
+  const statusChip = metaChip(ti.name, ti.fg, ti.bg, `${vm.tag}: ${vm.reason}`);
+  const covFg = vm.readingCoveragePct >= 95 ? "var(--status-saving)" : vm.readingCoveragePct >= 75 ? "var(--status-caution)" : "var(--status-risk)";
+  const covBg = vm.readingCoveragePct >= 95 ? "var(--green-tint)" : vm.readingCoveragePct >= 75 ? "var(--amber-tint)" : "var(--red-tint)";
+  const coverageChip = metaChip(
+    "activity",
+    covFg,
+    covBg,
+    `${vm.readingCoveragePct}% of expected half-hour slots have readings`
+  );
+  const rateFg = vm.ratesCoverage === "full" ? "var(--status-saving)" : vm.ratesCoverage === "partial" ? "var(--status-caution)" : "var(--status-risk)";
+  const rateBg = vm.ratesCoverage === "full" ? "var(--green-tint)" : vm.ratesCoverage === "partial" ? "var(--amber-tint)" : "var(--red-tint)";
+  const rateChip = metaChip("tag", rateFg, rateBg, vm.ratesCoverageNote);
   const chevron = el("span", { class: "chevron", style: vm.expandable ? "" : "opacity:0.25" }, [
     icon(ICONS.chevronRight, 17)
   ]);
@@ -2687,18 +2826,22 @@ function renderPeriodRow(vm, run, columns) {
       style: vm.expandable ? "cursor:pointer" : "cursor:default"
     },
     [
-      tag,
       el("div", { class: "row-main" }, [
+        // Title row: month/year • badge • kWh
         el("div", { style: "display:flex;align-items:center;gap:8px;flex-wrap:wrap" }, [
           el("span", { class: "row-title", text: vm.title }),
-          badge(vm.tag, vm.tagTone)
-        ]),
-        el("span", { class: "row-sub" }, [
+          badge(vm.tag, vm.tagTone),
           el("span", {
-            style: `font-weight:600;margin-right:3px;color:${vm.includedInHeadline === "yes" ? "var(--status-saving)" : vm.includedInHeadline === "caution" ? "var(--status-caution)" : "var(--status-risk)"}`,
-            text: vm.includedInHeadline === "yes" ? "✓" : vm.includedInHeadline === "caution" ? "⚠" : "✗"
-          }),
-          vm.reason
+            class: "mono",
+            style: "font-size:var(--text-caption);color:var(--text-muted)",
+            text: vm.kwhText
+          })
+        ]),
+        // Icon strip: status • reading coverage • rate coverage
+        el("div", { style: "display:flex;align-items:center;gap:5px;margin-top:5px" }, [
+          statusChip,
+          coverageChip,
+          rateChip
         ])
       ]),
       el(
@@ -2716,24 +2859,7 @@ function renderPeriodRow(vm, run, columns) {
             class: "mono",
             style: "font-size:var(--text-caption);color:var(--text-muted)",
             text: `${vm.flexLabel} ${vm.flexText}` + (vm.flexAvgPence !== null ? ` (${vm.flexAvgPence.toFixed(1)}p/kWh)` : "")
-          }),
-          el(
-            "span",
-            {
-              class: "mono",
-              style: "font-size:var(--text-caption);color:var(--text-muted);opacity:0.65;display:flex;align-items:center;gap:5px"
-            },
-            [
-              vm.kwhText,
-              el(
-                "span",
-                {
-                  style: `display:inline-flex;align-items:center;gap:2px;color:${vm.readingCoveragePct >= 95 ? "var(--text-muted)" : vm.readingCoveragePct >= 75 ? "var(--status-caution)" : "var(--status-risk)"}`
-                },
-                [`${vm.readingCoveragePct}%`, icon(ICONS.activity, 10)]
-              )
-            ]
-          )
+          })
         ]
       ),
       chevron
@@ -3093,9 +3219,15 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     status = "incomplete";
     tag = "Incomplete";
     tagTone = "caution";
-    reason = "Some half-hour readings are missing.";
+    const unmatchedRates = p.flex.unmatchedReadings > 0 || p.flex.unmatchedStandingDays > 0 || (p.agile?.unmatchedReadings ?? 0) > 0 || (p.agile?.unmatchedStandingDays ?? 0) > 0;
+    reason = readingCoveragePct < 100 ? "Some half-hour readings are missing." : unmatchedRates ? "Rate data does not fully cover this period." : "Some half-hour readings are missing.";
     includedInHeadline = "no";
   }
+  const flexUnmatched = p.flex.unmatchedReadings + p.flex.unmatchedStandingDays;
+  const agileUnmatched = (p.agile?.unmatchedReadings ?? 0) + (p.agile?.unmatchedStandingDays ?? 0);
+  const totalUnmatched = flexUnmatched + agileUnmatched;
+  const ratesCoverage = totalUnmatched === 0 ? "full" : flexUnmatched > expectedSlots * 0.5 ? "missing" : "partial";
+  const ratesCoverageNote = ratesCoverage === "full" ? "Rate data fully covers this period" : `${totalUnmatched} slot${totalUnmatched !== 1 ? "s" : ""} have no matching rate`;
   const excluded = !allPredate && (status === "preSwitch" || status === "mixed");
   return {
     period: p,
@@ -3111,6 +3243,8 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     flexAvgPence: p.flex.kwh > 0 ? p.flex.energyCostPence / p.flex.kwh : null,
     agileAvgPence: p.agile && p.agile.kwh > 0 ? p.agile.energyCostPence / p.agile.kwh : null,
     readingCoveragePct,
+    ratesCoverage,
+    ratesCoverageNote,
     expandable: p.flex.kwh > 0,
     status
   };
@@ -3125,7 +3259,8 @@ function computeResultsViewModel(run, headline) {
     (p) => classifyPeriod(run, p, currentTariff, notice !== null, flexLabel)
   );
   const comp = headline.comparison;
-  const useActual = headline.summaryHasActual && headline.actualComparable;
+  const flexOverridden = run.context.flexColumnSource.kind === "user-override";
+  const useActual = !flexOverridden && headline.summaryHasActual && headline.actualComparable;
   const paidPence = useActual ? headline.summaryActual : notice ? headline.summaryFlex : comp.currentCalc ?? headline.summaryFlex;
   const paid = {
     label: useActual ? "You paid" : notice ? "Flexible (calc.)" : comp.onAgile ? `${headline.currentTariffLabel} (calc.)` : calculatedBaselineLabel(run.context.flexColumnSource),
@@ -3239,14 +3374,26 @@ function renderResults(host, run, headline, replayMeta, cb) {
     );
   }
   host.append(
-    el("div", { style: "display:flex;flex-direction:column;gap:5px" }, [
-      el("h1", { style: "font-size:var(--text-h1)", text: "Your comparison" }),
-      el("p", {
-        class: "row-sub",
-        style: "max-width:520px",
-        text: "What each tariff would have cost on your real usage."
-      })
-    ])
+    el(
+      "div",
+      {
+        style: "display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap"
+      },
+      [
+        el("div", { style: "display:flex;flex-direction:column;gap:5px" }, [
+          el("h1", { style: "font-size:var(--text-h1)", text: "Your comparison" }),
+          el("p", {
+            class: "row-sub",
+            style: "max-width:520px",
+            text: "What each tariff would have cost on your real usage."
+          })
+        ]),
+        el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" }, [
+          button("Edit tariff", { variant: "secondary", onClick: cb.onEditTariff }),
+          cb.onResetTariff ? button("Reset to API rates", { variant: "ghost", onClick: cb.onResetTariff }) : null
+        ])
+      ]
+    )
   );
   const diffTone = vm.difference?.tone === "saving" ? "saving" : vm.difference?.tone === "info" ? "info" : "neutral";
   const calc = costCalc({
@@ -3440,9 +3587,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
             variant: "secondary",
             iconLeft: "lock",
             onClick: cb.onDiagnostics
-          }),
-          button("Edit tariff", { variant: "secondary", onClick: cb.onEditTariff }),
-          cb.onResetTariff ? button("Reset to API rates", { variant: "ghost", onClick: cb.onResetTariff }) : null
+          })
         ]),
         button("See how timing saves more", {
           variant: "primary",
@@ -3466,52 +3611,309 @@ function renderResultsEmpty(host, cb) {
     ])
   );
 }
-function openTariffOverrideModal(prefillUnit, prefillStanding, onApply) {
-  const backdrop = el("div", { class: "modal-backdrop" });
-  const close = () => backdrop.remove();
-  backdrop.addEventListener("click", (ev) => {
-    if (ev.target === backdrop) close();
-  });
+const KEEP_FLEX = "__keep_flex__";
+const KEEP_AGILE = "__keep_agile__";
+const MANUAL = "__manual__";
+let barStylesInjected = false;
+function ensureBarStyles() {
+  if (barStylesInjected) return;
+  barStylesInjected = true;
+  const s = document.createElement("style");
+  s.textContent = "@keyframes tariff-bar{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}.tariff-bar-fill{width:40%;height:100%;border-radius:var(--radius-pill);background:var(--grid-blue);animation:tariff-bar 1.4s ease-in-out infinite}";
+  document.head.appendChild(s);
+}
+function makeProgressBar() {
+  ensureBarStyles();
+  const fill = el("div", { class: "tariff-bar-fill" });
+  const track = el("div", { class: "steps-track", style: "overflow:hidden" }, [fill]);
+  const labelEl = el("div", { class: "field-hint", style: "margin-top:4px" });
+  const wrap2 = el("div", { style: "display:none;margin-bottom:12px" }, [track, labelEl]);
+  return {
+    wrap: wrap2,
+    show(label) {
+      labelEl.textContent = label;
+      wrap2.style.display = "";
+    },
+    hide() {
+      wrap2.style.display = "none";
+    }
+  };
+}
+function makeSelect(defaultValue, defaultLabel) {
+  const sel = document.createElement("select");
+  sel.className = "input";
+  const opt = document.createElement("option");
+  opt.value = defaultValue;
+  opt.textContent = defaultLabel;
+  sel.append(opt);
+  return sel;
+}
+function addOption(sel, value, label) {
+  const opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = label;
+  sel.append(opt);
+}
+function makeManualFields(prefill) {
   const unitInput = el("input", {
     class: "input",
     type: "number",
     placeholder: "e.g. 24.50",
-    value: prefillUnit !== null ? String(prefillUnit) : ""
+    value: prefill ? String(prefill.unitRate) : ""
   });
-  unitInput.setAttribute("min", "0.01");
-  unitInput.setAttribute("step", "0.01");
+  unitInput.min = "0.01";
+  unitInput.step = "0.01";
   const standingInput = el("input", {
     class: "input",
     type: "number",
     placeholder: "e.g. 53.27",
-    value: prefillStanding !== null ? String(prefillStanding) : ""
+    value: prefill ? String(prefill.standingCharge) : ""
   });
-  standingInput.setAttribute("min", "0");
-  standingInput.setAttribute("step", "0.01");
+  standingInput.min = "0";
+  standingInput.step = "0.01";
+  const wrap2 = el("div", { style: "display:none;margin-top:8px" }, [
+    el("div", { class: "field", style: "margin-bottom:8px" }, [
+      el("label", { class: "field-label", text: "Unit rate (p/kWh)" }),
+      unitInput
+    ]),
+    el("div", { class: "field" }, [
+      el("label", { class: "field-label", text: "Standing charge (p/day)" }),
+      standingInput
+    ])
+  ]);
+  return { wrap: wrap2, unitInput, standingInput };
+}
+function buildPickerModal(options, close) {
+  const { flexLabel, prefillLeft, prefillRight, leftSelection, rightSelection, onApply } = options;
+  const leftSel = makeSelect(KEEP_FLEX, `Account Tariff (${flexLabel})`);
+  const leftManual = makeManualFields(prefillLeft);
+  const leftLoadingOpt = document.createElement("option");
+  leftLoadingOpt.disabled = true;
+  leftLoadingOpt.textContent = "Loading available tariffs…";
+  leftSel.append(leftLoadingOpt);
+  addOption(leftSel, MANUAL, "Enter rates manually");
+  if (leftSelection) leftSel.value = leftSelection;
+  const rightSel = makeSelect(KEEP_AGILE, "Agile Octopus (default)");
+  const rightManual = makeManualFields(prefillRight);
+  const rightLoadingOpt = document.createElement("option");
+  rightLoadingOpt.disabled = true;
+  rightLoadingOpt.textContent = "Loading available tariffs…";
+  rightSel.append(rightLoadingOpt);
+  addOption(rightSel, MANUAL, "Enter rates manually");
+  if (rightSelection) rightSel.value = rightSelection;
+  const errorMsg = el("span", {
+    class: "field-hint",
+    style: "color:var(--status-risk);display:none"
+  });
+  const progress = makeProgressBar();
+  const applyBtn = button("Apply", { variant: "primary", onClick: () => void handleApply() });
+  function showError(msg) {
+    progress.hide();
+    errorMsg.textContent = msg;
+    errorMsg.style.display = "";
+  }
+  function clearError() {
+    errorMsg.style.display = "none";
+  }
+  leftSel.addEventListener("change", () => {
+    leftManual.wrap.style.display = leftSel.value === MANUAL ? "" : "none";
+  });
+  rightSel.addEventListener("change", () => {
+    rightManual.wrap.style.display = rightSel.value === MANUAL ? "" : "none";
+  });
+  if ((leftSelection ?? KEEP_FLEX) === MANUAL) leftManual.wrap.style.display = "";
+  if ((rightSelection ?? KEEP_AGILE) === MANUAL) rightManual.wrap.style.display = "";
+  async function handleApply() {
+    clearError();
+    const leftVal = leftSel.value;
+    const rightVal = rightSel.value;
+    if (leftVal === MANUAL) {
+      const u = parseFloat(leftManual.unitInput.value);
+      const s = parseFloat(leftManual.standingInput.value);
+      if (!Number.isFinite(u) || u <= 0 || !Number.isFinite(s) || s < 0) {
+        showError(
+          "Left column: enter a unit rate greater than zero and a standing charge of zero or more."
+        );
+        return;
+      }
+    }
+    if (rightVal === MANUAL) {
+      const u = parseFloat(rightManual.unitInput.value);
+      const s = parseFloat(rightManual.standingInput.value);
+      if (!Number.isFinite(u) || u <= 0 || !Number.isFinite(s) || s < 0) {
+        showError(
+          "Right column: enter a unit rate greater than zero and a standing charge of zero or more."
+        );
+        return;
+      }
+    }
+    if (leftVal === KEEP_FLEX && rightVal === KEEP_AGILE) {
+      close();
+      return;
+    }
+    const needFetch = leftVal !== KEEP_FLEX && leftVal !== MANUAL || rightVal !== KEEP_AGILE && rightVal !== MANUAL;
+    if (needFetch) {
+      applyBtn.setAttribute("disabled", "");
+    }
+    let flexCol = null;
+    let agileCol = null;
+    try {
+      if (leftVal === MANUAL) {
+        const unitRate = parseFloat(leftManual.unitInput.value);
+        const standingCharge = parseFloat(leftManual.standingInput.value);
+        const from = /* @__PURE__ */ new Date(0);
+        const to = /* @__PURE__ */ new Date(3250368e7);
+        flexCol = {
+          unitWindows: [{ validFrom: from, validTo: to, value: unitRate }],
+          standingWindows: [{ validFrom: from, validTo: to, value: standingCharge }],
+          label: "User tariff"
+        };
+      } else if (leftVal !== KEEP_FLEX) {
+        progress.show(`Fetching rates for ${leftVal}…`);
+        const rates = await options.fetchRatesByName(leftVal);
+        progress.hide();
+        if (!rates) {
+          showError(
+            `Could not fetch rates for "${leftVal}". Try a different tariff or enter manually.`
+          );
+          applyBtn.removeAttribute("disabled");
+          return;
+        }
+        flexCol = { ...rates, label: leftVal };
+      }
+      if (rightVal === MANUAL) {
+        const unitRate = parseFloat(rightManual.unitInput.value);
+        const standingCharge = parseFloat(rightManual.standingInput.value);
+        const from = /* @__PURE__ */ new Date(0);
+        const to = /* @__PURE__ */ new Date(3250368e7);
+        agileCol = {
+          unitWindows: [{ validFrom: from, validTo: to, value: unitRate }],
+          standingWindows: [{ validFrom: from, validTo: to, value: standingCharge }],
+          label: "User tariff"
+        };
+      } else if (rightVal !== KEEP_AGILE) {
+        progress.show(`Fetching rates for ${rightVal}…`);
+        const rates = await options.fetchRatesByName(rightVal);
+        progress.hide();
+        if (!rates) {
+          showError(
+            `Could not fetch rates for "${rightVal}". Try a different tariff or enter manually.`
+          );
+          applyBtn.removeAttribute("disabled");
+          return;
+        }
+        agileCol = { ...rates, label: rightVal };
+      }
+    } catch {
+      showError("Failed to fetch tariff rates. Check your connection and try again.");
+      applyBtn.removeAttribute("disabled");
+      return;
+    }
+    close();
+    onApply(flexCol, agileCol);
+  }
+  const leftField = el("div", { class: "field" }, [
+    el("label", { class: "field-label", text: "Left column — base calclation" }),
+    el("div", {
+      class: "field-hint",
+      text: "What your usage is priced against. Defaults to your current tariff."
+    }),
+    leftSel,
+    leftManual.wrap
+  ]);
+  const rightField = el("div", { class: "field" }, [
+    el("label", { class: "field-label", text: "Right column — comparison" }),
+    el("div", {
+      class: "field-hint",
+      text: "The tariff to compare against. Defaults to Agile Octopus."
+    }),
+    rightSel,
+    rightManual.wrap
+  ]);
+  progress.show("Loading available tariffs…");
+  void options.loadTariffNames().then(
+    (names) => {
+      progress.hide();
+      leftLoadingOpt.remove();
+      rightLoadingOpt.remove();
+      const manualOptL = [...leftSel.options].find((o) => o.value === MANUAL);
+      const manualOptR = [...rightSel.options].find((o) => o.value === MANUAL);
+      for (const name of names) {
+        const oL = document.createElement("option");
+        oL.value = name;
+        oL.textContent = name;
+        if (manualOptL) leftSel.insertBefore(oL, manualOptL);
+        else leftSel.append(oL);
+        const oR = document.createElement("option");
+        oR.value = name;
+        oR.textContent = name;
+        if (manualOptR) rightSel.insertBefore(oR, manualOptR);
+        else rightSel.append(oR);
+      }
+      if (leftSelection) leftSel.value = leftSelection;
+      if (rightSelection) rightSel.value = rightSelection;
+    },
+    () => {
+      progress.hide();
+      leftLoadingOpt.textContent = "Could not load tariff list";
+      rightLoadingOpt.textContent = "Could not load tariff list";
+    }
+  );
+  return el("div", { class: "modal" }, [
+    el("div", { class: "modal-head" }, [
+      el("div", { style: "display:flex;flex-direction:column;gap:4px" }, [
+        el("div", { class: "row-title", text: "Choose tariffs to compare" }),
+        el("div", {
+          class: "row-sub",
+          text: "Select the tariff for each column. Rates are fetched from the Octopus API for your region and billing window."
+        })
+      ]),
+      el("button", { class: "btn btn-ghost", type: "button", ariaLabel: "Close", onClick: close }, [
+        icon(ICONS.x, 18)
+      ])
+    ]),
+    el("div", { class: "modal-body" }, [progress.wrap, leftField, rightField, errorMsg]),
+    el("div", { class: "modal-foot" }, [
+      button("Cancel", { variant: "secondary", onClick: close }),
+      applyBtn
+    ])
+  ]);
+}
+function buildManualModal(options, close) {
+  const { prefillLeft, onApply } = options;
+  const unitInput = el("input", {
+    class: "input",
+    type: "number",
+    placeholder: "e.g. 24.50",
+    value: prefillLeft ? String(prefillLeft.unitRate) : ""
+  });
+  unitInput.min = "0.01";
+  unitInput.step = "0.01";
+  const standingInput = el("input", {
+    class: "input",
+    type: "number",
+    placeholder: "e.g. 53.27",
+    value: prefillLeft ? String(prefillLeft.standingCharge) : ""
+  });
+  standingInput.min = "0";
+  standingInput.step = "0.01";
   const errorMsg = el("span", {
     class: "field-hint",
     style: "color:var(--status-risk);display:none",
     text: "Please enter a unit rate greater than zero and a standing charge of zero or more."
   });
-  const modal = el("div", { class: "modal" }, [
+  return el("div", { class: "modal" }, [
     el("div", { class: "modal-head" }, [
       el("div", { style: "display:flex;flex-direction:column;gap:4px" }, [
         el("div", { class: "row-title", text: "Edit your tariff rates" }),
         el("div", {
           class: "row-sub",
-          text: "Enter the unit rate and standing charge from your bill or tariff agreement. These replace the API-fetched rates for every period and slot."
+          text: "Enter the unit rate and standing charge. These replace the API-fetched rates for every period and slot."
         })
       ]),
-      el(
-        "button",
-        {
-          class: "btn btn-ghost",
-          type: "button",
-          ariaLabel: "Close",
-          onClick: close
-        },
-        [icon(ICONS.x, 18)]
-      )
+      el("button", { class: "btn btn-ghost", type: "button", ariaLabel: "Close", onClick: close }, [
+        icon(ICONS.x, 18)
+      ])
     ]),
     el("div", { class: "modal-body" }, [
       callout(
@@ -3544,64 +3946,85 @@ function openTariffOverrideModal(prefillUnit, prefillStanding, onApply) {
             return;
           }
           close();
-          onApply(unit, standing);
+          const from = /* @__PURE__ */ new Date(0);
+          const to = /* @__PURE__ */ new Date(3250368e7);
+          onApply(
+            {
+              unitWindows: [{ validFrom: from, validTo: to, value: unit }],
+              standingWindows: [{ validFrom: from, validTo: to, value: standing }],
+              label: "User tariff"
+            },
+            null
+          );
         }
       })
     ])
   ]);
+}
+function openTariffOverrideModal(options) {
+  const backdrop = el("div", { class: "modal-backdrop" });
+  const close = () => backdrop.remove();
+  backdrop.addEventListener("click", (ev) => {
+    if (ev.target === backdrop) close();
+  });
+  const modal = options.loadTariffNames && options.fetchRatesByName ? buildPickerModal(
+    options,
+    close
+  ) : buildManualModal(options, close);
   backdrop.append(modal);
   document.body.append(backdrop);
-  unitInput.focus();
+  const first = modal.querySelector("input, select");
+  first?.focus();
 }
-function applyUserTariff(run, unitRatePence, standingChargePence) {
+function applyTariffComparison(run, flexColumn, agileColumn) {
+  if (!flexColumn && !agileColumn) return run;
   const { context } = run;
-  const flatUnit = {
-    validFrom: context.periodFrom,
-    validTo: context.periodTo,
-    value: unitRatePence
-  };
-  const flatStanding = {
-    validFrom: context.periodFrom,
-    validTo: context.periodTo,
-    value: standingChargePence
-  };
-  const flexUnitSorted = [flatUnit];
-  const flexStanding = [flatStanding];
+  const flexUnitSorted = flexColumn ? [...flexColumn.unitWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime()) : run.detail.flexUnitSorted;
+  const flexStanding = flexColumn ? [...flexColumn.standingWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime()) : run.detail.flexStanding;
+  const agileUnitSorted = agileColumn ? [...agileColumn.unitWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime()) : run.detail.agileUnitSorted;
+  const agileStanding = agileColumn ? [...agileColumn.standingWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime()) : run.detail.agileStanding;
   const periods = run.periods.map((p) => {
-    const newFlex = calculateCost(
-      run.detail.readings,
-      p.start,
-      p.end,
-      flexUnitSorted,
-      flexStanding
-    );
-    const confident = !p.wasClamped && !p.suspectActual && newFlex.unmatchedReadings === 0 && newFlex.unmatchedStandingDays === 0 && (p.agile === null || p.agile.unmatchedReadings === 0 && p.agile.unmatchedStandingDays === 0);
+    const newFlex = flexColumn ? calculateCost(run.detail.readings, p.start, p.end, flexUnitSorted, flexStanding, true) : p.flex;
+    const newAgile = agileColumn ? calculateCost(run.detail.readings, p.start, p.end, agileUnitSorted, agileStanding, true) : p.agile;
+    const confident = !p.wasClamped && !p.suspectActual && newFlex.unmatchedReadings === 0 && newFlex.unmatchedStandingDays === 0 && (newAgile === null || newAgile.unmatchedReadings === 0 && newAgile.unmatchedStandingDays === 0);
     return {
       ...p,
       flex: newFlex,
+      agile: newAgile,
       confident,
-      // classifyPeriod compares actualTariffCode to currentAgreement.tariff_code
-      // to detect "pre-switch" periods. Without this, every period looks like it
-      // predates the override and becomes non-expandable + triggers the notice path.
-      actualTariffCode: "User tariff",
-      tariffCodes: ["User tariff"]
+      ...flexColumn ? {
+        // classifyPeriod compares actualTariffCode to currentAgreement.tariff_code
+        // to detect pre-switch periods. Mirror the label onto both fields so every
+        // period is treated as "on current tariff" and none is dimmed.
+        actualTariffCode: flexColumn.label,
+        tariffCodes: [flexColumn.label]
+      } : {}
     };
   });
-  const detail = { ...run.detail, flexUnitSorted, flexStanding };
+  const detail = {
+    ...run.detail,
+    flexUnitSorted,
+    flexStanding,
+    agileUnitSorted,
+    agileStanding,
+    agileAvailable: agileColumn ? true : run.detail.agileAvailable
+  };
   return {
     periods,
     detail,
     context: {
       ...context,
-      // classifyTariffCode falls through to { kind: 'other', label: code } for
-      // unknown codes, so 'User tariff' renders as "User tariff" throughout.
-      currentAgreement: {
-        tariff_code: "User tariff",
-        valid_from: context.periodFrom.toISOString(),
-        valid_to: context.periodTo.toISOString()
-      },
-      tariffOverride: true,
-      flexColumnSource: { kind: "user-override", label: "User tariff" }
+      ...flexColumn ? {
+        currentAgreement: {
+          tariff_code: flexColumn.label,
+          valid_from: context.periodFrom.toISOString(),
+          valid_to: context.periodTo.toISOString()
+        },
+        flexColumnSource: { kind: "user-override", label: flexColumn.label }
+      } : {},
+      ...agileColumn ? { agileColumnLabel: agileColumn.label } : context.agileColumnLabel !== void 0 ? { agileColumnLabel: context.agileColumnLabel } : {},
+      agileAvailable: agileColumn ? true : context.agileAvailable,
+      tariffOverride: true
     }
   };
 }
@@ -4226,7 +4649,7 @@ class App {
   screenRenderers = /* @__PURE__ */ new Map();
   currentRun = null;
   originalRun = null;
-  userTariffOverride = null;
+  columnOverride = null;
   currentExport = null;
   replayMeta = null;
   liveClient = null;
@@ -4286,7 +4709,7 @@ class App {
     this.currentExport = null;
     this.currentMeter = null;
     this.replayMeta = replayMeta;
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.setState({ screen: "results", statusMessage: null, error: null });
   }
   showExportResults(run, replayMeta = null) {
@@ -4482,24 +4905,51 @@ class App {
     this.currentMeter = null;
     this.failureDiag = null;
     this.replayMeta = null;
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.setState({ screen: "connect", statusMessage: null, error: null });
   }
   openTariffOverrideModal() {
     const base = this.originalRun ?? this.currentRun;
     if (!base) return;
-    openTariffOverrideModal(
-      this.userTariffOverride?.unitRate ?? null,
-      this.userTariffOverride?.standingCharge ?? null,
-      (unitRate, standingCharge) => {
-        this.userTariffOverride = { unitRate, standingCharge };
-        this.currentRun = applyUserTariff(base, unitRate, standingCharge);
+    const { regionLetter, periodFrom, periodTo, flexColumnSource } = base.context;
+    const client = this.liveClient;
+    const prev = this.columnOverride;
+    const prefillLeft = prev?.left?.kind === "manual" ? { unitRate: prev.left.unitRate, standingCharge: prev.left.standingCharge } : null;
+    const prefillRight = prev?.right?.kind === "manual" ? { unitRate: prev.right.unitRate, standingCharge: prev.right.standingCharge } : null;
+    const leftSelection = prev?.left?.kind === "named" ? prev.left.name : null;
+    const rightSelection = prev?.right?.kind === "named" ? prev.right.name : null;
+    openTariffOverrideModal({
+      flexLabel: flexColumnSource.label,
+      prefillLeft,
+      prefillRight,
+      leftSelection,
+      rightSelection,
+      loadTariffNames: client ? () => discoverConsumerTariffNames(client, periodFrom, periodTo) : null,
+      fetchRatesByName: client ? (name) => fetchTariffRatesByName(client, name, regionLetter, periodFrom, periodTo) : null,
+      onApply: (flexCol, agileCol) => {
+        const override = {};
+        if (flexCol) {
+          override.left = flexCol.label === "User tariff" ? {
+            kind: "manual",
+            unitRate: flexCol.unitWindows[0]?.value ?? 0,
+            standingCharge: flexCol.standingWindows[0]?.value ?? 0
+          } : { kind: "named", name: flexCol.label };
+        }
+        if (agileCol) {
+          override.right = agileCol.label === "User tariff" ? {
+            kind: "manual",
+            unitRate: agileCol.unitWindows[0]?.value ?? 0,
+            standingCharge: agileCol.standingWindows[0]?.value ?? 0
+          } : { kind: "named", name: agileCol.label };
+        }
+        this.columnOverride = Object.keys(override).length ? override : null;
+        this.currentRun = applyTariffComparison(base, flexCol, agileCol);
         this.setState({ screen: "results" });
       }
-    );
+    });
   }
   resetTariff() {
-    this.userTariffOverride = null;
+    this.columnOverride = null;
     this.currentRun = this.originalRun;
     this.setState({ screen: "results" });
   }
@@ -4509,7 +4959,7 @@ class App {
       onReset: () => this.reset(),
       onDiagnostics: () => this.openDiagnostics(),
       onEditTariff: () => this.openTariffOverrideModal(),
-      onResetTariff: this.userTariffOverride ? () => this.resetTariff() : null
+      onResetTariff: this.currentRun?.context.tariffOverride ? () => this.resetTariff() : null
     };
   }
   renderResultsScreen(host) {
@@ -5506,6 +5956,44 @@ function buildSampleRun() {
     }
   };
 }
+let tipEl = null;
+function getTip() {
+  if (!tipEl) {
+    tipEl = document.createElement("div");
+    tipEl.className = "app-tooltip";
+    document.body.appendChild(tipEl);
+  }
+  return tipEl;
+}
+function showTip(text, anchor) {
+  const t = getTip();
+  t.textContent = text;
+  const r = anchor.getBoundingClientRect();
+  t.style.left = `${Math.round(r.left + r.width / 2)}px`;
+  t.style.top = `${Math.round(r.top - 6)}px`;
+  t.style.transform = "translate(-50%, -100%)";
+  t.style.opacity = "1";
+}
+function hideTip() {
+  if (tipEl) tipEl.style.opacity = "0";
+}
+function initTooltips() {
+  document.addEventListener("mouseover", (e) => {
+    const anchor = e.target.closest("[data-tooltip]");
+    const text = anchor?.dataset.tooltip;
+    if (!anchor || !text) {
+      hideTip();
+      return;
+    }
+    showTip(text, anchor);
+  });
+  document.addEventListener("mouseout", (e) => {
+    const anchor = e.target.closest("[data-tooltip]");
+    if (!anchor) return;
+    const dest = e.relatedTarget;
+    if (!dest || !anchor.contains(dest)) hideTip();
+  });
+}
 function pickTextFile(onText) {
   const input = document.createElement("input");
   input.type = "file";
@@ -5546,6 +6034,7 @@ function mount() {
     }
   });
   app.mount();
+  initTooltips();
 }
 mount();</script>
   <style rel="stylesheet" crossorigin>/* Auth Energy × ESA design system, ported for the single-file CSP build.
@@ -6558,6 +7047,25 @@ button {
   font-size: var(--text-overline);
   line-height: 1.5;
   color: var(--text-muted);
+}
+
+/* Tooltip — singleton <div class="app-tooltip"> appended to <body> by tooltip.ts,
+   positioned with fixed so it escapes any overflow:hidden container. */
+.app-tooltip {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  background: var(--surface-inverse);
+  color: var(--text-inverse);
+  padding: 5px 9px;
+  border-radius: 5px;
+  font-size: var(--text-caption);
+  font-weight: 400;
+  line-height: 1.4;
+  max-width: 220px;
+  word-break: break-word;
+  opacity: 0;
+  transition: opacity 120ms;
 }
 
 @media (max-width: 640px) {

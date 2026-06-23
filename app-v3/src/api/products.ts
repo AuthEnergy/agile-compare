@@ -246,6 +246,164 @@ export async function fetchRateWindows(
 // actually available so a retired open-ended row can't leak past its end and
 // hide a missing-version gap. rawCount = rows seen before clipping, so a caller
 // can tell "no rates at all" from "rates exist but don't overlap this window".
+// Discover display names of consumer (non-business, non-prepay) Octopus tariffs
+// available at any point during the window. Excludes Agile (already the right
+// column default) and export/outgoing tariffs. Samples at the start, end, and
+// current time so products that launched or retired mid-window are included.
+export async function discoverConsumerTariffNames(
+  client: OctopusClient,
+  periodFrom: Date,
+  periodTo: Date,
+): Promise<string[]> {
+  const seen = new Set<string>();
+  for (const at of [periodFrom, periodTo, null] as Array<Date | null>) {
+    const params: Params = { brand: 'OCTOPUS_ENERGY' };
+    if (at) params['available_at'] = at.toISOString();
+    let results: ProductRow[];
+    try {
+      results = await client.restGetAllPages<ProductRow>('/products/', params);
+    } catch {
+      continue;
+    }
+    for (const p of results) {
+      if (p.is_business || p.is_prepay || !p.display_name) continue;
+      const nameLower = p.display_name.toLowerCase();
+      if (nameLower.includes('agile')) continue;
+      if (nameLower.includes('outgoing') || nameLower.includes('export')) continue;
+      seen.add(p.display_name);
+    }
+  }
+  return [...seen].sort();
+}
+
+// Like findProductsByDisplayNameOverlapping but does NOT filter to is_variable,
+// so fixed-rate tariffs are included alongside variable ones.
+async function findProductVersionsByDisplayName(
+  client: OctopusClient,
+  displayName: string,
+  periodFrom: Date,
+  periodTo: Date,
+): Promise<DiscoveredProduct[]> {
+  const samples: Array<Date | null> = [];
+  const stepMs = 45 * 24 * 60 * 60 * 1000;
+  for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) samples.push(new Date(t));
+  samples.push(periodTo);
+  samples.push(null);
+
+  const byCode = new Map<string, DiscoveredProduct>();
+  const probe = async (at: Date | null): Promise<void> => {
+    const params: Params = { brand: 'OCTOPUS_ENERGY' };
+    if (at) params['available_at'] = at.toISOString();
+    let results: ProductRow[];
+    try {
+      results = await client.restGetAllPages<ProductRow>('/products/', params);
+    } catch {
+      return;
+    }
+    for (const p of results) {
+      if (p.display_name === displayName && !p.is_business && !p.is_prepay && !byCode.has(p.code)) {
+        byCode.set(p.code, {
+          code: p.code,
+          available_from: p.available_from ?? null,
+          available_to: p.available_to ?? null,
+        });
+      }
+    }
+  };
+
+  for (const at of samples) await probe(at);
+
+  const fromMs = periodFrom.getTime();
+  const toMs = periodTo.getTime();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const boundaries = new Set<number>();
+  for (const p of [...byCode.values()]) {
+    for (const edge of [p.available_from, p.available_to]) {
+      if (!edge) continue;
+      const ms = new Date(edge).getTime();
+      for (const side of [-dayMs, dayMs]) {
+        const t = ms + side;
+        if (t > fromMs && t < toMs) boundaries.add(Math.floor(t / dayMs) * dayMs);
+      }
+    }
+  }
+  for (const t of boundaries) await probe(new Date(t));
+
+  const products = [...byCode.values()];
+  const overlapping = products.filter((p) => {
+    const af = p.available_from ? new Date(p.available_from).getTime() : -Infinity;
+    const at = p.available_to ? new Date(p.available_to).getTime() : Infinity;
+    return af < periodTo.getTime() && at > periodFrom.getTime();
+  });
+  const chosen = overlapping.length ? overlapping : products;
+  chosen.sort(
+    (a, b) => new Date(a.available_from ?? 0).getTime() - new Date(b.available_from ?? 0).getTime(),
+  );
+  return chosen;
+}
+
+// Fetch merged unit and standing rate windows for a tariff identified by display
+// name, across all product versions that overlap the window. Includes both
+// variable and fixed-rate tariffs. Probes night-unit-rates and merges them via
+// buildGoRateWindows when present (covers Go, Intelligent Go, and Cosy shapes).
+export async function fetchTariffRatesByName(
+  client: OctopusClient,
+  displayName: string,
+  regionLetter: string,
+  periodFrom: Date,
+  periodTo: Date,
+): Promise<{ unitWindows: RateWindow[]; standingWindows: RateWindow[] } | null> {
+  const products = await findProductVersionsByDisplayName(
+    client,
+    displayName,
+    periodFrom,
+    periodTo,
+  );
+  if (products.length === 0) return null;
+
+  const [dayMerged, standingMerged] = await Promise.all([
+    fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      'standard-unit-rates',
+      periodFrom,
+      periodTo,
+    ),
+    fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      'standing-charges',
+      periodFrom,
+      periodTo,
+    ),
+  ]);
+  if (dayMerged.windows.length === 0) return null;
+
+  let nightWindows: RateWindow[] = [];
+  try {
+    const nightMerged = await fetchMergedRateWindows(
+      client,
+      products,
+      regionLetter,
+      'night-unit-rates',
+      periodFrom,
+      periodTo,
+    );
+    nightWindows = nightMerged.windows;
+  } catch {
+    /* flat-rate tariff — no night rates */
+  }
+
+  const unitWindows =
+    nightWindows.length > 0
+      ? buildGoRateWindows(dayMerged.windows, nightWindows, periodFrom, periodTo)
+      : dayMerged.windows;
+
+  return { unitWindows, standingWindows: standingMerged.windows };
+}
+
 export async function fetchMergedRateWindows(
   client: OctopusClient,
   products: readonly DiscoveredProduct[],

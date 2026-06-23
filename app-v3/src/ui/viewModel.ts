@@ -34,6 +34,8 @@ export interface PeriodRowVM {
   // periods where the Flexible calculation is a genuine alternative, not a proxy.
   flexLabel: string;
   readingCoveragePct: number; // 0–100: what fraction of expected half-hour slots have readings
+  ratesCoverage: 'full' | 'partial' | 'missing'; // how well rate windows cover this period
+  ratesCoverageNote: string; // tooltip for the rate coverage icon
   status: PeriodStatus;
   expandable: boolean;
 }
@@ -204,9 +206,29 @@ function classifyPeriod(
     status = 'incomplete';
     tag = 'Incomplete';
     tagTone = 'caution';
-    reason = 'Some half-hour readings are missing.';
+    const unmatchedRates =
+      p.flex.unmatchedReadings > 0 ||
+      p.flex.unmatchedStandingDays > 0 ||
+      (p.agile?.unmatchedReadings ?? 0) > 0 ||
+      (p.agile?.unmatchedStandingDays ?? 0) > 0;
+    reason =
+      readingCoveragePct < 100
+        ? 'Some half-hour readings are missing.'
+        : unmatchedRates
+          ? 'Rate data does not fully cover this period.'
+          : 'Some half-hour readings are missing.';
     includedInHeadline = 'no';
   }
+
+  const flexUnmatched = p.flex.unmatchedReadings + p.flex.unmatchedStandingDays;
+  const agileUnmatched = (p.agile?.unmatchedReadings ?? 0) + (p.agile?.unmatchedStandingDays ?? 0);
+  const totalUnmatched = flexUnmatched + agileUnmatched;
+  const ratesCoverage: 'full' | 'partial' | 'missing' =
+    totalUnmatched === 0 ? 'full' : flexUnmatched > expectedSlots * 0.5 ? 'missing' : 'partial';
+  const ratesCoverageNote =
+    ratesCoverage === 'full'
+      ? 'Rate data fully covers this period'
+      : `${totalUnmatched} slot${totalUnmatched !== 1 ? 's' : ''} have no matching rate`;
 
   // In the all-pre-switch case the figures sum over EVERY period (pre-switch AND
   // any old-vs-old mixed period), so none is “excl.” — show its kWh. In the normal
@@ -226,6 +248,8 @@ function classifyPeriod(
     flexAvgPence: p.flex.kwh > 0 ? p.flex.energyCostPence / p.flex.kwh : null,
     agileAvgPence: p.agile && p.agile.kwh > 0 ? p.agile.energyCostPence / p.agile.kwh : null,
     readingCoveragePct,
+    ratesCoverage,
+    ratesCoverageNote,
     expandable: p.flex.kwh > 0,
     status,
   };
@@ -243,7 +267,11 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
   );
 
   const comp = headline.comparison;
-  const useActual = headline.summaryHasActual && headline.actualComparable;
+  // When the flex column has been replaced with a user-selected tariff, the
+  // real billing amounts reflect a different (actual) tariff — showing "You paid"
+  // next to the override name would be misleading. Always show the calc figure.
+  const flexOverridden = run.context.flexColumnSource.kind === 'user-override';
+  const useActual = !flexOverridden && headline.summaryHasActual && headline.actualComparable;
   // "You paid" when comparable; otherwise YOUR tariff's calculated cost (the
   // notice/old-usage case has no current tariff, so it falls back to Flexible).
   const paidPence = useActual

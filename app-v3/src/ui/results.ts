@@ -59,14 +59,29 @@ export function renderResults(
   }
 
   host.append(
-    el('div', { style: 'display:flex;flex-direction:column;gap:5px' }, [
-      el('h1', { style: 'font-size:var(--text-h1)', text: 'Your comparison' }),
-      el('p', {
-        class: 'row-sub',
-        style: 'max-width:520px',
-        text: 'What each tariff would have cost on your real usage.',
-      }),
-    ]),
+    el(
+      'div',
+      {
+        style:
+          'display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap',
+      },
+      [
+        el('div', { style: 'display:flex;flex-direction:column;gap:5px' }, [
+          el('h1', { style: 'font-size:var(--text-h1)', text: 'Your comparison' }),
+          el('p', {
+            class: 'row-sub',
+            style: 'max-width:520px',
+            text: 'What each tariff would have cost on your real usage.',
+          }),
+        ]),
+        el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center' }, [
+          button('Other tariffs', { variant: 'secondary', onClick: cb.onEditTariff }),
+          cb.onResetTariff
+            ? button('Reset to API rates', { variant: 'ghost', onClick: cb.onResetTariff })
+            : null,
+        ]),
+      ],
+    ),
   );
 
   // headline card — the comparison as a "receipt": each cost on its own line,
@@ -316,10 +331,6 @@ export function renderResults(
             iconLeft: 'lock',
             onClick: cb.onDiagnostics,
           }),
-          button('Edit tariff', { variant: 'secondary', onClick: cb.onEditTariff }),
-          cb.onResetTariff
-            ? button('Reset to API rates', { variant: 'ghost', onClick: cb.onResetTariff })
-            : null,
         ]),
         button('See how timing saves more', {
           variant: 'primary',

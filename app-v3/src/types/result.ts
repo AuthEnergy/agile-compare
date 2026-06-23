@@ -78,7 +78,7 @@ export type FlexColumnSource =
       actualTariffCode: string;
       reason: string;
     }
-  | { kind: 'user-override'; label: 'User tariff' };
+  | { kind: 'user-override'; label: string };
 
 export interface RunContext {
   regionLetter: string;
@@ -113,6 +113,9 @@ export interface RunContext {
   // Set when the user's actual tariff rates could not be fetched and Flexible is
   // used as the flex column proxy instead. Shown as a caveat in the results.
   flexNote?: string | null;
+  // When set, the right (agile) column displays this label rather than "Agile".
+  // Used when the user selects a different comparison tariff.
+  agileColumnLabel?: string;
   gapInfo: { gaps: DateRange[]; duplicates: Date[]; earliest: Date | null; latest: Date | null };
   products: {
     flexProductCode: string;

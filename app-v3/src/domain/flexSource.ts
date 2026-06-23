@@ -20,7 +20,7 @@ export function calculatedBaselineLabel(source: FlexColumnSource): string {
     case 'flexible-proxy':
       return 'Flexible proxy (calc.)';
     case 'user-override':
-      return 'User tariff (calc.)';
+      return `${source.label} (calc.)`;
     case 'flexible-alternative':
       return 'Flexible (calc.)';
   }

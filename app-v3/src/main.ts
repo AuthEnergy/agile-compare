@@ -6,6 +6,7 @@ import './ui/styles.css';
 import { App } from './ui/app';
 import { replayDiagnostics } from './diagnostics/replay';
 import { buildSampleRun } from './data/sample';
+import { initTooltips } from './ui/tooltip';
 
 // Open a native file picker and hand back the file's text (no upload — read
 // locally). The CSP allows this; nothing leaves the device.
@@ -52,6 +53,7 @@ function mount(): void {
   });
 
   app.mount();
+  initTooltips();
 }
 
 mount();

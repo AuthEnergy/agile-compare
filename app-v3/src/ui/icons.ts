@@ -17,6 +17,7 @@ export const ICONS = {
   upload:
     '<path d="M12 2v8"/><path d="m16 6-4-4-4 4"/><rect x="3" y="14" width="18" height="7" rx="2"/>',
   activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  tag: '<path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

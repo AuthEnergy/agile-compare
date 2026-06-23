@@ -133,7 +133,7 @@ describe('renderResults — all data predates the current tariff', () => {
     run.context.latestStatementEnd = null; // no in-window statement
     renderResults(host, run, computeHeadline(run), null, cb);
     const text = host.textContent ?? '';
-    expect(text).toContain('None of this usage is billed yet');
+    expect(text).toContain('None of this usage is billed');
     expect(text).not.toContain('We found statements up to');
   });
 

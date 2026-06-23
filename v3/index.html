@@ -998,73 +998,88 @@ async function fetchConsumptionMerged(client, mpan, serials, periodFrom, periodT
   return { readings: merged, duplicateIntervals };
 }
 async function fetchCurrentTariffRates(client, tariffCode, periodFrom, periodTo) {
-  const productCode = productCodeFromTariffCode(tariffCode);
-  if (!productCode) {
-    return {
-      status: "unavailable",
-      productCode: null,
-      reason: "Could not derive a product code from your current tariff code."
-    };
-  }
   const tariff = classifyTariffCode(tariffCode);
   const isGoLike = tariff.kind === "go";
-  let dayWindows;
-  let standingWindows;
-  try {
-    [dayWindows, standingWindows] = await Promise.all([
-      fetchRateWindows(
+  const tryFetch = async (pCode, tCode) => {
+    let dayWindows;
+    let standingWindows;
+    try {
+      [dayWindows, standingWindows] = await Promise.all([
+        fetchRateWindows(client, pCode, tCode, "standard-unit-rates", periodFrom, periodTo),
+        fetchRateWindows(client, pCode, tCode, "standing-charges", periodFrom, periodTo)
+      ]);
+    } catch {
+      return null;
+    }
+    if (dayWindows.length === 0) return null;
+    let nightWindows = [];
+    try {
+      nightWindows = await fetchRateWindows(
         client,
-        productCode,
-        tariffCode,
-        "standard-unit-rates",
+        pCode,
+        tCode,
+        "night-unit-rates",
         periodFrom,
         periodTo
-      ),
-      fetchRateWindows(client, productCode, tariffCode, "standing-charges", periodFrom, periodTo)
-    ]);
-  } catch {
-    return {
-      status: "unavailable",
-      productCode,
-      reason: "Could not fetch standard unit rates and standing charges for your current tariff."
-    };
+      );
+    } catch {
+    }
+    if (nightWindows.length > 0 && !isGoLike) return "unsupported";
+    if (isGoLike && nightWindows.length === 0) return null;
+    const rateShape = isGoLike ? "go-day-night" : "flat";
+    const unitWindows = rateShape === "go-day-night" ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo) : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
+    return { unitWindows, standingWindows, rateShape };
+  };
+  const originalProductCode = productCodeFromTariffCode(tariffCode);
+  if (originalProductCode) {
+    const direct = await tryFetch(originalProductCode, tariffCode);
+    if (direct === "unsupported") {
+      return {
+        status: "unsupported",
+        productCode: originalProductCode,
+        reason: `${tariff.label} has time-of-use rates that this page cannot model safely yet.`
+      };
+    }
+    if (direct !== null) {
+      return { status: "available", productCode: originalProductCode, ...direct };
+    }
   }
-  if (dayWindows.length === 0) {
-    return {
-      status: "unavailable",
-      productCode,
-      reason: "The Octopus API returned no standard unit rates for your current tariff."
-    };
+  if (isGoLike) {
+    const regionMatch = /^E-\d+R-.+-([A-P])$/i.exec(tariffCode);
+    const region = regionMatch?.[1];
+    if (region) {
+      const goDisplayName = tariff.label === "Intelligent Go" ? "Intelligent Octopus Go" : "Octopus Go";
+      try {
+        const rates = await fetchTariffRatesByName(
+          client,
+          goDisplayName,
+          region,
+          periodFrom,
+          periodTo
+        );
+        if (rates && rates.unitWindows.length > 0) {
+          const accountCode = originalProductCode ?? tariffCode;
+          const base = {
+            status: "available",
+            productCode: originalProductCode ?? goDisplayName,
+            unitWindows: rates.unitWindows,
+            standingWindows: rates.standingWindows,
+            rateShape: "go-day-night"
+          };
+          return originalProductCode ? {
+            ...base,
+            substitutionNote: `Your account shows ${accountCode}, whose published rates don't cover this comparison period. Current ${tariff.label} rates were used instead — the tariff structure is the same.`
+          } : base;
+        }
+      } catch {
+      }
+    }
   }
-  let nightWindows = [];
-  try {
-    nightWindows = await fetchRateWindows(
-      client,
-      productCode,
-      tariffCode,
-      "night-unit-rates",
-      periodFrom,
-      periodTo
-    );
-  } catch {
-  }
-  if (nightWindows.length > 0 && !isGoLike) {
-    return {
-      status: "unsupported",
-      productCode,
-      reason: `${tariff.label} has time-of-use rates that this page cannot model safely yet.`
-    };
-  }
-  if (isGoLike && nightWindows.length === 0) {
-    return {
-      status: "unavailable",
-      productCode,
-      reason: `${tariff.label} needs day and night rate windows, but the Octopus API returned no night rates.`
-    };
-  }
-  const rateShape = isGoLike ? "go-day-night" : "flat";
-  const unitWindows = rateShape === "go-day-night" ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo) : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
-  return { status: "available", unitWindows, standingWindows, productCode, rateShape };
+  return {
+    status: "unavailable",
+    productCode: originalProductCode ?? null,
+    reason: originalProductCode ? `${tariff.label} rates are not available from the Octopus API for this comparison period.` : "Could not derive a product code from your current tariff code."
+  };
 }
 async function fetchProductTariffCode(client, productCode, regionLetter) {
   const detail = await client.restGet(`/products/${productCode}/`);
@@ -1143,7 +1158,14 @@ async function fetchRateWindows(client, productCode, tariffCode, kind, periodFro
 }
 async function discoverConsumerTariffNames(client, periodFrom, periodTo) {
   const seen = /* @__PURE__ */ new Set();
-  for (const at of [periodFrom, periodTo, null]) {
+  const stepMs = 45 * 24 * 60 * 60 * 1e3;
+  const samples = [];
+  for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) {
+    samples.push(new Date(t));
+  }
+  samples.push(periodTo);
+  samples.push(null);
+  for (const at of samples) {
     const params = { brand: "OCTOPUS_ENERGY" };
     if (at) params["available_at"] = at.toISOString();
     let results;
@@ -1836,6 +1858,7 @@ async function runComparison(client, input, onProgress = () => {
   const onAgile = currentTariffKind === "agile";
   let currentTariffRates = null;
   let flexNote = null;
+  let ratesSubstitutionNote = null;
   if (!onFlexible && !onAgile && currentAgreement) {
     onProgress("Fetching your current tariff rates…", "active", 62);
     try {
@@ -1847,9 +1870,10 @@ async function runComparison(client, input, onProgress = () => {
       );
       if (currentTariffRateResult.status === "available") {
         currentTariffRates = currentTariffRateResult;
+        ratesSubstitutionNote = currentTariffRateResult.substitutionNote ?? null;
         const label = currentTariffRateResult.rateShape === "go-day-night" ? "Go-style day/night" : "flat-rate";
         onProgress(
-          `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
+          ratesSubstitutionNote ? `Current tariff (${label}, substitute product used): ${currentTariffRates.unitWindows.length} rate window(s).` : `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
           "ok",
           64
         );
@@ -2020,6 +2044,7 @@ async function runComparison(client, input, onProgress = () => {
       readingsBeyondStatements,
       agileSkipReason,
       flexNote,
+      ratesSubstitutionNote,
       gapInfo,
       products: {
         flexProductCode: effectiveFlexProductCode,
@@ -2592,6 +2617,7 @@ const TAG_ICON = {
   preSwitch: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
   mixed: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
   partial: { name: "clock", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
+  proxyRates: { name: "info", fg: "var(--status-caution)", bg: "var(--amber-tint)" },
   incomplete: FALLBACK_TAG,
   mismatch: { name: "x", fg: "var(--status-risk)", bg: "var(--red-tint)" }
 };
@@ -3162,6 +3188,8 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     (r) => r.start >= p.start && r.start < p.end
   ).length;
   const readingCoveragePct = expectedSlots > 0 ? Math.min(100, Math.round(actualSlots / expectedSlots * 100)) : 100;
+  const flexSource = run.context.flexColumnSource;
+  const usingProxy = flexSource.kind === "flexible-proxy";
   let status;
   let tag;
   let tagTone;
@@ -3178,13 +3206,14 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     tag = "Pre-tariff";
     tagTone = "caution";
     const oldLabel = p.actualTariffCode ? classifyTariffCode(p.actualTariffCode).label : null;
-    if (allPredate) {
-      reason = oldLabel ? `From before you switched tariff — ${oldLabel} rates aren't available from the API, so Flexible is used as the baseline.` : "From before you switched tariff — the figures above are based on this usage.";
-      includedInHeadline = "caution";
+    if (oldLabel) {
+      reason = `Contracted: ${oldLabel}. Calculated using: Flexible Octopus — ${oldLabel} rates aren't available from the API.`;
+    } else if (allPredate) {
+      reason = "From before you switched tariff — the figures above are based on this usage.";
     } else {
-      reason = oldLabel ? `Your ${oldLabel} rates for this period aren't available from the API — Flexible and Agile are shown as alternatives.` : "Before your current tariff — excluded from the headline.";
-      includedInHeadline = "no";
+      reason = "Before your current tariff — excluded from the headline.";
     }
+    includedInHeadline = allPredate ? "caution" : "no";
   } else if (mismatchInfo.hasMismatch && !mismatchInfo.isMinor) {
     status = "mismatch";
     tag = "Statement mismatch";
@@ -3203,11 +3232,23 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
     const pctStr = mismatchInfo.pct !== null ? `${(mismatchInfo.pct * 100).toFixed(1)}%` : "small";
     reason = `${metered} metered, ${billed} billed — ${pctStr} gap, small enough to include.`;
     includedInHeadline = onCurrent && p.confident ? "caution" : "no";
+  } else if (onCurrent && p.confident && usingProxy) {
+    status = "proxyRates";
+    tag = "Proxy rates";
+    tagTone = "caution";
+    reason = `Contracted: ${flexSource.actualTariffLabel}. Calculated using: Flexible Octopus — ${flexSource.actualTariffLabel} rates aren't available from the API.`;
+    includedInHeadline = "caution";
   } else if (onCurrent && p.confident) {
     status = "complete";
     tag = "Complete";
     tagTone = "saving";
-    reason = "On your current tariff, complete and confident.";
+    if (run.context.ratesSubstitutionNote && flexSource.kind === "current-tariff-rates") {
+      const contractedCode = /^E-\d+R-(.+)-[A-P]$/i.exec(flexSource.tariffCode)?.[1] ?? flexSource.label;
+      reason = `Contracted: ${contractedCode}. Calculated using: current ${flexSource.label} product rates — ${contractedCode} rates don't cover this period.`;
+    } else {
+      const rateId = (flexSource.kind === "current-tariff-rates" || flexSource.kind === "flexible-current") && flexSource.tariffCode != null ? `${/^E-\d+R-(.+)-[A-P]$/i.exec(flexSource.tariffCode)?.[1] ?? flexSource.tariffCode} (${flexSource.label})` : flexSource.label;
+      reason = `${rateId}, complete and confident.`;
+    }
     includedInHeadline = "yes";
   } else if (p.wasClamped || p.isSplit) {
     status = "partial";
@@ -3226,8 +3267,8 @@ function classifyPeriod(run, p, currentTariff, allPredate, proxyFlexLabel) {
   const flexUnmatched = p.flex.unmatchedReadings + p.flex.unmatchedStandingDays;
   const agileUnmatched = (p.agile?.unmatchedReadings ?? 0) + (p.agile?.unmatchedStandingDays ?? 0);
   const totalUnmatched = flexUnmatched + agileUnmatched;
-  const ratesCoverage = totalUnmatched === 0 ? "full" : flexUnmatched > expectedSlots * 0.5 ? "missing" : "partial";
-  const ratesCoverageNote = ratesCoverage === "full" ? "Rate data fully covers this period" : `${totalUnmatched} slot${totalUnmatched !== 1 ? "s" : ""} have no matching rate`;
+  const ratesCoverage = usingProxy ? "partial" : totalUnmatched === 0 ? "full" : flexUnmatched > expectedSlots * 0.5 ? "missing" : "partial";
+  const ratesCoverageNote = usingProxy ? `Flexible proxy rates used — ${flexSource.actualTariffLabel} rates aren't available from the API` : ratesCoverage === "full" ? "Rate data fully covers this period" : `${totalUnmatched} slot${totalUnmatched !== 1 ? "s" : ""} have no matching rate`;
   const excluded = !allPredate && (status === "preSwitch" || status === "mixed");
   return {
     period: p,
@@ -3312,9 +3353,13 @@ function computeResultsViewModel(run, headline) {
   const confidentCount = run.periods.filter((p) => p.confident).length;
   const trustedCount = notice ? confidentCount : headline.consistentCount;
   const coverage = trustedCount / Math.max(1, headline.totalCount);
-  const confidenceLevel = !headline.trustworthy ? "low" : coverage >= 0.6 ? "high" : "medium";
+  const usingProxyRates = run.context.flexColumnSource.kind === "flexible-proxy";
+  const noBillingStatements = !headline.summaryHasActual;
+  const baseConfidenceLevel = !headline.trustworthy ? "low" : coverage >= 0.6 ? "high" : "medium";
+  const confidenceLevel = baseConfidenceLevel === "high" && (usingProxyRates || noBillingStatements) ? "medium" : baseConfidenceLevel;
   const confidencePct = confidenceLevel === "high" ? 90 : confidenceLevel === "medium" ? 62 : 28;
-  const confidenceCaption = notice ? headline.trustworthy ? `Based on ${confidentCount} confident period(s) of your earlier usage ${onPrev}, with matched rates and standing charges.` : `Based on ${confidentCount} of ${headline.totalCount} period(s) of your earlier usage ${onPrev} — some readings are incomplete.` : `Based on ${headline.consistentCount} of ${headline.totalCount} complete period(s), with matched rates and standing charges.`;
+  const periodCount = `${headline.consistentCount} of ${headline.totalCount}`;
+  const confidenceCaption = notice ? headline.trustworthy ? `Based on ${confidentCount} confident period(s) of your earlier usage ${onPrev}, with matched rates and standing charges.` : `Based on ${confidentCount} of ${headline.totalCount} period(s) of your earlier usage ${onPrev} — some readings are incomplete.` : usingProxyRates && noBillingStatements ? `Based on ${periodCount} period(s) — Flexible proxy rates used and no billing statements available to verify.` : usingProxyRates ? `Based on ${periodCount} period(s) — Flexible proxy rates used, not your actual tariff rates.` : noBillingStatements ? `Based on ${periodCount} period(s) — estimated from published rates, no billing statements to verify.` : `Based on ${periodCount} complete period(s), with matched rates and standing charges.`;
   const switchClause = notice && notice.switchDate ? ` on ${fmtDateShort(notice.switchDate)}` : "";
   const previousTariffNotice = notice ? {
     previousLabel: previousLabel ?? "",
@@ -3471,7 +3516,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
       title: "Your most recent usage isn’t billed yet",
       body: `We found statements up to ${fmtDateShort(run.context.latestStatementEnd)}. Newer usage is still compared on Octopus’s published rates — you can see what Agile and Flexible would have cost — but not what you actually paid, because no bill covering those weeks came back from the API.`
     } : {
-      title: "None of this usage is billed yet",
+      title: "None of this usage is billed",
       body: "No statement covering this period came back from the API, so every figure here is on Octopus’s published rates — what Agile and Flexible would have cost — not what you actually paid."
     };
     host.append(callout(note.title, note.body, "caution", "info"));
@@ -3480,7 +3525,7 @@ function renderResults(host, run, headline, replayMeta, cb) {
     host.append(
       callout(
         "Bills not attributed safely",
-        "This account has more than one electricity meter, and Octopus statements do not say which MPAN each charge belongs to. We have left out the billed “you paid” total and shown published-rate estimates for this meter only.",
+        "This account has more than one electricity meter, and Octopus statements do not say which MPAN/meter each charge belongs to. We have left out the billed “you paid” total and shown published-rate estimates for this meter only.",
         "caution",
         "info"
       )
@@ -3491,6 +3536,16 @@ function renderResults(host, run, headline, replayMeta, cb) {
       callout(
         "Some bills were not attributed",
         "One or more accounts that list this MPAN also bill another electricity meter. We excluded those statements, so the “you paid” total includes only safely attributable bills and may not cover every account that bills this meter.",
+        "caution",
+        "info"
+      )
+    );
+  }
+  if (run.context.ratesSubstitutionNote) {
+    host.append(
+      callout(
+        "Tariff rates: updated product used",
+        run.context.ratesSubstitutionNote,
         "caution",
         "info"
       )

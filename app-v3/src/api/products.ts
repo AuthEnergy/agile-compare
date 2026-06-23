@@ -15,6 +15,9 @@ export interface CurrentTariffRates {
   standingWindows: RateWindow[];
   productCode: string;
   rateShape: CurrentTariffRateShape;
+  // Set when we fell back to a newer product-code version of the same tariff because
+  // the account's code no longer has published rates for the comparison period.
+  substitutionNote?: string;
 }
 
 export type CurrentTariffRatesResult =
@@ -33,85 +36,130 @@ export async function fetchCurrentTariffRates(
   periodFrom: Date,
   periodTo: Date,
 ): Promise<CurrentTariffRatesResult> {
-  const productCode = productCodeFromTariffCode(tariffCode);
-  if (!productCode) {
-    return {
-      status: 'unavailable',
-      productCode: null,
-      reason: 'Could not derive a product code from your current tariff code.',
-    };
-  }
   const tariff = classifyTariffCode(tariffCode);
   const isGoLike = tariff.kind === 'go';
 
-  let dayWindows: RateWindow[];
-  let standingWindows: RateWindow[];
-  try {
-    [dayWindows, standingWindows] = await Promise.all([
-      fetchRateWindows(
+  // Inner helper: try fetching all rate windows for a specific product+tariff code.
+  // Returns the windows on success, 'unsupported' for unmodelable ToU shapes, or
+  // null on any failure (missing endpoint, empty windows, API error) so the caller
+  // can try substitute product versions without catching multiple error shapes.
+  const tryFetch = async (
+    pCode: string,
+    tCode: string,
+  ): Promise<
+    | {
+        unitWindows: RateWindow[];
+        standingWindows: RateWindow[];
+        rateShape: CurrentTariffRateShape;
+      }
+    | 'unsupported'
+    | null
+  > => {
+    let dayWindows: RateWindow[];
+    let standingWindows: RateWindow[];
+    try {
+      [dayWindows, standingWindows] = await Promise.all([
+        fetchRateWindows(client, pCode, tCode, 'standard-unit-rates', periodFrom, periodTo),
+        fetchRateWindows(client, pCode, tCode, 'standing-charges', periodFrom, periodTo),
+      ]);
+    } catch {
+      return null;
+    }
+    if (dayWindows.length === 0) return null;
+
+    let nightWindows: RateWindow[] = [];
+    try {
+      nightWindows = await fetchRateWindows(
         client,
-        productCode,
-        tariffCode,
-        'standard-unit-rates',
+        pCode,
+        tCode,
+        'night-unit-rates',
         periodFrom,
         periodTo,
-      ),
-      fetchRateWindows(client, productCode, tariffCode, 'standing-charges', periodFrom, periodTo),
-    ]);
-  } catch {
-    return {
-      status: 'unavailable',
-      productCode,
-      reason: 'Could not fetch standard unit rates and standing charges for your current tariff.',
-    };
-  }
-  if (dayWindows.length === 0) {
-    return {
-      status: 'unavailable',
-      productCode,
-      reason: 'The Octopus API returned no standard unit rates for your current tariff.',
-    };
-  }
+      );
+    } catch {
+      /* flat-rate tariff — no night-unit-rates endpoint, or 404 */
+    }
 
-  // Probe for off-peak rates. A positive response means the tariff is not a plain
-  // single-register shape; only Go-like two-band day/night tariffs are modelled.
-  let nightWindows: RateWindow[] = [];
-  try {
-    nightWindows = await fetchRateWindows(
-      client,
-      productCode,
-      tariffCode,
-      'night-unit-rates',
-      periodFrom,
-      periodTo,
-    );
-  } catch {
-    /* flat/single-register tariff — no night-unit-rates endpoint */
+    if (nightWindows.length > 0 && !isGoLike) return 'unsupported';
+    if (isGoLike && nightWindows.length === 0) return null;
+
+    const rateShape: CurrentTariffRateShape = isGoLike ? 'go-day-night' : 'flat';
+    const unitWindows =
+      rateShape === 'go-day-night'
+        ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo)
+        : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
+    return { unitWindows, standingWindows, rateShape };
+  };
+
+  // 1. Try the exact product code from the account agreement.
+  const originalProductCode = productCodeFromTariffCode(tariffCode);
+  if (originalProductCode) {
+    const direct = await tryFetch(originalProductCode, tariffCode);
+    if (direct === 'unsupported') {
+      return {
+        status: 'unsupported',
+        productCode: originalProductCode,
+        reason: `${tariff.label} has time-of-use rates that this page cannot model safely yet.`,
+      };
+    }
+    if (direct !== null) {
+      return { status: 'available', productCode: originalProductCode, ...direct };
+    }
   }
 
-  if (nightWindows.length > 0 && !isGoLike) {
-    return {
-      status: 'unsupported',
-      productCode,
-      reason: `${tariff.label} has time-of-use rates that this page cannot model safely yet.`,
-    };
+  // 2. For Go-like tariffs, the account may reference an older product version whose
+  //    published rates don't cover the comparison period. Use the same display-name
+  //    lookup as the manual tariff picker (fetchTariffRatesByName → findProductVersionsByDisplayName
+  //    → fetchMergedRateWindows), which uses dated sampling to find every product version
+  //    that overlapped the window regardless of whether the tariff is still open to new customers.
+  if (isGoLike) {
+    const regionMatch = /^E-\d+R-.+-([A-P])$/i.exec(tariffCode);
+    const region = regionMatch?.[1];
+    if (region) {
+      const goDisplayName =
+        tariff.label === 'Intelligent Go' ? 'Intelligent Octopus Go' : 'Octopus Go';
+      try {
+        const rates = await fetchTariffRatesByName(
+          client,
+          goDisplayName,
+          region,
+          periodFrom,
+          periodTo,
+        );
+        if (rates && rates.unitWindows.length > 0) {
+          const accountCode = originalProductCode ?? tariffCode;
+          const base = {
+            status: 'available' as const,
+            productCode: originalProductCode ?? goDisplayName,
+            unitWindows: rates.unitWindows,
+            standingWindows: rates.standingWindows,
+            rateShape: 'go-day-night' as const,
+          };
+          return originalProductCode
+            ? {
+                ...base,
+                substitutionNote:
+                  `Your account shows ${accountCode}, whose published rates don't cover this ` +
+                  `comparison period. Current ${tariff.label} rates were used instead — ` +
+                  `the tariff structure is the same.`,
+              }
+            : base;
+        }
+      } catch {
+        /* fall through to unavailable */
+      }
+    }
   }
 
-  if (isGoLike && nightWindows.length === 0) {
-    return {
-      status: 'unavailable',
-      productCode,
-      reason: `${tariff.label} needs day and night rate windows, but the Octopus API returned no night rates.`,
-    };
-  }
-
-  const rateShape: CurrentTariffRateShape = isGoLike ? 'go-day-night' : 'flat';
-  const unitWindows =
-    rateShape === 'go-day-night'
-      ? buildGoRateWindows(dayWindows, nightWindows, periodFrom, periodTo)
-      : [...dayWindows].sort((a, b) => a.validFrom.getTime() - b.validFrom.getTime());
-
-  return { status: 'available', unitWindows, standingWindows, productCode, rateShape };
+  // 3. No rates could be fetched — return unavailable for the proxy fallback.
+  return {
+    status: 'unavailable',
+    productCode: originalProductCode ?? null,
+    reason: originalProductCode
+      ? `${tariff.label} rates are not available from the Octopus API for this comparison period.`
+      : 'Could not derive a product code from your current tariff code.',
+  };
 }
 
 export interface MergedRateWindows {
@@ -256,7 +304,17 @@ export async function discoverConsumerTariffNames(
   periodTo: Date,
 ): Promise<string[]> {
   const seen = new Set<string>();
-  for (const at of [periodFrom, periodTo, null] as Array<Date | null>) {
+  // Dense sampling (same cadence as findProductVersionsByDisplayName) so that
+  // tariffs which were available at some point in the window — but are now
+  // closed to new customers — still appear in the picker.
+  const stepMs = 45 * 24 * 60 * 60 * 1000;
+  const samples: Array<Date | null> = [];
+  for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) {
+    samples.push(new Date(t));
+  }
+  samples.push(periodTo);
+  samples.push(null); // current: products available to new customers right now
+  for (const at of samples) {
     const params: Params = { brand: 'OCTOPUS_ENERGY' };
     if (at) params['available_at'] = at.toISOString();
     let results: ProductRow[];

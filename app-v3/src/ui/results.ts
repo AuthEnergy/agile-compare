@@ -184,7 +184,7 @@ export function renderResults(
           body: `We found statements up to ${fmtDateShort(run.context.latestStatementEnd)}. Newer usage is still compared on Octopus’s published rates — you can see what Agile and Flexible would have cost — but not what you actually paid, because no bill covering those weeks came back from the API.`,
         }
       : {
-          title: 'None of this usage is billed yet',
+          title: 'None of this usage is billed',
           body: 'No statement covering this period came back from the API, so every figure here is on Octopus’s published rates — what Agile and Flexible would have cost — not what you actually paid.',
         };
     host.append(callout(note.title, note.body, 'caution', 'info'));
@@ -193,7 +193,7 @@ export function renderResults(
     host.append(
       callout(
         'Bills not attributed safely',
-        'This account has more than one electricity meter, and Octopus statements do not say which MPAN each charge belongs to. We have left out the billed “you paid” total and shown published-rate estimates for this meter only.',
+        'This account has more than one electricity meter, and Octopus statements do not say which MPAN/meter each charge belongs to. We have left out the billed “you paid” total and shown published-rate estimates for this meter only.',
         'caution',
         'info',
       ),
@@ -204,6 +204,16 @@ export function renderResults(
       callout(
         'Some bills were not attributed',
         'One or more accounts that list this MPAN also bill another electricity meter. We excluded those statements, so the “you paid” total includes only safely attributable bills and may not cover every account that bills this meter.',
+        'caution',
+        'info',
+      ),
+    );
+  }
+  if (run.context.ratesSubstitutionNote) {
+    host.append(
+      callout(
+        'Tariff rates: updated product used',
+        run.context.ratesSubstitutionNote,
         'caution',
         'info',
       ),

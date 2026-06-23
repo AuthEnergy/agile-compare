@@ -138,12 +138,14 @@ describe('fetchCurrentTariffRates', () => {
     expect(result.reason).toContain('cannot model safely');
   });
 
-  it('does not price a Go-like tariff without night rates', async () => {
+  it('does not price a Go-like tariff when no night rates exist anywhere', async () => {
     globalThis.fetch = (async (url: string | URL) => {
       const path = new URL(url.toString()).pathname;
       if (path.includes('standard-unit-rates')) return jsonResp({ results: [rateRow(31)] });
       if (path.includes('standing-charges')) return jsonResp({ results: [rateRow(45)] });
       if (path.includes('night-unit-rates')) return jsonResp({ results: [] });
+      // Products list returns empty — no live substitute available
+      if (path === '/v1/products/') return jsonResp({ results: [], next: null });
       throw new Error('Unhandled: ' + path);
     }) as unknown as typeof fetch;
 
@@ -155,8 +157,62 @@ describe('fetchCurrentTariffRates', () => {
     );
 
     expect(result.status).toBe('unavailable');
-    if (result.status !== 'unavailable') throw new Error('expected unavailable rates');
-    expect(result.reason).toContain('night rates');
+  });
+
+  it('substitutes via display-name lookup when the account tariff has no night rates for the period', async () => {
+    const nightStart = new Date('2025-01-01T00:30:00Z');
+    const nightEnd = new Date('2025-01-01T05:30:00Z');
+    globalThis.fetch = (async (url: string | URL) => {
+      const path = new URL(url.toString()).pathname;
+      // Old product night rates: empty (triggers fallback)
+      if (path.includes('GO-VAR-22-10-14') && path.includes('night-unit-rates')) {
+        return jsonResp({ results: [] });
+      }
+      // Products list (all available_at probes): return GO-24-10-01 as "Octopus Go"
+      if (path === '/v1/products/') {
+        return jsonResp({
+          results: [
+            {
+              code: 'GO-24-10-01',
+              display_name: 'Octopus Go',
+              is_business: false,
+              is_prepay: false,
+              available_from: '2024-10-01T00:00:00Z',
+              available_to: null,
+            },
+          ],
+          next: null,
+        });
+      }
+      // Tariff code lookup for GO-24-10-01 (called by fetchMergedRateWindows)
+      if (path === '/v1/products/GO-24-10-01/') {
+        return jsonResp({
+          single_register_electricity_tariffs: {
+            _C: { direct_debit_monthly: { code: 'E-1R-GO-24-10-01-C' } },
+          },
+        });
+      }
+      // Night rates for substitute product: present
+      if (path.includes('GO-24-10-01') && path.includes('night-unit-rates')) {
+        return jsonResp({ results: [rateRow(8, nightStart, nightEnd)] });
+      }
+      // All other rate endpoints (standard/standing for both products)
+      if (path.includes('standard-unit-rates')) return jsonResp({ results: [rateRow(31)] });
+      if (path.includes('standing-charges')) return jsonResp({ results: [rateRow(45)] });
+      throw new Error('Unhandled: ' + path);
+    }) as unknown as typeof fetch;
+
+    const result = await fetchCurrentTariffRates(
+      createClient('k'),
+      'E-1R-GO-VAR-22-10-14-C',
+      periodFrom,
+      periodTo,
+    );
+
+    expect(result.status).toBe('available');
+    if (result.status !== 'available') throw new Error('expected available rates');
+    expect(result.rateShape).toBe('go-day-night');
+    expect(result.substitutionNote).toMatch(/GO-VAR-22-10-14/);
   });
 });
 

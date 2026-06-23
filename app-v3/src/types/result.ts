@@ -113,6 +113,10 @@ export interface RunContext {
   // Set when the user's actual tariff rates could not be fetched and Flexible is
   // used as the flex column proxy instead. Shown as a caveat in the results.
   flexNote?: string | null;
+  // Set when rates were fetched from a newer product-code version of the same
+  // tariff (e.g. GO-24-10-01 standing in for GO-VAR-22-10-14). The comparison
+  // is still using the right tariff type — this is informational, not a proxy.
+  ratesSubstitutionNote?: string | null;
   // When set, the right (agile) column displays this label rather than "Agile".
   // Used when the user selects a different comparison tariff.
   agileColumnLabel?: string;

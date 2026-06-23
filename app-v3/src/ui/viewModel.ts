@@ -15,7 +15,8 @@ export type PeriodStatus =
   | 'mismatch'
   | 'mismatchMinor'
   | 'partial'
-  | 'incomplete';
+  | 'incomplete'
+  | 'proxyRates';
 
 export interface PeriodRowVM {
   period: PeriodComparison;
@@ -143,6 +144,9 @@ function classifyPeriod(
   const readingCoveragePct =
     expectedSlots > 0 ? Math.min(100, Math.round((actualSlots / expectedSlots) * 100)) : 100;
 
+  const flexSource = run.context.flexColumnSource;
+  const usingProxy = flexSource.kind === 'flexible-proxy';
+
   let status: PeriodStatus;
   let tag: string;
   let tagTone: Tone;
@@ -160,17 +164,14 @@ function classifyPeriod(
     tag = 'Pre-tariff';
     tagTone = 'caution';
     const oldLabel = p.actualTariffCode ? classifyTariffCode(p.actualTariffCode).label : null;
-    if (allPredate) {
-      reason = oldLabel
-        ? `From before you switched tariff — ${oldLabel} rates aren't available from the API, so Flexible is used as the baseline.`
-        : 'From before you switched tariff — the figures above are based on this usage.';
-      includedInHeadline = 'caution';
+    if (oldLabel) {
+      reason = `Contracted: ${oldLabel}. Calculated using: Flexible Octopus — ${oldLabel} rates aren't available from the API.`;
+    } else if (allPredate) {
+      reason = 'From before you switched tariff — the figures above are based on this usage.';
     } else {
-      reason = oldLabel
-        ? `Your ${oldLabel} rates for this period aren't available from the API — Flexible and Agile are shown as alternatives.`
-        : 'Before your current tariff — excluded from the headline.';
-      includedInHeadline = 'no';
+      reason = 'Before your current tariff — excluded from the headline.';
     }
+    includedInHeadline = allPredate ? 'caution' : 'no';
   } else if (mismatchInfo.hasMismatch && !mismatchInfo.isMinor) {
     status = 'mismatch';
     tag = 'Statement mismatch';
@@ -190,11 +191,28 @@ function classifyPeriod(
     const pctStr = mismatchInfo.pct !== null ? `${(mismatchInfo.pct * 100).toFixed(1)}%` : 'small';
     reason = `${metered} metered, ${billed} billed — ${pctStr} gap, small enough to include.`;
     includedInHeadline = onCurrent && p.confident ? 'caution' : 'no';
+  } else if (onCurrent && p.confident && usingProxy) {
+    status = 'proxyRates';
+    tag = 'Proxy rates';
+    tagTone = 'caution';
+    reason = `Contracted: ${flexSource.actualTariffLabel}. Calculated using: Flexible Octopus — ${flexSource.actualTariffLabel} rates aren't available from the API.`;
+    includedInHeadline = 'caution';
   } else if (onCurrent && p.confident) {
     status = 'complete';
     tag = 'Complete';
     tagTone = 'saving';
-    reason = 'On your current tariff, complete and confident.';
+    if (run.context.ratesSubstitutionNote && flexSource.kind === 'current-tariff-rates') {
+      const contractedCode =
+        /^E-\d+R-(.+)-[A-P]$/i.exec(flexSource.tariffCode)?.[1] ?? flexSource.label;
+      reason = `Contracted: ${contractedCode}. Calculated using: current ${flexSource.label} product rates — ${contractedCode} rates don't cover this period.`;
+    } else {
+      const rateId =
+        (flexSource.kind === 'current-tariff-rates' || flexSource.kind === 'flexible-current') &&
+        flexSource.tariffCode != null
+          ? `${/^E-\d+R-(.+)-[A-P]$/i.exec(flexSource.tariffCode)?.[1] ?? flexSource.tariffCode} (${flexSource.label})`
+          : flexSource.label;
+      reason = `${rateId}, complete and confident.`;
+    }
     includedInHeadline = 'yes';
   } else if (p.wasClamped || p.isSplit) {
     status = 'partial';
@@ -223,10 +241,16 @@ function classifyPeriod(
   const flexUnmatched = p.flex.unmatchedReadings + p.flex.unmatchedStandingDays;
   const agileUnmatched = (p.agile?.unmatchedReadings ?? 0) + (p.agile?.unmatchedStandingDays ?? 0);
   const totalUnmatched = flexUnmatched + agileUnmatched;
-  const ratesCoverage: 'full' | 'partial' | 'missing' =
-    totalUnmatched === 0 ? 'full' : flexUnmatched > expectedSlots * 0.5 ? 'missing' : 'partial';
-  const ratesCoverageNote =
-    ratesCoverage === 'full'
+  const ratesCoverage: 'full' | 'partial' | 'missing' = usingProxy
+    ? 'partial'
+    : totalUnmatched === 0
+      ? 'full'
+      : flexUnmatched > expectedSlots * 0.5
+        ? 'missing'
+        : 'partial';
+  const ratesCoverageNote = usingProxy
+    ? `Flexible proxy rates used — ${flexSource.actualTariffLabel} rates aren't available from the API`
+    : ratesCoverage === 'full'
       ? 'Rate data fully covers this period'
       : `${totalUnmatched} slot${totalUnmatched !== 1 ? 's' : ''} have no matching rate`;
 
@@ -360,17 +384,32 @@ export function computeResultsViewModel(run: ComparisonRun, headline: Headline):
   // "medium" — never a near-full "high" bar that overstates how much we checked.
   const trustedCount = notice ? confidentCount : headline.consistentCount;
   const coverage = trustedCount / Math.max(1, headline.totalCount);
-  const confidenceLevel: 'high' | 'medium' | 'low' = !headline.trustworthy
+  const usingProxyRates = run.context.flexColumnSource.kind === 'flexible-proxy';
+  const noBillingStatements = !headline.summaryHasActual;
+  const baseConfidenceLevel: 'high' | 'medium' | 'low' = !headline.trustworthy
     ? 'low'
     : coverage >= 0.6
       ? 'high'
       : 'medium';
+  // Cap at medium when the flex column uses proxy rates (not the user's actual tariff)
+  // or when there are no billing statements to verify against.
+  const confidenceLevel: 'high' | 'medium' | 'low' =
+    baseConfidenceLevel === 'high' && (usingProxyRates || noBillingStatements)
+      ? 'medium'
+      : baseConfidenceLevel;
   const confidencePct = confidenceLevel === 'high' ? 90 : confidenceLevel === 'medium' ? 62 : 28;
+  const periodCount = `${headline.consistentCount} of ${headline.totalCount}`;
   const confidenceCaption = notice
     ? headline.trustworthy
       ? `Based on ${confidentCount} confident period(s) of your earlier usage ${onPrev}, with matched rates and standing charges.`
       : `Based on ${confidentCount} of ${headline.totalCount} period(s) of your earlier usage ${onPrev} — some readings are incomplete.`
-    : `Based on ${headline.consistentCount} of ${headline.totalCount} complete period(s), with matched rates and standing charges.`;
+    : usingProxyRates && noBillingStatements
+      ? `Based on ${periodCount} period(s) — Flexible proxy rates used and no billing statements available to verify.`
+      : usingProxyRates
+        ? `Based on ${periodCount} period(s) — Flexible proxy rates used, not your actual tariff rates.`
+        : noBillingStatements
+          ? `Based on ${periodCount} period(s) — estimated from published rates, no billing statements to verify.`
+          : `Based on ${periodCount} complete period(s), with matched rates and standing charges.`;
 
   const switchClause = notice && notice.switchDate ? ` on ${fmtDateShort(notice.switchDate)}` : '';
   const previousTariffNotice = notice

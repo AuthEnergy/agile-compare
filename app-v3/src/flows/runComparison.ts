@@ -320,6 +320,7 @@ export async function runComparison(
   const onAgile = currentTariffKind === 'agile';
   let currentTariffRates: CurrentTariffRates | null = null;
   let flexNote: string | null = null;
+  let ratesSubstitutionNote: string | null = null;
   if (!onFlexible && !onAgile && currentAgreement) {
     onProgress('Fetching your current tariff rates…', 'active', 62);
     try {
@@ -331,10 +332,13 @@ export async function runComparison(
       );
       if (currentTariffRateResult.status === 'available') {
         currentTariffRates = currentTariffRateResult;
+        ratesSubstitutionNote = currentTariffRateResult.substitutionNote ?? null;
         const label =
           currentTariffRateResult.rateShape === 'go-day-night' ? 'Go-style day/night' : 'flat-rate';
         onProgress(
-          `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
+          ratesSubstitutionNote
+            ? `Current tariff (${label}, substitute product used): ${currentTariffRates.unitWindows.length} rate window(s).`
+            : `Current tariff (${label}): ${currentTariffRates.unitWindows.length} rate window(s).`,
           'ok',
           64,
         );
@@ -554,6 +558,7 @@ export async function runComparison(
       readingsBeyondStatements,
       agileSkipReason,
       flexNote,
+      ratesSubstitutionNote,
       gapInfo,
       products: {
         flexProductCode: effectiveFlexProductCode,

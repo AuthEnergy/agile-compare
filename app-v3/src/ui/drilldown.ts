@@ -46,6 +46,7 @@ export const TAG_ICON: Record<string, TagIcon> = {
   preSwitch: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
   mixed: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
   partial: { name: 'clock', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
+  proxyRates: { name: 'info', fg: 'var(--status-caution)', bg: 'var(--amber-tint)' },
   incomplete: FALLBACK_TAG,
   mismatch: { name: 'x', fg: 'var(--status-risk)', bg: 'var(--red-tint)' },
 };

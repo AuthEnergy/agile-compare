@@ -21,6 +21,7 @@ function stmtRow(label: string, value: string, strong = false): HTMLElement {
 
 export interface ResultsCallbacks {
   onTiming: () => void;
+  onSolar: () => void;
   onReset: () => void;
   onDiagnostics: () => void;
   onEditTariff: () => void;
@@ -346,11 +347,14 @@ export function renderResults(
             onClick: cb.onDiagnostics,
           }),
         ]),
-        button('See how timing saves more', {
-          variant: 'primary',
-          size: 'lg',
-          onClick: cb.onTiming,
-        }),
+        el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' }, [
+          button('Solar & battery', { variant: 'secondary', onClick: cb.onSolar }),
+          button('See how timing saves more', {
+            variant: 'primary',
+            size: 'lg',
+            onClick: cb.onTiming,
+          }),
+        ]),
       ],
     ),
   );

@@ -27,8 +27,16 @@ import { applyTariffComparison, type TariffColumn } from '../flows/applyTariffCo
 import { discoverConsumerTariffNames, fetchTariffRatesByName } from '../api/products';
 import { renderExportResults } from './exportResults';
 import { renderTiming } from './timing';
+import { renderSolar } from './solarResults';
 import { renderFooter } from './footer';
 import { openDiagnosticsModal, type DiagModalDeps } from './diagnosticsModal';
+import {
+  runSolar,
+  recomputeSolar,
+  DEFAULT_SEG_PENCE,
+  type SolarExportWindows,
+} from '../flows/runSolar';
+import { DEFAULT_SOLAR_CONFIG, type SolarConfig, type SolarRun } from '../types/solar';
 
 function downloadBundle(bundle: DiagnosticsBundle): void {
   const blob = new Blob([bundle.content], { type: bundle.mimeType });
@@ -42,7 +50,7 @@ function downloadBundle(bundle: DiagnosticsBundle): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export type Screen = 'connect' | 'meter' | 'fetch' | 'results' | 'timing';
+export type Screen = 'connect' | 'meter' | 'fetch' | 'results' | 'timing' | 'solar';
 
 export interface UiState {
   screen: Screen;
@@ -55,6 +63,7 @@ export interface UiState {
   fetchMessage: string;
   exportConsent: boolean;
   analyticsConsent: boolean;
+  solarBusy: boolean;
 }
 
 export interface UiActions {
@@ -71,7 +80,12 @@ const STEP_MAP: Record<Screen, { label: string; n: number }> = {
   fetch: { label: 'Reading your usage', n: 2 },
   results: { label: 'Your comparison', n: 3 },
   timing: { label: 'Save more', n: 4 },
+  // Solar is a sibling exploration off results (like timing), so it shares the
+  // final step rather than extending the linear journey.
+  solar: { label: 'Solar & battery', n: 4 },
 };
+// Derived so adding a screen never leaves the progress bar reading "5 / 4".
+const STEP_MAX = Math.max(...Object.values(STEP_MAP).map((s) => s.n));
 
 function initialTheme(): 'light' | 'dark' {
   try {
@@ -121,6 +135,14 @@ export class App {
       | { kind: 'manual'; unitRate: number; standingCharge: number };
   } | null = null;
   private currentExport: ExportRun | null = null;
+  // Solar what-if state. Export windows are fetched ONCE per run and cached so input
+  // tweaks re-run only the pure sim (recomputeSolar). solarSeq guards a stale fetch.
+  private currentSolar: SolarRun | null = null;
+  private solarExportWindows: SolarExportWindows | null = null;
+  private solarConfig: SolarConfig = { ...DEFAULT_SOLAR_CONFIG };
+  private solarSegPence = DEFAULT_SEG_PENCE;
+  private solarError: string | null = null;
+  private solarSeq = 0;
   private replayMeta: string | null = null;
   private liveClient: OctopusClient | null = null;
   private liveApiKey = '';
@@ -164,12 +186,14 @@ export class App {
       fetchMessage: '',
       exportConsent: false,
       analyticsConsent,
+      solarBusy: false,
     };
     this.screenRenderers.set('connect', (h) => this.renderConnect(h));
     this.screenRenderers.set('meter', (h) => this.renderMeterScreen(h));
     this.screenRenderers.set('fetch', (h) => this.renderFetchScreen(h));
     this.screenRenderers.set('results', (h) => this.renderResultsScreen(h));
     this.screenRenderers.set('timing', (h) => this.renderTimingScreen(h));
+    this.screenRenderers.set('solar', (h) => this.renderSolarScreen(h));
   }
 
   getState(): Readonly<UiState> {
@@ -184,7 +208,19 @@ export class App {
     this.currentMeter = null;
     this.replayMeta = replayMeta;
     this.columnOverride = null;
-    this.setState({ screen: 'results', statusMessage: null, error: null });
+    this.resetSolar();
+    this.setState({ screen: 'results', statusMessage: null, error: null, solarBusy: false });
+  }
+
+  // Drop any cached solar what-if so a new run never values fresh generation against
+  // a previous run's export windows or config.
+  private resetSolar(): void {
+    this.solarSeq++;
+    this.currentSolar = null;
+    this.solarExportWindows = null;
+    this.solarConfig = { ...DEFAULT_SOLAR_CONFIG };
+    this.solarSegPence = DEFAULT_SEG_PENCE;
+    this.solarError = null;
   }
 
   showExportResults(run: ExportRun, replayMeta: string | null = null): void {
@@ -400,7 +436,8 @@ export class App {
     this.failureDiag = null;
     this.replayMeta = null;
     this.columnOverride = null;
-    this.setState({ screen: 'connect', statusMessage: null, error: null });
+    this.resetSolar();
+    this.setState({ screen: 'connect', statusMessage: null, error: null, solarBusy: false });
   }
 
   private openTariffOverrideModal(): void {
@@ -471,6 +508,7 @@ export class App {
   private resultsCallbacks() {
     return {
       onTiming: () => this.setState({ screen: 'timing' }),
+      onSolar: () => this.setState({ screen: 'solar' }),
       onReset: () => this.reset(),
       onDiagnostics: () => this.openDiagnostics(),
       onEditTariff: () => this.openTariffOverrideModal(),
@@ -620,8 +658,64 @@ export class App {
     const guidance = nextSteps(this.currentRun, computeHeadline(this.currentRun));
     renderTiming(host, guidance, {
       onBack: () => this.setState({ screen: 'results' }),
+      onSolar: () => this.setState({ screen: 'solar' }),
       onDiagnostics: () => this.openDiagnostics(),
     });
+  }
+
+  private renderSolarScreen(host: HTMLElement): void {
+    if (!this.currentRun) {
+      host.append(el('p', { class: 'muted', text: 'No comparison loaded.' }));
+      return;
+    }
+    renderSolar(
+      host,
+      {
+        solar: this.currentSolar,
+        config: this.solarConfig,
+        segPence: this.solarSegPence,
+        busy: this.state.solarBusy,
+        error: this.solarError,
+      },
+      {
+        onCalculate: (cfg, segPence) => void this.calculateSolar(cfg, segPence),
+        onBack: () => this.setState({ screen: 'results' }),
+      },
+    );
+  }
+
+  // First Calculate fetches the export rates once and caches them; later tweaks
+  // re-run only the pure sim. liveClient is null for sample/replay → SEG fallback.
+  private async calculateSolar(cfg: SolarConfig, segPence: number): Promise<void> {
+    const run = this.currentRun;
+    if (!run) return;
+    this.solarConfig = cfg;
+    this.solarSegPence = segPence;
+    this.solarError = null;
+
+    if (this.solarExportWindows) {
+      this.currentSolar = recomputeSolar(run, cfg, this.solarExportWindows, {
+        segRatePence: segPence,
+      });
+      this.setState({ solarBusy: false });
+      return;
+    }
+
+    const myCalc = ++this.solarSeq;
+    this.setState({ solarBusy: true });
+    try {
+      const { run: solarRun, exportWindows } = await runSolar(this.liveClient, run, cfg, {
+        segRatePence: segPence,
+      });
+      if (myCalc !== this.solarSeq) return;
+      this.solarExportWindows = exportWindows;
+      this.currentSolar = solarRun;
+    } catch (err) {
+      if (myCalc !== this.solarSeq) return;
+      this.solarError = errorMessage(err);
+    } finally {
+      if (myCalc === this.solarSeq) this.setState({ solarBusy: false });
+    }
   }
 
   setState(patch: Partial<UiState>): void {
@@ -779,10 +873,10 @@ export class App {
     return el('div', { class: 'steps' }, [
       el('div', { class: 'steps-row' }, [
         el('span', { class: 'steps-label', text: sm.label }),
-        el('span', { class: 'steps-count', text: `${sm.n} / 4` }),
+        el('span', { class: 'steps-count', text: `${sm.n} / ${STEP_MAX}` }),
       ]),
       el('div', { class: 'steps-track' }, [
-        el('div', { class: 'steps-fill', style: `width:${(sm.n / 4) * 100}%` }),
+        el('div', { class: 'steps-fill', style: `width:${(sm.n / STEP_MAX) * 100}%` }),
       ]),
     ]);
   }

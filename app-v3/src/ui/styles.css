@@ -1050,3 +1050,46 @@ button {
     display: none;
   }
 }
+
+/* solar what-if screen */
+.solar-input-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+.solar-advanced {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+}
+.solar-advanced > summary {
+  cursor: pointer;
+  font-size: var(--text-body-sm);
+  font-weight: 600;
+  color: var(--text-body);
+  margin-bottom: 10px;
+}
+.solar-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+.solar-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-body-sm);
+}
+.solar-table th,
+.solar-table td {
+  text-align: right;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.solar-table th:first-child,
+.solar-table td:first-child {
+  text-align: left;
+}
+.solar-table thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: var(--text-caption);
+}

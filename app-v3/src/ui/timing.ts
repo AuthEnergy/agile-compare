@@ -5,6 +5,7 @@ import { ICONS } from './icons';
 
 export interface TimingCallbacks {
   onBack: () => void;
+  onSolar: () => void;
   onDiagnostics: () => void;
 }
 
@@ -112,11 +113,14 @@ export function renderTiming(
           variant: 'secondary',
           onClick: cb.onBack,
         }),
-        button('Download or send diagnostics', {
-          variant: 'secondary',
-          iconLeft: 'lock',
-          onClick: cb.onDiagnostics,
-        }),
+        el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' }, [
+          button('Solar & battery', { variant: 'secondary', onClick: cb.onSolar }),
+          button('Download or send diagnostics', {
+            variant: 'secondary',
+            iconLeft: 'lock',
+            onClick: cb.onDiagnostics,
+          }),
+        ]),
       ],
     ),
   );

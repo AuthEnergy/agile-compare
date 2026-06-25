@@ -47,6 +47,7 @@ describe('renderResults — all data predates the current tariff', () => {
   let host: HTMLElement;
   const cb = {
     onTiming: () => {},
+    onSolar: () => {},
     onReset: () => {},
     onDiagnostics: () => {},
     onEditTariff: () => {},
@@ -250,6 +251,7 @@ describe('renderResults — all data predates the current tariff', () => {
 describe('renderResults — drill-down tariff labels', () => {
   const cb = {
     onTiming: () => {},
+    onSolar: () => {},
     onReset: () => {},
     onDiagnostics: () => {},
     onEditTariff: () => {},

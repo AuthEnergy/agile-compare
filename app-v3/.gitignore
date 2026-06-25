@@ -3,3 +3,7 @@ test-results/
 playwright-report/
 .vite/
 *.tsbuildinfo
+
+# Raw MIDAS Open downloads (dev-time, regenerate the bundled module from these).
+# Only src/data/solarProfiles.generated.ts is committed, never the raw CSVs.
+tools/midas-data/

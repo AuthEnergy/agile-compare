@@ -90,7 +90,10 @@ export function parseRadiationFile(text) {
   const iHours = idx('ob_hour_count');
   if (iTime === -1 || iGlbl === -1) return null; // not a radiation obs file
 
-  const rows = [];
+  // Some station-years report the SAME hour twice under different message types
+  // (e.g. AWSHRLY and MODLERAD), both version_num=1 — summing both double-counts.
+  // Dedupe by ob_end_time below, keeping the larger global value.
+  const byTime = new Map();
   for (let i = colIdx + 1; i < lines.length; i++) {
     const line = lines[i];
     if (line.trim() === '') continue;
@@ -102,13 +105,20 @@ export function parseRadiationFile(text) {
     if (!obEndTime) continue;
     const glblKj = Number(cells[iGlbl]);
     if (!Number.isFinite(glblKj) || glblKj < 0) continue;
+    // Diffuse is treated as MISSING when absent or exactly 0: many station-years
+    // carry difu_irad_amt as 0 (a missing-as-zero placeholder), and true diffuse is
+    // never 0 in daylight — counting those zeros would crush the diffuse fraction.
     let difuKwh = null;
     if (iDifu !== -1) {
       const difuKj = Number(cells[iDifu]);
-      if (Number.isFinite(difuKj) && difuKj >= 0) difuKwh = difuKj / KJ_PER_KWH;
+      if (Number.isFinite(difuKj) && difuKj > 0) difuKwh = difuKj / KJ_PER_KWH;
     }
-    rows.push({ obEndTime, glblKwh: glblKj / KJ_PER_KWH, difuKwh });
+    const ts = obEndTime.getTime();
+    const cand = { obEndTime, glblKwh: glblKj / KJ_PER_KWH, difuKwh };
+    const prev = byTime.get(ts);
+    if (!prev || cand.glblKwh > prev.glblKwh) byTime.set(ts, cand);
   }
+  const rows = [...byTime.values()].sort((a, b) => a.obEndTime.getTime() - b.obEndTime.getTime());
 
   if (lat === null || lng === null || rows.length === 0) return null;
   return { srcId, lat, lng, rows };

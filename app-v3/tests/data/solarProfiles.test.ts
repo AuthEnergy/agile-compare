@@ -71,12 +71,25 @@ describe('bundled solar profiles', () => {
   });
 
   it('has honest, complete provenance with an attributable citation', () => {
-    expect(SOLAR_DATA_PROVENANCE.version).toBe(SOLAR_DATA_VERSION);
-    expect(SOLAR_DATA_PROVENANCE.license.length).toBeGreaterThan(0);
-    expect(SOLAR_DATA_PROVENANCE.citation.length).toBeGreaterThan(0);
-    // The committed default is the modelled climatology — it must not claim measured data.
-    expect(SOLAR_DATA_PROVENANCE.shapeBasis.toLowerCase()).toContain('clear-sky');
-    expect(SOLAR_DATA_PROVENANCE.coverage.toLowerCase()).toContain('not a measured');
+    // Either source may be committed: modelled climatology (default) or measured MIDAS.
+    const p = SOLAR_DATA_PROVENANCE as unknown as Record<string, string | number | undefined>;
+    const get = (k: string): string => String(p[k] ?? '');
+    // SOLAR_DATA_VERSION is the bundle version; provenance.version is the upstream
+    // dataset version (equal for modelled, "midas-<v>" vs "<v>" for measured).
+    expect(SOLAR_DATA_VERSION).toContain(get('version'));
+    expect(get('license').length).toBeGreaterThan(0);
+    expect(get('citation').length).toBeGreaterThan(0);
+    expect(get('shapeBasis').length).toBeGreaterThan(0);
+    if ('doi' in p) {
+      // measured MIDAS Open build — must be attributable under the OGL.
+      expect(get('doi')).toContain('10.5285/');
+      expect(get('shapeBasis').toLowerCase()).toContain('measured');
+      expect(get('license').toLowerCase()).toContain('open government licence');
+    } else {
+      // modelled climatology default — must not claim measured data.
+      expect(get('shapeBasis').toLowerCase()).toContain('clear-sky');
+      expect(get('coverage').toLowerCase()).toContain('not a measured');
+    }
   });
 
   it('stays within the generated-module size budget', () => {

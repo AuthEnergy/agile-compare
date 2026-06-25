@@ -5,11 +5,15 @@
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { haversineKm, sinElevationAt } from './solarGeom.mjs';
+import { dayOfYearUtc, haversineKm, sinElevationAt } from './solarGeom.mjs';
 import { parseRadiationFile } from './parseBadcCsv.mjs';
 import { buildModelledProfiles, modelledMonthlyGhi, modelledShape, toPpm } from './modelled.mjs';
 
 const HALF_HOUR_MS = 30 * 60 * 1000;
+// A complete MIDAS day records ~24 hourly rows (night zeros included). Days with
+// fewer are partial/stray and are dropped, so a near-empty station-year can't
+// deflate a zone's monthly GHI (and a zone with no complete days falls back).
+const MIN_DAY_ROWS = 20;
 
 function daysInMonthUtc(monthIndex) {
   return new Date(Date.UTC(2021, monthIndex + 1, 0)).getUTCDate(); // non-leap reference
@@ -79,9 +83,12 @@ export function ingestMidas({ midasDir, src }) {
     acc[id] = {
       shape: Array.from({ length: 12 }, () => new Array(48).fill(0)),
       monthKwh: new Array(12).fill(0),
+      // Distinct OBSERVED station-days per month (keyed by station so two stations
+      // sharing a date count as two days, not one — otherwise monthly GHI inflates).
       days: Array.from({ length: 12 }, () => new Set()),
       difu: new Array(12).fill(0),
       glblWithDifu: new Array(12).fill(0),
+      difuCount: new Array(12).fill(0),
       stations: new Set(),
     };
   }
@@ -101,26 +108,64 @@ export function ingestMidas({ midasDir, src }) {
     const zoneId = assignZone(station.lat, station.lng, zones);
     if (!zoneId) continue;
     const a = acc[zoneId];
-    a.stations.add(station.srcId ?? `${station.lat},${station.lng}`);
+    const stationKey = station.srcId ?? `${station.lat},${station.lng}`;
+    a.stations.add(stationKey);
     filesUsed++;
 
+    // First pass: rows per observed day (completeness gate against stray/partial days).
+    const dayRows = new Map();
     for (const row of station.rows) {
-      const halves = splitHourToHalfHours(station.lat, station.lng, row.obEndTime, row.glblKwh);
-      for (const h of halves) {
-        const m = h.slotStart.getUTCMonth();
-        a.shape[m][slotOfDay(h.slotStart)] += h.kwh;
-        a.monthKwh[m] += h.kwh;
-        a.days[m].add(
-          `${h.slotStart.getUTCFullYear()}-${h.slotStart.getUTCMonth()}-${h.slotStart.getUTCDate()}`,
-        );
-        const y = h.slotStart.getUTCFullYear();
-        if (y < minYear) minYear = y;
-        if (y > maxYear) maxYear = y;
+      const k = `${row.obEndTime.getUTCFullYear()}-${dayOfYearUtc(row.obEndTime)}`;
+      dayRows.set(k, (dayRows.get(k) ?? 0) + 1);
+    }
+
+    // Detect this station-year's sampling interval. Some station-years are reported
+    // half-hourly (≈48 rows/day) yet still tagged ob_hour_count=1; treating each as a
+    // full hour would double-count the energy. Decide from the modal gap between
+    // consecutive observation times.
+    const times = station.rows.map((r) => r.obEndTime.getTime()).sort((x, y) => x - y);
+    let c30 = 0;
+    let c60 = 0;
+    for (let i = 1; i < times.length; i++) {
+      const d = (times[i] - times[i - 1]) / 60000;
+      if (d > 0 && d <= 45) c30++;
+      else if (d <= 90) c60++;
+    }
+    const halfHourly = c30 > c60;
+
+    const fold = (slotStart, kwh) => {
+      const m = slotStart.getUTCMonth();
+      a.shape[m][slotOfDay(slotStart)] += kwh;
+      a.monthKwh[m] += kwh;
+      a.days[m].add(
+        `${stationKey}-${slotStart.getUTCFullYear()}-${slotStart.getUTCMonth()}-${slotStart.getUTCDate()}`,
+      );
+      const y = slotStart.getUTCFullYear();
+      if (y < minYear) minYear = y;
+      if (y > maxYear) maxYear = y;
+    };
+
+    for (const row of station.rows) {
+      const dayKey = `${row.obEndTime.getUTCFullYear()}-${dayOfYearUtc(row.obEndTime)}`;
+      if ((dayRows.get(dayKey) ?? 0) < MIN_DAY_ROWS) continue; // skip partial days
+      if (halfHourly) {
+        // The value covers the single half-hour ENDING at ob_end_time.
+        fold(new Date(row.obEndTime.getTime() - HALF_HOUR_MS), row.glblKwh);
+      } else {
+        for (const h of splitHourToHalfHours(
+          station.lat,
+          station.lng,
+          row.obEndTime,
+          row.glblKwh,
+        )) {
+          fold(h.slotStart, h.kwh);
+        }
       }
       if (row.difuKwh !== null) {
         const m = row.obEndTime.getUTCMonth();
         a.difu[m] += row.difuKwh;
         a.glblWithDifu[m] += row.glblKwh;
+        a.difuCount[m] += 1;
       }
     }
   }
@@ -128,10 +173,12 @@ export function ingestMidas({ midasDir, src }) {
   const monthlyGhi = {};
   const profilesPpm = {};
   const zoneSources = {};
-  // Shared monthly diffuse fraction: mean of measured fractions across zones, with a
-  // modelled cloudy-UK fallback where nothing was measured.
+  // Shared monthly diffuse fraction: measured where it is well-sampled AND physically
+  // plausible, otherwise the published cloudy-UK seasonal curve. (Few MIDAS stations
+  // measure diffuse, and some carry it as 0 — so an un-guarded mean is unreliable.)
   const difuNum = new Array(12).fill(0);
   const difuDen = new Array(12).fill(0);
+  const difuCountAll = new Array(12).fill(0);
 
   for (const id of zoneIds) {
     const a = acc[id];
@@ -153,6 +200,7 @@ export function ingestMidas({ midasDir, src }) {
         if (a.glblWithDifu[m] > 0) {
           difuNum[m] += a.difu[m];
           difuDen[m] += a.glblWithDifu[m];
+          difuCountAll[m] += a.difuCount[m];
         }
       }
     } else {
@@ -164,9 +212,14 @@ export function ingestMidas({ midasDir, src }) {
     }
   }
 
-  const diffuseFraction = src.monthlyDiffuseFraction.map((fallback, m) =>
-    difuDen[m] > 0 ? Math.round((difuNum[m] / difuDen[m]) * 1000) / 1000 : fallback,
-  );
+  const MIN_DIFU_ROWS = 500; // ~3 weeks of daylight hours before trusting a measured month
+  const diffuseFraction = src.monthlyDiffuseFraction.map((fallback, m) => {
+    if (difuCountAll[m] >= MIN_DIFU_ROWS && difuDen[m] > 0) {
+      const df = difuNum[m] / difuDen[m];
+      if (df >= 0.3 && df <= 0.85) return Math.round(df * 1000) / 1000;
+    }
+    return fallback;
+  });
 
   const midasZones = Object.values(zoneSources).filter((s) => s === 'midas').length;
   if (midasZones === 0) {

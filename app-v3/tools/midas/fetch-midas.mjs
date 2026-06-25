@@ -20,12 +20,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Auth: a CEDA access token (Bearer) or a logged-in browser cookie string. Read
+// from the env only — never written, logged, or committed.
 const TOKEN = process.env.CEDA_TOKEN;
-if (!TOKEN) {
+const COOKIE = process.env.CEDA_COOKIE;
+if (!TOKEN && !COOKIE) {
   console.error(
-    'Set CEDA_TOKEN to a CEDA access token, e.g.\n' +
+    'Set CEDA_TOKEN (a CEDA access token) or CEDA_COOKIE (a logged-in session cookie), e.g.\n' +
       '  CEDA_TOKEN=eyJ... node tools/midas/fetch-midas.mjs\n' +
-      'Get one from your CEDA account → My Account → Access Token (while logged in).',
+      '  CEDA_COOKIE="$(cat cookie.txt)" node tools/midas/fetch-midas.mjs',
   );
   process.exit(2);
 }
@@ -56,6 +59,8 @@ const DEFAULT_COUNTIES = [
   'greater-manchester',
   'north-yorkshire',
   'west-yorkshire',
+  'south-yorkshire',
+  'humberside',
   'tyne-and-wear',
   'durham',
   'fife',
@@ -77,7 +82,7 @@ const stationsPerCounty = Number(arg('--stations-per-county', '2'));
 const yearsPerStation = Number(arg('--years', '4'));
 const maxFiles = Number(arg('--max-files', '250'));
 
-const headers = { Authorization: `Bearer ${TOKEN}` };
+const headers = COOKIE ? { Cookie: COOKIE } : { Authorization: `Bearer ${TOKEN}` };
 
 async function indexJson(path) {
   const r = await fetch(`${INDEX}/${path}?json`);
@@ -107,10 +112,12 @@ async function filesForCounty(county) {
     } catch {
       continue;
     }
-    files.sort((a, b) => baseName(b.name ?? b.path).localeCompare(baseName(a.name ?? a.path)));
+    // Largest files first: a full year of hourly radiation is ~160 KB, while a
+    // near-empty station-year is tiny — so size is a good completeness proxy.
+    files.sort((a, b) => (b.size ?? 0) - (a.size ?? 0));
     for (const f of files.slice(0, yearsPerStation)) {
       const rel = `${county}/${station}/qc-version-1/${baseName(f.name ?? f.path)}`;
-      picked.push({ rel, url: `${DATA}/${rel}`, md5: f.md5 ?? null });
+      picked.push({ rel, url: `${DATA}/${rel}?download=1`, md5: f.md5 ?? null });
     }
   }
   return picked;

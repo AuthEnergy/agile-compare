@@ -4,7 +4,11 @@ import {
   getRegionLetterFromAccount,
 } from '../api/account';
 import { fetchConsumptionMerged } from '../api/consumption';
-import { fetchMergedRateWindows, findProductsByDisplayNameOverlapping } from '../api/products';
+import {
+  fetchMergedRateWindows,
+  findFlatOutgoingProducts,
+  findProductsByDisplayNameOverlapping,
+} from '../api/products';
 import type { OctopusClient } from '../api/client';
 import { calculateExportValue } from '../domain/cost';
 import { detectGaps } from '../domain/gaps';
@@ -57,14 +61,9 @@ export async function runExportComparison(
     40,
   );
 
-  // Outgoing (flat) export rates.
+  // Outgoing (flat) export rates — current variable + historical fixed names.
   onProgress('Fetching Outgoing Octopus (flat export) rates…', 'active', 55);
-  const flatProducts = await findProductsByDisplayNameOverlapping(
-    client,
-    'Outgoing Octopus',
-    dataFrom,
-    dataTo,
-  );
+  const flatProducts = await findFlatOutgoingProducts(client, dataFrom, dataTo);
   const flatMerged = await fetchMergedRateWindows(
     client,
     flatProducts,

@@ -4,6 +4,8 @@ import {
   fetchCurrentTariffRates,
   fetchMergedRateWindows,
   fetchProductTariffCode,
+  findFlatOutgoingProducts,
+  findProductsByDisplayNameOverlapping,
 } from '../../src/api/products';
 import type { DiscoveredProduct } from '../../src/types/octopus';
 
@@ -213,6 +215,61 @@ describe('fetchCurrentTariffRates', () => {
     if (result.status !== 'available') throw new Error('expected available rates');
     expect(result.rateShape).toBe('go-day-night');
     expect(result.substitutionNote).toMatch(/GO-VAR-22-10-14/);
+  });
+});
+
+describe('findFlatOutgoingProducts (historical fixed export coverage)', () => {
+  // A pre-2024-10-28 window: the flat export is the FIXED "Outgoing Octopus 12M
+  // Fixed"; there is no variable "Outgoing Octopus" yet.
+  const oldFrom = new Date('2024-06-01T00:00:00Z');
+  const oldTo = new Date('2024-07-01T00:00:00Z');
+  const FIXED = {
+    code: 'OUTGOING-FIX-12M-19-05-13',
+    display_name: 'Outgoing Octopus 12M Fixed',
+    is_variable: false,
+    is_business: false,
+    is_prepay: false,
+    available_from: '2019-05-13T00:00:00Z',
+    available_to: '2024-10-28T00:00:00Z',
+  };
+  const VARIABLE = {
+    code: 'OUTGOING-VAR-24-10-26',
+    display_name: 'Outgoing Octopus',
+    is_variable: true,
+    is_business: false,
+    is_prepay: false,
+    available_from: '2024-10-26T00:00:00Z',
+    available_to: null,
+  };
+  // Mock the products endpoint, honouring the is_variable=true server filter.
+  function mockProducts(): void {
+    globalThis.fetch = (async (url: string | URL) => {
+      const u = new URL(url.toString());
+      const variableOnly = u.searchParams.get('is_variable') === 'true';
+      const results = [FIXED, VARIABLE].filter((p) => !variableOnly || p.is_variable);
+      return jsonResp({ results, next: null });
+    }) as unknown as typeof fetch;
+  }
+
+  it('finds the historical FIXED flat export the variable-only lookup misses', async () => {
+    mockProducts();
+    const codes = (await findFlatOutgoingProducts(createClient('k'), oldFrom, oldTo)).map(
+      (p) => p.code,
+    );
+    expect(codes).toContain('OUTGOING-FIX-12M-19-05-13');
+  });
+
+  it('the default (variable-only) lookup would NOT surface the fixed product (regression)', async () => {
+    mockProducts();
+    const codes = (
+      await findProductsByDisplayNameOverlapping(
+        createClient('k'),
+        'Outgoing Octopus 12M Fixed',
+        oldFrom,
+        oldTo,
+      )
+    ).map((p) => p.code);
+    expect(codes).not.toContain('OUTGOING-FIX-12M-19-05-13');
   });
 });
 

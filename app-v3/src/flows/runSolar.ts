@@ -9,7 +9,11 @@
 // region with no Outgoing product).
 
 import type { OctopusClient } from '../api/client';
-import { fetchMergedRateWindows, findProductsByDisplayNameOverlapping } from '../api/products';
+import {
+  fetchMergedRateWindows,
+  findFlatOutgoingProducts,
+  findProductsByDisplayNameOverlapping,
+} from '../api/products';
 import { rateAtSorted } from '../domain/rates';
 import { summaryScopePeriods } from '../domain/headline';
 import { modelledGeneration, resolveZone, scopeWindowDays } from '../domain/solar';
@@ -286,12 +290,9 @@ export async function runSolar(
       );
 
       onProgress('Fetching Outgoing Octopus (flat export) rates…', 'active', 65);
-      const flatProducts = await findProductsByDisplayNameOverlapping(
-        client,
-        'Outgoing Octopus',
-        from,
-        to,
-      );
+      // Covers the historical FIXED flat export ("Outgoing Octopus 12M Fixed") too,
+      // which the variable-only lookup misses for pre-2024-10-28 windows.
+      const flatProducts = await findFlatOutgoingProducts(client, from, to);
       const flatMerged = await fetchMergedRateWindows(
         client,
         flatProducts,

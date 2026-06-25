@@ -494,6 +494,7 @@ export class App {
         }
         this.columnOverride = Object.keys(override).length ? override : null;
         this.currentRun = applyTariffComparison(base, flexCol, agileCol);
+        this.refreshSolarForCurrentRun();
         this.setState({ screen: 'results' });
       },
     });
@@ -502,7 +503,19 @@ export class App {
   private resetTariff(): void {
     this.columnOverride = null;
     this.currentRun = this.originalRun;
+    this.refreshSolarForCurrentRun();
     this.setState({ screen: 'results' });
+  }
+
+  // A tariff override/reset changes the import basis the solar what-if prices
+  // self-consumption against. Re-price an already-computed result immediately
+  // (export windows don't depend on the import tariff, so they're reused) so the
+  // solar screen never shows figures against a stale basis after re-opening.
+  private refreshSolarForCurrentRun(): void {
+    if (!this.currentRun || !this.currentSolar || !this.solarExportWindows) return;
+    this.currentSolar = recomputeSolar(this.currentRun, this.solarConfig, this.solarExportWindows, {
+      segRatePence: this.solarSegPence,
+    });
   }
 
   private resultsCallbacks() {

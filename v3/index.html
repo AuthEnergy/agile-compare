@@ -1109,7 +1109,7 @@ async function fetchProductTariffCode(client, productCode, regionLetter) {
   const tariff = regionTariffs["direct_debit_monthly"] ?? Object.values(regionTariffs)[0];
   return tariff?.code ?? null;
 }
-async function findProductsByDisplayNameOverlapping(client, displayName, periodFrom, periodTo) {
+async function findProductsByDisplayNameOverlapping(client, displayName, periodFrom, periodTo, opts = {}) {
   const samples = [];
   const stepMs = 45 * 24 * 60 * 60 * 1e3;
   for (let t = periodFrom.getTime(); t < periodTo.getTime(); t += stepMs) samples.push(new Date(t));
@@ -1117,7 +1117,8 @@ async function findProductsByDisplayNameOverlapping(client, displayName, periodF
   samples.push(null);
   const byCode = /* @__PURE__ */ new Map();
   const probe = async (at) => {
-    const params = { brand: "OCTOPUS_ENERGY", is_variable: "true" };
+    const params = { brand: "OCTOPUS_ENERGY" };
+    if (!opts.includeFixed) params["is_variable"] = "true";
     if (at) params["available_at"] = at.toISOString();
     let results;
     try {
@@ -1162,6 +1163,22 @@ async function findProductsByDisplayNameOverlapping(client, displayName, periodF
     (a, b) => new Date(a.available_from ?? 0).getTime() - new Date(b.available_from ?? 0).getTime()
   );
   return chosen;
+}
+const FLAT_OUTGOING_DISPLAY_NAMES = [
+  "Outgoing Octopus",
+  "Outgoing Octopus 12M Fixed"
+];
+async function findFlatOutgoingProducts(client, periodFrom, periodTo) {
+  const lists = await Promise.all(
+    FLAT_OUTGOING_DISPLAY_NAMES.map(
+      (name) => findProductsByDisplayNameOverlapping(client, name, periodFrom, periodTo, {
+        includeFixed: true
+      })
+    )
+  );
+  const byCode = /* @__PURE__ */ new Map();
+  for (const list of lists) for (const p of list) if (!byCode.has(p.code)) byCode.set(p.code, p);
+  return [...byCode.values()];
 }
 async function fetchRateWindows(client, productCode, tariffCode, kind, periodFrom, periodTo) {
   const path = `/products/${productCode}/electricity-tariffs/${tariffCode}/${kind}/`;
@@ -2112,12 +2129,7 @@ async function runExportComparison(client, input, onProgress = () => {
     40
   );
   onProgress("Fetching Outgoing Octopus (flat export) rates…", "active", 55);
-  const flatProducts = await findProductsByDisplayNameOverlapping(
-    client,
-    "Outgoing Octopus",
-    dataFrom,
-    dataTo
-  );
+  const flatProducts = await findFlatOutgoingProducts(client, dataFrom, dataTo);
   const flatMerged = await fetchMergedRateWindows(
     client,
     flatProducts,
@@ -5776,12 +5788,7 @@ async function runSolar(client, run, cfg, opts = {}) {
         to
       );
       onProgress("Fetching Outgoing Octopus (flat export) rates…", "active", 65);
-      const flatProducts = await findProductsByDisplayNameOverlapping(
-        client,
-        "Outgoing Octopus",
-        from,
-        to
-      );
+      const flatProducts = await findFlatOutgoingProducts(client, from, to);
       const flatMerged = await fetchMergedRateWindows(
         client,
         flatProducts,
@@ -6179,6 +6186,7 @@ class App {
         }
         this.columnOverride = Object.keys(override).length ? override : null;
         this.currentRun = applyTariffComparison(base, flexCol, agileCol);
+        this.refreshSolarForCurrentRun();
         this.setState({ screen: "results" });
       }
     });
@@ -6186,7 +6194,18 @@ class App {
   resetTariff() {
     this.columnOverride = null;
     this.currentRun = this.originalRun;
+    this.refreshSolarForCurrentRun();
     this.setState({ screen: "results" });
+  }
+  // A tariff override/reset changes the import basis the solar what-if prices
+  // self-consumption against. Re-price an already-computed result immediately
+  // (export windows don't depend on the import tariff, so they're reused) so the
+  // solar screen never shows figures against a stale basis after re-opening.
+  refreshSolarForCurrentRun() {
+    if (!this.currentRun || !this.currentSolar || !this.solarExportWindows) return;
+    this.currentSolar = recomputeSolar(this.currentRun, this.solarConfig, this.solarExportWindows, {
+      segRatePence: this.solarSegPence
+    });
   }
   resultsCallbacks() {
     return {

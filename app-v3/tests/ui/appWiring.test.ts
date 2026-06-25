@@ -147,6 +147,55 @@ describe('App live-journey wiring', () => {
     expect(root.textContent).toContain('would have cost'); // back on connect
   });
 
+  it('re-prices the solar what-if after a tariff override (no stale import basis)', async () => {
+    vi.mocked(discoverMeters).mockResolvedValue([meter({})]);
+    vi.mocked(runComparison).mockResolvedValue(buildSampleRun());
+
+    const root = document.createElement('div');
+    const app = new App(root, noActions);
+    app.mount();
+
+    await app.runLive('sk_test_key');
+    clickButton(root, 'Fetch this meter');
+    await vi.waitFor(() => expect(root.textContent).toContain('Your comparison'));
+
+    // Solar → Calculate (the mocked client can't fetch, so it uses the SEG fallback).
+    clickButton(root, 'Solar & battery');
+    clickButton(root, 'Calculate');
+    await vi.waitFor(() => expect(root.textContent).toContain('Would have generated'));
+    const before = root.textContent ?? '';
+
+    // Override the Agile (right) column with a much higher manual unit rate.
+    clickButton(root, 'Back to comparison');
+    clickButton(root, 'Other tariffs');
+    const modal = document.querySelector('.modal-backdrop');
+    if (!modal) throw new Error('override modal did not open');
+    const rightSel = [...modal.querySelectorAll('select')][1] as HTMLSelectElement | undefined;
+    const manualOpt =
+      rightSel && [...rightSel.options].find((o) => /manual/i.test(o.textContent ?? ''));
+    if (!rightSel || !manualOpt) throw new Error('right manual option not found');
+    rightSel.value = manualOpt.value;
+    rightSel.dispatchEvent(new Event('change'));
+    const nums = [...modal.querySelectorAll('input[type="number"]')] as HTMLInputElement[];
+    const rightUnit = nums[2]; // [leftUnit, leftStanding, rightUnit, rightStanding]
+    const rightStanding = nums[3];
+    if (!rightUnit || !rightStanding) throw new Error('right manual inputs not found');
+    rightUnit.value = '100';
+    rightUnit.dispatchEvent(new Event('input'));
+    rightStanding.value = '0';
+    rightStanding.dispatchEvent(new Event('input'));
+    clickButton(modal as HTMLElement, 'Apply');
+
+    // Re-open solar WITHOUT recalculating — figures must reflect the new basis,
+    // not the stale one priced against the original Agile rates.
+    await vi.waitFor(() => expect(root.textContent).toContain('Your comparison'));
+    clickButton(root, 'Solar & battery');
+    await vi.waitFor(() => expect(root.textContent).toContain('Would have generated'));
+    const after = root.textContent ?? '';
+
+    expect(after).not.toBe(before);
+  });
+
   it('does not send analytics on first load', () => {
     const root = document.createElement('div');
     const app = new App(root, noActions);

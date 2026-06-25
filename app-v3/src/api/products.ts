@@ -207,6 +207,7 @@ export async function findProductsByDisplayNameOverlapping(
   displayName: string,
   periodFrom: Date,
   periodTo: Date,
+  opts: { includeFixed?: boolean } = {},
 ): Promise<DiscoveredProduct[]> {
   const samples: Array<Date | null> = [];
   const stepMs = 45 * 24 * 60 * 60 * 1000;
@@ -216,7 +217,11 @@ export async function findProductsByDisplayNameOverlapping(
 
   const byCode = new Map<string, DiscoveredProduct>();
   const probe = async (at: Date | null): Promise<void> => {
-    const params: Params = { brand: 'OCTOPUS_ENERGY', is_variable: 'true' };
+    // By default only variable products are listed. Some export tariffs (the
+    // pre-2024-10-28 flat "Outgoing Octopus 12M Fixed") are FIXED, so callers that
+    // need those pass includeFixed to drop the is_variable filter.
+    const params: Params = { brand: 'OCTOPUS_ENERGY' };
+    if (!opts.includeFixed) params['is_variable'] = 'true';
     if (at) params['available_at'] = at.toISOString();
     let results: ProductRow[];
     try {
@@ -265,6 +270,34 @@ export async function findProductsByDisplayNameOverlapping(
     (a, b) => new Date(a.available_from ?? 0).getTime() - new Date(b.available_from ?? 0).getTime(),
   );
   return chosen;
+}
+
+// Display names Octopus has used for the standard FLAT export ("Outgoing") tariff.
+// The current one ("Outgoing Octopus") is variable; the pre-2024-10-28 product
+// ("Outgoing Octopus 12M Fixed") is FIXED — which the default variable-only
+// discovery misses, silently dropping the flat export basis for older windows.
+export const FLAT_OUTGOING_DISPLAY_NAMES = [
+  'Outgoing Octopus',
+  'Outgoing Octopus 12M Fixed',
+] as const;
+
+// Discover the flat ("Outgoing") export products overlapping a window, across the
+// current and historical display names and INCLUDING fixed products. Deduped by code.
+export async function findFlatOutgoingProducts(
+  client: OctopusClient,
+  periodFrom: Date,
+  periodTo: Date,
+): Promise<DiscoveredProduct[]> {
+  const lists = await Promise.all(
+    FLAT_OUTGOING_DISPLAY_NAMES.map((name) =>
+      findProductsByDisplayNameOverlapping(client, name, periodFrom, periodTo, {
+        includeFixed: true,
+      }),
+    ),
+  );
+  const byCode = new Map<string, DiscoveredProduct>();
+  for (const list of lists) for (const p of list) if (!byCode.has(p.code)) byCode.set(p.code, p);
+  return [...byCode.values()];
 }
 
 export async function fetchRateWindows(

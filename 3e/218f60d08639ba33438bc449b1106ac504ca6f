@@ -1,0 +1,23 @@
+app-v3/.gitignore
+  s_d989b47bd25eb0::t_2eba981955ce53 6-9
+app-v3/tools/midas/fetch-midas.mjs
+  s_d989b47bd25eb0::t_769c3a94fddecb 17
+  s_d989b47bd25eb0::t_70f29add1ad274 1-16,18-32,37-42,66-171
+  s_d989b47bd25eb0::t_589329ed4bbbba 33-36,43-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "3e218f60d08639ba33438bc449b1106ac504ca6f",
+  "prompts": {},
+  "sessions": {
+    "s_d989b47bd25eb0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e5355e3d-1032-4125-a473-497642cb43ec",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

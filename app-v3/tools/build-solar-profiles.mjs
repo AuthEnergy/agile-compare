@@ -1,126 +1,41 @@
-// Dev-time generator for src/data/solarProfiles.generated.ts.
+// Dev-time generator for src/data/solarProfiles.generated.ts. NOT in the CI gate;
+// run by hand after editing the source, then commit the regenerated file.
 //
-// Reads the committed climatology source (tools/solar-climatology.json) and emits
-// a deterministic, hand-readable TypeScript module. NOT wired into the normal CI
-// gate; run it by hand after editing the source, then commit the regenerated file:
+//   node tools/build-solar-profiles.mjs
+//       → modelled clear-sky shapes scaled to approximate regional annual GHI
+//         (the committed default; honest representative climatology).
 //
-//     node tools/build-solar-profiles.mjs
+//   node tools/build-solar-profiles.mjs --source midas --midas-dir <path/to/midas>
+//       → REAL Met Office MIDAS Open "uk-radiation-obs" measured data. Point it at a
+//         local CEDA download (badc/ukmo-midas-open/data/uk-radiation-obs/...). Zones
+//         with no station coverage fall back to modelled shapes, so output is complete.
+//       Add --dry-run --json to print computed structures to stdout without writing
+//       (used by the fixture test).
 //
-// HONESTY: the per-zone annual GHI figures are approximate published UK regional
-// climatology (horizontal plane). The within-year monthly split and the within-day
-// half-hour SHAPE are MODELLED from clear-sky solar geometry at each zone centroid
-// in UTC — this is a representative-climatology product, not a measured per-site
-// time series. The provenance constant says exactly this; the UI must caveat it.
-//
-// DETERMINISM: no Date.now()/Math.random(). Re-running on the same source yields a
-// byte-identical module (sorted keys, fixed precision, version-derived stamp), so
-// the staleness gate stays meaningful.
+// DETERMINISM: no Date.now()/Math.random(); re-running on the same input is
+// byte-identical, so the staleness gate stays meaningful.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildModelledProfiles } from './midas/modelled.mjs';
+import { ingestMidas } from './midas/ingest.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = join(here, 'solar-climatology.json');
 const OUT = join(here, '..', 'src', 'data', 'solarProfiles.generated.ts');
 
-const DEG = Math.PI / 180;
-// Day-of-year for the 15th of each month (non-leap representative day).
-const DOY_15 = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349];
+const MIDAS_DOI = '10.5285/76e54f87291c4cd98c793e37524dc98e';
+const MIDAS_UUID = '76e54f87291c4cd98c793e37524dc98e';
 
-// NOAA solar-position: returns sin(solar elevation) at a UTC instant for a site.
-// Includes the equation of time and the longitude correction so solar noon lands
-// at the true local meridian crossing (east shifts it earlier in UTC). tz = 0 (UTC).
-function sinElevation(latDeg, lngDeg, doy, minutesUtc) {
-  const gamma = ((2 * Math.PI) / 365) * (doy - 1 + (minutesUtc / 60 - 12) / 24);
-  const decl =
-    0.006918 -
-    0.399912 * Math.cos(gamma) +
-    0.070257 * Math.sin(gamma) -
-    0.006758 * Math.cos(2 * gamma) +
-    0.000907 * Math.sin(2 * gamma) -
-    0.002697 * Math.cos(3 * gamma) +
-    0.00148 * Math.sin(3 * gamma);
-  const eqTime =
-    229.18 *
-    (0.000075 +
-      0.001868 * Math.cos(gamma) -
-      0.032077 * Math.sin(gamma) -
-      0.014615 * Math.cos(2 * gamma) -
-      0.040849 * Math.sin(2 * gamma));
-  const timeOffset = eqTime + 4 * lngDeg; // minutes; tz = 0 (UTC)
-  const tst = minutesUtc + timeOffset; // true solar time, minutes
-  const ha = (tst / 4 - 180) * DEG; // hour angle, radians
-  const lat = latDeg * DEG;
-  const cosZen = Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(ha);
-  return cosZen; // = sin(elevation)
-}
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(name);
+const opt = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? (args[i + 1] ?? null) : null;
+};
 
-// Clear-sky GHI proxy (Kasten-Young air mass × Bras-style transmittance). Only the
-// SHAPE matters here — the absolute constant cancels in normalisation. Zero below
-// the horizon. This is the diurnal weight the bundled monthly GHI is spread across.
-function clearSkyWeight(latDeg, lngDeg, doy, minutesUtc) {
-  const s = sinElevation(latDeg, lngDeg, doy, minutesUtc);
-  if (s <= 0.001) return 0;
-  const elevDeg = Math.asin(Math.min(1, s)) / DEG;
-  const airMass = 1 / (s + 0.50572 * Math.pow(6.07995 + elevDeg, -1.6364));
-  return s * Math.pow(0.7, Math.pow(airMass, 0.678));
-}
-
-// Largest-remainder rounding of weights → integer ppm summing to exactly `total`
-// (0 when the day has no daylight, which never happens for UK latitudes/months).
-function toPpm(weights, total = 10000) {
-  const sum = weights.reduce((a, b) => a + b, 0);
-  if (sum <= 0) return weights.map(() => 0);
-  const scaled = weights.map((w) => (w / sum) * total);
-  const floored = scaled.map((x) => Math.floor(x));
-  let remainder = total - floored.reduce((a, b) => a + b, 0);
-  const order = scaled
-    .map((x, i) => ({ i, frac: x - Math.floor(x) }))
-    .sort((a, b) => b.frac - a.frac);
-  for (let k = 0; k < remainder; k++) {
-    const idx = order[k % order.length].i;
-    floored[idx] += 1;
-  }
-  return floored;
-}
-
-function build() {
-  const src = JSON.parse(readFileSync(SRC, 'utf8'));
-  const zoneIds = Object.keys(src.zones).sort();
-
-  // Validate every referenced zone exists (areaZones is keyed BY zone).
-  const refs = new Set([
-    src.defaultZone,
-    ...Object.values(src.dnoRegionZone),
-    ...Object.keys(src.areaZones),
-  ]);
-  for (const z of refs) {
-    if (!(z in src.zones)) throw new Error(`zone "${z}" referenced but not defined`);
-  }
-
-  const shapeSum = src.monthShape.reduce((a, b) => a + b, 0);
-
-  const monthlyGhi = {};
-  const profilesPpm = {};
-  for (const id of zoneIds) {
-    const z = src.zones[id];
-    monthlyGhi[id] = src.monthShape.map(
-      (f) => Math.round(((z.annualGhi * f) / shapeSum) * 100) / 100,
-    );
-    const months = [];
-    for (let m = 0; m < 12; m++) {
-      const weights = [];
-      for (let slot = 0; slot < 48; slot++) {
-        const mid = slot * 30 + 15; // minutes UTC at slot midpoint
-        weights.push(clearSkyWeight(z.lat, z.lng, DOY_15[m], mid));
-      }
-      months.push(toPpm(weights, 10000));
-    }
-    profilesPpm[id] = months;
-  }
-
-  // Invert zone → [areas] into AREA → zone (the lookup the flow needs).
+function invertAreaZones(src) {
   const areaZone = {};
   for (const [zone, areas] of Object.entries(src.areaZones)) {
     for (const a of areas) {
@@ -128,28 +43,128 @@ function build() {
       areaZone[a] = zone;
     }
   }
-
-  return { src, zoneIds, monthlyGhi, profilesPpm, areaZone };
+  return areaZone;
 }
 
-function emit({ src, zoneIds, monthlyGhi, profilesPpm, areaZone }) {
-  const q = (s) => JSON.stringify(s);
+function build() {
+  const src = JSON.parse(readFileSync(SRC, 'utf8'));
+
+  // Every referenced zone must exist (areaZones is keyed BY zone).
+  for (const z of [
+    src.defaultZone,
+    ...Object.values(src.dnoRegionZone),
+    ...Object.keys(src.areaZones),
+  ]) {
+    if (!(z in src.zones)) throw new Error(`zone "${z}" referenced but not defined`);
+  }
+  const areaZone = invertAreaZones(src);
+
+  const source = opt('--source') ?? 'modelled';
+  if (source === 'midas') {
+    const midasDir = opt('--midas-dir');
+    if (!midasDir) throw new Error('--source midas requires --midas-dir <path>');
+    const midasVersion = opt('--midas-version') ?? 'v202507';
+    const ing = ingestMidas({ midasDir: resolve(process.cwd(), midasDir), src });
+    const coverage =
+      ing.coverage.minYear && ing.coverage.maxYear
+        ? `${ing.coverage.minYear}–${ing.coverage.maxYear}`
+        : 'unknown';
+    const provenance = {
+      dataset: 'Met Office MIDAS Open: UK hourly solar radiation data',
+      version: midasVersion,
+      doi: MIDAS_DOI,
+      uuid: MIDAS_UUID,
+      coverage: `${coverage} (ingested station-years)`,
+      license: 'Open Government Licence v3.0 — requires citation',
+      citation: `Met Office (2025): MIDAS Open: UK hourly solar radiation data, ${midasVersion}. NERC EDS Centre for Environmental Data Analysis. doi:${MIDAS_DOI}`,
+      shapeBasis:
+        'Measured hourly global/diffuse irradiation; hour-ending values mapped to UTC half-hours by elevation weighting.',
+      zonesFromMidas: ing.coverage.midasZones,
+      zonesModelledFallback: ing.coverage.modelledZones,
+      generatedBy: 'tools/build-solar-profiles.mjs --source midas',
+      generatedFrom: `MIDAS Open uk-radiation-obs ${midasVersion}`,
+    };
+    return {
+      src,
+      source,
+      areaZone,
+      zoneIds: ing.zoneIds,
+      monthlyGhi: ing.monthlyGhi,
+      profilesPpm: ing.profilesPpm,
+      diffuseFraction: ing.diffuseFraction,
+      zoneSources: ing.zoneSources,
+      dataVersion: `midas-${midasVersion}`,
+      provenance,
+    };
+  }
+
+  // Default: modelled clear-sky.
+  const m = buildModelledProfiles(src);
+  const zoneSources = Object.fromEntries(m.zoneIds.map((id) => [id, 'modelled']));
+  const provenance = {
+    dataset: 'UK regional solar climatology (modelled half-hour shapes)',
+    version: src.version,
+    annualGhiBasis: 'Approximate published UK regional GHI averages (horizontal plane).',
+    shapeBasis:
+      'Clear-sky geometry at zone centroid, UTC (NOAA solar position + Kasten-Young air mass).',
+    coverage: 'Representative climatology — not a measured per-site time series.',
+    license: src.license,
+    citation: 'Modelled UK solar climatology — see tools/solar-climatology.json.',
+    generatedBy: 'tools/build-solar-profiles.mjs',
+    generatedFrom: `tools/solar-climatology.json@${src.version}`,
+  };
+  return {
+    src,
+    source,
+    areaZone,
+    zoneIds: m.zoneIds,
+    monthlyGhi: m.monthlyGhi,
+    profilesPpm: m.profilesPpm,
+    diffuseFraction: src.monthlyDiffuseFraction,
+    zoneSources,
+    dataVersion: src.version,
+    provenance,
+  };
+}
+
+const q = (s) => JSON.stringify(s);
+
+function serializeProvenance(p) {
+  return Object.entries(p)
+    .map(([k, v]) => `  ${k}: ${typeof v === 'number' ? v : q(v)},`)
+    .join('\n');
+}
+
+function emit(built) {
+  const { src, source, zoneIds, monthlyGhi, profilesPpm, diffuseFraction, areaZone } = built;
   const sortedObj = (obj, fmtVal) =>
     Object.keys(obj)
       .sort()
       .map((k) => `  ${q(k)}: ${fmtVal(obj[k])},`)
       .join('\n');
 
-  const L = [];
-  L.push(
-    '// AUTO-GENERATED by tools/build-solar-profiles.mjs — DO NOT EDIT BY HAND.',
-    '// Regenerate after editing tools/solar-climatology.json:  node tools/build-solar-profiles.mjs',
-    '//',
-    '// Per-zone annual GHI is approximate published UK regional climatology (horizontal',
-    '// plane). The monthly split and the half-hour shapes are MODELLED clear-sky geometry',
-    '// at each zone centroid in UTC — representative climatology, NOT measured site data.',
+  const header =
+    source === 'midas'
+      ? [
+          '// AUTO-GENERATED by tools/build-solar-profiles.mjs --source midas — DO NOT EDIT BY HAND.',
+          '//',
+          '// Built from Met Office MIDAS Open "uk-radiation-obs" MEASURED hourly irradiation.',
+          '// Hour-ending observations are mapped to UTC half-hours by elevation weighting. Zones',
+          '// with no station coverage fall back to modelled clear-sky shapes (see provenance).',
+        ]
+      : [
+          '// AUTO-GENERATED by tools/build-solar-profiles.mjs — DO NOT EDIT BY HAND.',
+          '// Regenerate after editing tools/solar-climatology.json:  node tools/build-solar-profiles.mjs',
+          '//',
+          '// Per-zone annual GHI is approximate published UK regional climatology (horizontal',
+          '// plane). The monthly split and the half-hour shapes are MODELLED clear-sky geometry',
+          '// at each zone centroid in UTC — representative climatology, NOT measured site data.',
+        ];
+
+  const L = [
+    ...header,
     '',
-    `export const SOLAR_DATA_VERSION = ${q(src.version)};`,
+    `export const SOLAR_DATA_VERSION = ${q(built.dataVersion)};`,
     '',
     'export interface SolarZoneMeta {',
     '  lat: number;',
@@ -172,7 +187,7 @@ function emit({ src, zoneIds, monthlyGhi, profilesPpm, areaZone }) {
     '};',
     '',
     '// Diffuse fraction of GHI by month (shared across zones; cloudy-UK seasonal curve).',
-    `export const MONTHLY_DIFFUSE_FRACTION: readonly number[] = [${src.monthlyDiffuseFraction.join(', ')}];`,
+    `export const MONTHLY_DIFFUSE_FRACTION: readonly number[] = [${diffuseFraction.join(', ')}];`,
     '',
     '// Half-hour diurnal GHI shape as integer parts-per-10000, [month 0..11][slot 0..47].',
     '// Each month sums to exactly 10000 (or 0 for a hypothetical no-daylight day). The PV',
@@ -202,24 +217,41 @@ function emit({ src, zoneIds, monthlyGhi, profilesPpm, areaZone }) {
     `export const DEFAULT_ZONE = ${q(src.defaultZone)};`,
     '',
     'export const SOLAR_DATA_PROVENANCE = {',
-    `  dataset: 'UK regional solar climatology (modelled half-hour shapes)',`,
-    `  version: ${q(src.version)},`,
-    `  annualGhiBasis: 'Approximate published UK regional GHI averages (horizontal plane).',`,
-    `  shapeBasis: 'Clear-sky geometry at zone centroid, UTC (NOAA solar position + Kasten-Young air mass).',`,
-    `  coverage: 'Representative climatology — not a measured per-site time series.',`,
-    `  license: ${q(src.license)},`,
-    `  generatedBy: 'tools/build-solar-profiles.mjs',`,
-    `  generatedFrom: ${q(`tools/solar-climatology.json@${src.version}`)},`,
+    serializeProvenance(built.provenance),
     '} as const;',
     '',
-  );
+  ];
   return L.join('\n');
 }
 
 const built = build();
-writeFileSync(OUT, emit(built), 'utf8');
-const cells = built.zoneIds.length * 12;
-console.log(
-  `build-solar-profiles: wrote ${OUT}\n  ${built.zoneIds.length} zones, ${cells} zone-months, ` +
-    `${Object.keys(built.areaZone).length} postcode areas mapped.`,
-);
+
+if (flag('--json')) {
+  process.stdout.write(
+    JSON.stringify(
+      {
+        source: built.source,
+        dataVersion: built.dataVersion,
+        provenance: built.provenance,
+        monthlyGhi: built.monthlyGhi,
+        profilesPpm: built.profilesPpm,
+        diffuseFraction: built.diffuseFraction,
+        zoneSources: built.zoneSources,
+      },
+      null,
+      2,
+    ),
+  );
+}
+
+if (!flag('--dry-run')) {
+  const outPath = opt('--out') ?? OUT;
+  writeFileSync(outPath, emit(built), 'utf8');
+  const cells = built.zoneIds.length * 12;
+  const midas =
+    built.source === 'midas' ? ` (MIDAS: ${built.provenance.zonesFromMidas} zones)` : '';
+  process.stderr.write(
+    `build-solar-profiles: wrote ${outPath}\n  ${built.zoneIds.length} zones, ${cells} zone-months, ` +
+      `${Object.keys(built.areaZone).length} postcode areas${midas}.\n`,
+  );
+}

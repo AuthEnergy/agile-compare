@@ -69,6 +69,9 @@ export interface SolarResult {
   windowDays: number;
   shortWindow: boolean; // scope shorter than ~28 days — seasonal-bias warning
   solarDataVersion: string;
+  // Where the radiation data came from — shown on screen and attributable (e.g. the
+  // OGL citation when sourced from MIDAS Open). Driven by SOLAR_DATA_PROVENANCE.
+  provenance: { version: string; license: string; citation: string };
 }
 
 export interface SolarRun {

@@ -286,6 +286,15 @@ function renderResult(host: HTMLElement, run: SolarRun): void {
 
   // Battery — clearly-labelled experimental placeholder (Phase B not yet shipped).
   host.append(callout(vm.battery.title, vm.battery.body, 'caution', 'info'));
+
+  // Visible data-source attribution (OGL requires citation when sourced from MIDAS).
+  host.append(
+    el('p', {
+      class: 'row-sub',
+      style: 'font-size:var(--text-caption);color:var(--text-muted)',
+      text: vm.dataSource,
+    }),
+  );
 }
 
 export function renderSolar(host: HTMLElement, state: SolarScreenState, cb: SolarCallbacks): void {

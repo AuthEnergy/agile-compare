@@ -66,6 +66,7 @@ export interface SolarViewModel {
   tiles: SolarTile[];
   table: { rows: SolarTableRow[]; foot: string } | null;
   caveats: string[];
+  dataSource: string;
   battery: { title: string; body: string };
 }
 
@@ -162,6 +163,8 @@ export function computeSolarViewModel(run: SolarRun): SolarViewModel {
       'separate, clearly-labelled upper-bound and is not shown here yet.',
   };
 
+  const dataSource = `Radiation data: ${r.provenance.citation} (${r.provenance.license}).`;
+
   return {
     arraySummary,
     generated,
@@ -173,6 +176,7 @@ export function computeSolarViewModel(run: SolarRun): SolarViewModel {
     tiles,
     table,
     caveats: run.caveats,
+    dataSource,
     battery,
   };
 }

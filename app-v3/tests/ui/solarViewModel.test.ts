@@ -69,6 +69,12 @@ describe('computeSolarViewModel', () => {
     expect(vm.coverage.toLowerCase()).toContain('valued');
   });
 
+  it('surfaces the radiation data source for attribution', () => {
+    const vm = computeSolarViewModel(solarRun());
+    expect(vm.dataSource.toLowerCase()).toContain('radiation data');
+    expect(vm.dataSource.length).toBeGreaterThan(20);
+  });
+
   it('labels the import basis and marks the battery panel experimental', () => {
     const vm = computeSolarViewModel(solarRun(true));
     expect(vm.basis).toContain('Agile');

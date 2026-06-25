@@ -4512,6 +4512,7 @@ function computeSolarViewModel(run) {
     title: "Battery modelling — experimental, coming later",
     body: "A home battery would shift some of this surplus into pricier hours instead of exporting it. That model carries more uncertainty (it assumes smart scheduling), so it is being built as a separate, clearly-labelled upper-bound and is not shown here yet."
   };
+  const dataSource = `Radiation data: ${r.provenance.citation} (${r.provenance.license}).`;
   return {
     arraySummary,
     generated,
@@ -4523,6 +4524,7 @@ function computeSolarViewModel(run) {
     tiles,
     table,
     caveats: run.caveats,
+    dataSource,
     battery
   };
 }
@@ -4773,6 +4775,13 @@ function renderResult(host, run) {
     ])
   );
   host.append(callout(vm.battery.title, vm.battery.body, "caution", "info"));
+  host.append(
+    el("p", {
+      class: "row-sub",
+      style: "font-size:var(--text-caption);color:var(--text-muted)",
+      text: vm.dataSource
+    })
+  );
 }
 function renderSolar(host, state, cb) {
   host.append(
@@ -5423,6 +5432,11 @@ const DNO_REGION_ZONE = {
   "P": "scotland-north"
 };
 const DEFAULT_ZONE = "midlands";
+const SOLAR_DATA_PROVENANCE = {
+  version: "uk-clim-2025.1",
+  license: "Annual GHI figures: approximate UK regional averages (public climatology). Modelled shapes: original (clear-sky geometry).",
+  citation: "Modelled UK solar climatology — see tools/solar-climatology.json."
+};
 const HALF_HOUR_MS$2 = 30 * 60 * 1e3;
 const DEG = Math.PI / 180;
 const ALBEDO = 0.2;
@@ -5695,7 +5709,12 @@ function recomputeSolar(run, cfg, exportWindows, opts = {}) {
     perMonth: [...months.values()].sort((a, b) => a.key.localeCompare(b.key)),
     windowDays,
     shortWindow,
-    solarDataVersion: SOLAR_DATA_VERSION
+    solarDataVersion: SOLAR_DATA_VERSION,
+    provenance: {
+      version: SOLAR_DATA_PROVENANCE.version,
+      license: SOLAR_DATA_PROVENANCE.license,
+      citation: SOLAR_DATA_PROVENANCE.citation
+    }
   };
   return { result, caveats: buildCaveats(result) };
 }

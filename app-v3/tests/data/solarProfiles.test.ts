@@ -70,9 +70,11 @@ describe('bundled solar profiles', () => {
     expect(Object.keys(AREA_ZONE).length).toBeGreaterThanOrEqual(110);
   });
 
-  it('has honest, complete provenance (does not claim measured site data)', () => {
+  it('has honest, complete provenance with an attributable citation', () => {
     expect(SOLAR_DATA_PROVENANCE.version).toBe(SOLAR_DATA_VERSION);
     expect(SOLAR_DATA_PROVENANCE.license.length).toBeGreaterThan(0);
+    expect(SOLAR_DATA_PROVENANCE.citation.length).toBeGreaterThan(0);
+    // The committed default is the modelled climatology — it must not claim measured data.
     expect(SOLAR_DATA_PROVENANCE.shapeBasis.toLowerCase()).toContain('clear-sky');
     expect(SOLAR_DATA_PROVENANCE.coverage.toLowerCase()).toContain('not a measured');
   });

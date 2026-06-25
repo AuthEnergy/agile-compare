@@ -13,7 +13,7 @@ import { fetchMergedRateWindows, findProductsByDisplayNameOverlapping } from '..
 import { rateAtSorted } from '../domain/rates';
 import { summaryScopePeriods } from '../domain/headline';
 import { modelledGeneration, resolveZone, scopeWindowDays } from '../domain/solar';
-import { SOLAR_DATA_VERSION } from '../data/solarProfiles.generated';
+import { SOLAR_DATA_PROVENANCE, SOLAR_DATA_VERSION } from '../data/solarProfiles.generated';
 import type { RateWindow } from '../types/domain';
 import type { ComparisonRun, ProgressFn } from '../types/result';
 import type {
@@ -206,6 +206,11 @@ export function recomputeSolar(
     windowDays,
     shortWindow,
     solarDataVersion: SOLAR_DATA_VERSION,
+    provenance: {
+      version: SOLAR_DATA_PROVENANCE.version,
+      license: SOLAR_DATA_PROVENANCE.license,
+      citation: SOLAR_DATA_PROVENANCE.citation,
+    },
   };
 
   return { result, caveats: buildCaveats(result) };

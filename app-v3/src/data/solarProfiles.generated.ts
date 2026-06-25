@@ -389,12 +389,13 @@ export const DNO_REGION_ZONE: Record<string, string> = {
 export const DEFAULT_ZONE = "midlands";
 
 export const SOLAR_DATA_PROVENANCE = {
-  dataset: 'UK regional solar climatology (modelled half-hour shapes)',
+  dataset: "UK regional solar climatology (modelled half-hour shapes)",
   version: "uk-clim-2025.1",
-  annualGhiBasis: 'Approximate published UK regional GHI averages (horizontal plane).',
-  shapeBasis: 'Clear-sky geometry at zone centroid, UTC (NOAA solar position + Kasten-Young air mass).',
-  coverage: 'Representative climatology — not a measured per-site time series.',
+  annualGhiBasis: "Approximate published UK regional GHI averages (horizontal plane).",
+  shapeBasis: "Clear-sky geometry at zone centroid, UTC (NOAA solar position + Kasten-Young air mass).",
+  coverage: "Representative climatology — not a measured per-site time series.",
   license: "Annual GHI figures: approximate UK regional averages (public climatology). Modelled shapes: original (clear-sky geometry).",
-  generatedBy: 'tools/build-solar-profiles.mjs',
+  citation: "Modelled UK solar climatology — see tools/solar-climatology.json.",
+  generatedBy: "tools/build-solar-profiles.mjs",
   generatedFrom: "tools/solar-climatology.json@uk-clim-2025.1",
 } as const;

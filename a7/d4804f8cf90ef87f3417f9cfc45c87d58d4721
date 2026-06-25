@@ -1,0 +1,52 @@
+app-v3/tools/build-solar-profiles.mjs
+  s_d989b47bd25eb0::t_e90c5f3e178d63 53,57,108-109,251-252
+  s_d989b47bd25eb0::t_a4912af7a796db 1-2,4-6,8-13,15-16,19,21-22,28-29,31-36,38-44,46,52,60,62-98,101-107,110-128,130-135,138-139,146-165,167,190,220,223,228-250,253-257
+app-v3/tools/midas/selftest.mjs
+  s_d989b47bd25eb0::t_e90c5f3e178d63 79-82
+  s_d989b47bd25eb0::t_b1745d8ee68537 1-78,83-88
+app-v3/tests/ui/solarViewModel.test.ts
+  s_d989b47bd25eb0::t_32455d71909859 72-77
+app-v3/src/types/solar.ts
+  s_d989b47bd25eb0::t_4c58ac8378a268 72-74
+app-v3/tools/midas/modelled.mjs
+  s_d989b47bd25eb0::t_70c6d7baf667f8 1-51
+app-v3/tools/midas/solarGeom.mjs
+  s_d989b47bd25eb0::t_2d23b26b0c6187 1-63,65-66
+  s_d989b47bd25eb0::t_e90c5f3e178d63 64
+v3/index.html
+  s_d989b47bd25eb0::t_4c87c2fe670c6e 4515,4527,4778-4784,5435-5439,5712-5717
+app-v3/tests/data/solarProfiles.test.ts
+  s_d989b47bd25eb0::t_3594856133fd39 73,76-77
+app-v3/tools/midas/parseBadcCsv.mjs
+  s_d989b47bd25eb0::t_e87101c80520ae 1-115
+app-v3/src/ui/solarResults.ts
+  s_d989b47bd25eb0::t_93db92d6b1d283 289-297
+app-v3/src/ui/solarViewModel.ts
+  s_d989b47bd25eb0::t_b5aa28306335b2 69
+  s_d989b47bd25eb0::t_8b362bbcadb968 166-167,179
+app-v3/tests/tools/midas.test.ts
+  s_d989b47bd25eb0::t_d837f59155fee6 1-49
+app-v3/tools/fixtures/midas/midas-open_uk-radiation-obs_dv-202507_devon_01336_exeter-fixture_qcv-1_2020.csv
+  s_d989b47bd25eb0::t_18dd74643e668e 1-43
+app-v3/src/flows/runSolar.ts
+  s_d989b47bd25eb0::t_e51995593873ad 16
+  s_d989b47bd25eb0::t_e857d7f9c4181f 209-213
+app-v3/tools/midas/ingest.mjs
+  s_d989b47bd25eb0::t_71a7350b96aeb3 1-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a7d4804f8cf90ef87f3417f9cfc45c87d58d4721",
+  "prompts": {},
+  "sessions": {
+    "s_d989b47bd25eb0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e5355e3d-1032-4125-a473-497642cb43ec",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

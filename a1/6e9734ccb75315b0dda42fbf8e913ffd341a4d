@@ -1,0 +1,38 @@
+v3/index.html
+  s_d989b47bd25eb0::t_6cf8c9d55c66c4 1112,1120-1121,1167-1182,2132,5791,6189,6197,6200-6208
+  s_d989b47bd25eb0::t_e4d8b3eaa78999 6209
+app-v3/src/flows/runExportComparison.ts
+  s_d989b47bd25eb0::t_45ff58605d14e6 64,66
+  s_d989b47bd25eb0::t_189a59c5b90875 7-11
+app-v3/src/flows/runSolar.ts
+  s_d989b47bd25eb0::t_c69d8289962fb4 293-295
+  s_d989b47bd25eb0::t_51432133b5d970 12-16
+app-v3/src/api/products.ts
+  s_d989b47bd25eb0::t_65c340ac4d9b78 275-302
+  s_d989b47bd25eb0::t_fa9df681677a07 210,220-224
+app-v3/tests/api/products.test.ts
+  s_d989b47bd25eb0::t_90605c997e3fcf 221-275
+  s_d989b47bd25eb0::t_2af0b4fa60f36e 7-8
+app-v3/tests/ui/appWiring.test.ts
+  s_d989b47bd25eb0::t_be86fa7bd4db77 174-175
+  s_d989b47bd25eb0::t_c9652c67c77b98 150-173,176-198
+app-v3/src/ui/app.ts
+  s_d989b47bd25eb0::t_431f735732b949 497,506,510-518
+  s_d989b47bd25eb0::t_8a172a64e85062 519-520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "a16e9734ccb75315b0dda42fbf8e913ffd341a4d",
+  "prompts": {},
+  "sessions": {
+    "s_d989b47bd25eb0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e5355e3d-1032-4125-a473-497642cb43ec",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}

@@ -1,0 +1,46 @@
+app-v3/tools/fixtures/midas/midas-open_uk-radiation-obs_dv-202507_devon_01336_exeter-fixture_qcv-1_2020.csv
+  s_d989b47bd25eb0::t_13171ec50d521d 38-40
+  s_d989b47bd25eb0::t_59329004c0ea8a 17-19
+app-v3/tests/data/solarProfiles.test.ts
+  s_d989b47bd25eb0::t_7bce0c61c74a71 74,83-84,88-89,92
+  s_d989b47bd25eb0::t_27efb5939f9470 77-79
+  s_d989b47bd25eb0::t_8d27b1d2c713e3 75-76,80-82,85-87,90-91
+app-v3/tools/midas/parseBadcCsv.mjs
+  s_d989b47bd25eb0::t_34392e2e8d56b1 93-96
+  s_d989b47bd25eb0::t_f1936268e47b9a 108-110,114
+  s_d989b47bd25eb0::t_4ae6d10c73b3a9 116-119,121
+app-v3/tools/midas/ingest.mjs
+  s_d989b47bd25eb0::t_62a39d732c9e2e 155-160
+  s_d989b47bd25eb0::t_9eaa9e81f12351 8,13-16
+  s_d989b47bd25eb0::t_7cc204eb454351 86-87,91
+  s_d989b47bd25eb0::t_3c3fd7f1cc9a0b 215-222
+  s_d989b47bd25eb0::t_c3e773389918ee 122-147,151-154,161-162
+  s_d989b47bd25eb0::t_0b1f9099099eae 176-178,181
+  s_d989b47bd25eb0::t_658a092e9fad99 203
+  s_d989b47bd25eb0::t_148954e7b99277 111-112,168
+  s_d989b47bd25eb0::t_d6d2e714ac24dd 115-116,118-121,148-150
+v3/index.html
+  s_d989b47bd25eb0::t_2c3ad42d1e6e87 5076,5093-5105,5107,5110-5121,5124-5135,5138-5149,5152-5163,5166-5177,5180-5191,5194-5205,5208-5219,5222-5233,5236-5247,5250-5261,5264-5275,5278-5289,5436-5438
+app-v3/tools/midas/fetch-midas.mjs
+  s_d989b47bd25eb0::t_ca28318c35a828 120
+  s_d989b47bd25eb0::t_e6acd204a0b0ce 23-24,26-27,29,31
+  s_d989b47bd25eb0::t_9a02b96724cebb 62-63
+  s_d989b47bd25eb0::t_1a7b49da8a9d41 115-117
+  s_d989b47bd25eb0::t_a5c0ed73488491 85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.13",
+  "base_commit_sha": "a538ea641aefb3d22ef6dce335dcde927ddba536",
+  "prompts": {},
+  "sessions": {
+    "s_d989b47bd25eb0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e5355e3d-1032-4125-a473-497642cb43ec",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Lee Crossley <leee@hotmail.co.uk>"
+    }
+  }
+}
